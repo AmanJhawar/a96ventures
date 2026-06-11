@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import Header from '@/components/header'
 import Footer from '@/components/footer'
+import DisableDevTools from '@/components/disable-dev-tools'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -24,6 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="scroll-smooth">
       <body className={`${inter.className} min-h-screen flex flex-col text-black bg-white antialiased`}>
+        <DisableDevTools />
         <Header />
         <main className="flex-1 pt-20">
           {children}

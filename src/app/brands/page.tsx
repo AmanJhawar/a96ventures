@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
+import Link from 'next/link'
 import { brands } from '@/data/brands'
 
 export const metadata: Metadata = {
@@ -15,9 +16,15 @@ export default function Brands() {
           <h1 className="text-4xl md:text-5xl font-bold leading-tight tracking-tight text-black mb-6">
             Our Brands
           </h1>
-          <p className="text-xl font-normal text-gray-500 leading-relaxed max-w-[600px] mx-auto">
+          <p className="text-xl font-normal text-gray-500 leading-relaxed max-w-[600px] mx-auto mb-8">
             The brands we build.
           </p>
+          <Link 
+            href="/catalog" 
+            className="inline-block px-8 py-4 bg-black text-white rounded-full text-base font-semibold transition-all duration-150 ease-[var(--ease-out)] @media(hover:hover):hover:bg-gray-700 active:scale-[0.97] active:blur-[0.5px]"
+          >
+            View Jewelry Catalog
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
