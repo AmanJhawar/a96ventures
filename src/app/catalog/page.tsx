@@ -25,7 +25,7 @@ export default function Catalog() {
     load()
   }, [])
 
-  const categories = ['All', 'Silver Idols', 'Silver Animals', 'Marble Photoframes']
+  const categories = ['All', 'Silver Idols', 'Silver Animals', 'Marble Photoframes', 'MMTC Bullions']
   const filteredItems = activeFilter === 'All' ? items : items.filter(item => item.category === activeFilter)
   return (
     <div className="py-20 min-h-[calc(100vh-160px)]">

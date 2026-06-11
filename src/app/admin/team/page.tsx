@@ -87,7 +87,7 @@ export default function AdminTeam() {
         </div>
         <button 
           onClick={() => isFormOpen ? handleCancel() : setIsFormOpen(true)}
-          className="bg-black text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors flex items-center gap-2"
+          className="admin-btn-primary flex items-center gap-2"
         >
           <Plus size={18} className={isFormOpen ? "rotate-45 transition-transform" : "transition-transform"} />
           {isFormOpen ? 'Cancel' : 'Add Member'}
@@ -100,26 +100,26 @@ export default function AdminTeam() {
           <form onSubmit={handleSave} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                <label className="admin-label">Full Name</label>
                 <input 
                   type="text" required
                   value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                <label className="admin-label">Role</label>
                 <input 
                   type="text" required
                   value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                 />
               </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Profile Image</label>
+                <label className="admin-label">Profile Image</label>
                 <ImageDropzone 
                   value={formData.imageFile || ''} 
                   onChange={(url) => setFormData({...formData, imageFile: url})} 
@@ -127,35 +127,35 @@ export default function AdminTeam() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">LinkedIn URL (Optional)</label>
+                <label className="admin-label">LinkedIn URL (Optional)</label>
                 <input 
                   type="url" 
                   value={formData.linkedin || ''} onChange={e => setFormData({...formData, linkedin: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Expertise (comma separated)</label>
+              <label className="admin-label">Expertise (comma separated)</label>
               <input 
                 type="text" required
                 value={(formData.expertise || []).join(', ')} onChange={e => setFormData({...formData, expertise: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                className="admin-input"
                 placeholder="e.g., Sales Strategy, Design"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
+              <label className="admin-label">Bio</label>
               <textarea 
                 required rows={3}
                 value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                className="admin-input resize-none"
               />
             </div>
 
-            <button type="submit" className="bg-black text-white px-6 py-2.5 rounded-lg font-medium hover:bg-gray-800">
+            <button type="submit" className="admin-btn-primary">
               {editingId ? 'Update Member' : 'Save Member'}
             </button>
           </form>

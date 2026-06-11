@@ -86,7 +86,7 @@ export default function AdminBrands() {
         </div>
         <button 
           onClick={() => isFormOpen ? handleCancel() : setIsFormOpen(true)}
-          className="bg-black text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors flex items-center gap-2"
+          className="admin-btn-primary flex items-center gap-2"
         >
           <Plus size={18} className={isFormOpen ? "rotate-45 transition-transform" : "transition-transform"} />
           {isFormOpen ? 'Cancel' : 'Add Brand'}
@@ -99,25 +99,25 @@ export default function AdminBrands() {
           <form onSubmit={handleSave} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                <label className="admin-label">Name</label>
                 <input 
                   type="text" required
                   value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Sector</label>
+                <label className="admin-label">Sector</label>
                 <input 
                   type="text" required
                   value={formData.sector} onChange={e => setFormData({...formData, sector: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                 />
               </div>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Brand Logo</label>
+              <label className="admin-label">Brand Logo</label>
               <ImageDropzone 
                 value={formData.logoFile || ''} 
                 onChange={(url) => setFormData({...formData, logoFile: url})} 
@@ -126,15 +126,15 @@ export default function AdminBrands() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+              <label className="admin-label">Description</label>
               <textarea 
                 required rows={3}
                 value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                className="admin-input resize-none"
               />
             </div>
 
-            <button type="submit" className="bg-black text-white px-6 py-2.5 rounded-lg font-medium hover:bg-gray-800">
+            <button type="submit" className="admin-btn-primary">
               {editingId ? 'Update Brand' : 'Save Brand'}
             </button>
           </form>

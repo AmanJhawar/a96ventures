@@ -98,7 +98,7 @@ export default function AdminPortfolio() {
         </div>
         <button 
           onClick={() => isFormOpen ? handleCancel() : setIsFormOpen(true)}
-          className="bg-black text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors flex items-center gap-2"
+          className="admin-btn-primary flex items-center gap-2"
         >
           <Plus size={18} className={isFormOpen ? "rotate-45 transition-transform" : "transition-transform"} />
           {isFormOpen ? 'Cancel' : 'Add Company'}
@@ -111,51 +111,51 @@ export default function AdminPortfolio() {
           <form onSubmit={handleSave} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Company Name</label>
+                <label className="admin-label">Company Name</label>
                 <input 
                   type="text" required
                   value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">URL Slug (e.g., example-company)</label>
+                <label className="admin-label">URL Slug</label>
                 <input 
                   type="text" required
                   disabled={!!editingId}
                   value={formData.slug} onChange={e => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black disabled:bg-gray-100"
+                  className="admin-input disabled:bg-gray-100"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Stage</label>
+                <label className="admin-label">Stage</label>
                 <input 
                   type="text" required
                   value={formData.stage} onChange={e => setFormData({...formData, stage: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                   placeholder="e.g., Seed, Series A"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Sector</label>
+                <label className="admin-label">Sector</label>
                 <input 
                   type="text" required
                   value={formData.sector} onChange={e => setFormData({...formData, sector: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                 />
               </div>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+              <label className="admin-label">Description</label>
               <textarea 
                 required rows={3}
                 value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                className="admin-input resize-none"
               />
             </div>
 
-            <button type="submit" className="bg-black text-white px-6 py-2.5 rounded-lg font-medium hover:bg-gray-800">
+            <button type="submit" className="admin-btn-primary">
               {editingId ? 'Update Company' : 'Save Company'}
             </button>
           </form>

@@ -67,3 +67,153 @@
   }
 }
 
+/* ═══════════════════════════════════════════════════
+   Admin Design System — Minimal, Elegant Controls
+   ═══════════════════════════════════════════════════ */
+
+/* ── Labels ── */
+.admin-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+/* ── Standard Input ── */
+.admin-input {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  background: white;
+  font-size: 0.875rem;
+  transition: border-color 200ms, box-shadow 200ms;
+}
+.admin-input:focus {
+  outline: none;
+  border-color: #000;
+  box-shadow: 0 0 0 1px #000;
+}
+
+/* ── Underline Input (for custom numeric entry) ── */
+.admin-input-underline {
+  width: 100%;
+  padding: 0.5rem 0;
+  border: none;
+  border-bottom: 1px solid #d1d5db;
+  background: transparent;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  transition: border-color 200ms;
+}
+.admin-input-underline:focus {
+  outline: none;
+  border-bottom-color: #000;
+}
+
+/* ── Primary Button ── */
+.admin-btn-primary {
+  background: #000;
+  color: #fff;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: background 200ms;
+  cursor: pointer;
+}
+.admin-btn-primary:hover {
+  background: #1f2937;
+}
+
+/* ── Outline Button (ADD) ── */
+.admin-btn-outline {
+  padding: 0.5rem 1.25rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #374151;
+  cursor: pointer;
+  transition: border-color 200ms, background 200ms;
+}
+.admin-btn-outline:hover {
+  border-color: #000;
+  background: #f9fafb;
+}
+
+/* ── Pill / Tag Buttons (for sizes & purities) ── */
+.admin-pill {
+  padding: 0.375rem 0.875rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 200ms;
+}
+.admin-pill:hover {
+  border-color: #9ca3af;
+}
+.admin-pill-active {
+  border-color: #000;
+  color: #000;
+  background: #f3f4f6;
+}
+
+/* ── Custom Checkbox (elegant square) ── */
+.admin-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+.admin-checkbox input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.admin-checkbox-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 1.5px solid #9ca3af;
+  border-radius: 0.1875rem;
+  background: transparent;
+  flex-shrink: 0;
+  transition: all 150ms;
+}
+.admin-checkbox input[type="checkbox"]:checked + .admin-checkbox-box {
+  background: #000;
+  border-color: #000;
+}
+.admin-checkbox input[type="checkbox"]:checked + .admin-checkbox-box::after {
+  content: '';
+  display: block;
+  width: 0.375rem;
+  height: 0.375rem;
+  background: #fff;
+  border-radius: 1px;
+}
+.admin-checkbox input[type="checkbox"]:focus-visible + .admin-checkbox-box {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}

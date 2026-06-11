@@ -91,7 +91,7 @@ export default function AdminInsights() {
         </div>
         <button 
           onClick={() => isFormOpen ? handleCancel() : setIsFormOpen(true)}
-          className="bg-black text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors flex items-center gap-2"
+          className="admin-btn-primary flex items-center gap-2"
         >
           <Plus size={18} className={isFormOpen ? "rotate-45 transition-transform" : "transition-transform"} />
           {isFormOpen ? 'Cancel' : 'Add Insight'}
@@ -104,51 +104,51 @@ export default function AdminInsights() {
           <form onSubmit={handleSave} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                <label className="admin-label">Title</label>
                 <input 
                   type="text" required
                   value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                <label className="admin-label">Category</label>
                 <input 
                   type="text" required
                   value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <label className="admin-label">Date</label>
                 <input 
                   type="text" required
                   value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                   placeholder="e.g., January 15, 2026"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Read Time</label>
+                <label className="admin-label">Read Time</label>
                 <input 
                   type="text" required
                   value={formData.readTime} onChange={e => setFormData({...formData, readTime: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  className="admin-input"
                   placeholder="e.g., 5 min read"
                 />
               </div>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Excerpt</label>
+              <label className="admin-label">Excerpt</label>
               <textarea 
                 required rows={3}
                 value={formData.excerpt} onChange={e => setFormData({...formData, excerpt: e.target.value})}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                className="admin-input resize-none"
               />
             </div>
 
-            <button type="submit" className="bg-black text-white px-6 py-2.5 rounded-lg font-medium hover:bg-gray-800">
+            <button type="submit" className="admin-btn-primary">
               {editingId ? 'Update Insight' : 'Publish Insight'}
             </button>
           </form>

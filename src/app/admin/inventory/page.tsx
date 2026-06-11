@@ -3,62 +3,62 @@
 import { useState, useEffect } from 'react'
 import { collection, setDoc, deleteDoc, doc, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { Trash2, Plus, Box, Edit2 } from 'lucide-react'
+import { Trash2, Plus, Box, Edit2, X, ChevronDown } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 
-export interface InventoryItem {
-  id: string; // slug is used as id
-  slug: string;
-  sku: string;
-  name: string;
-  hasSizeVariants: boolean;
-  standardSizes: string[];
-  customSizes: string;
-  weight: string;
-  description: string;
-  imageFile: string;
+const STANDARD_SIZES = ['4cm', '7cm', '10cm', '12.5cm']
+const STANDARD_PURITIES = ['92.5', '80.0']
+const CATEGORIES = ['Silver Idols', 'Silver Animals', 'Marble Photoframes', 'MMTC Bullions']
+
+interface InventoryItem {
+  id: string
+  slug: string
+  sku: string
+  name: string
+  category: string
+  hasVariants: boolean
+  standardSizes: string[]
+  customSizes: string[]
+  standardPurities: string[]
+  customPurities: string[]
+  weight: string
+  description: string
+  imageFile: string
 }
 
-const STANDARD_SIZES_OPTIONS = ['4cm', '7cm', '10cm', '12.5cm']
+const emptyForm: Partial<InventoryItem> = {
+  slug: '', sku: '', name: '', category: '', hasVariants: false,
+  standardSizes: [], customSizes: [], standardPurities: [], customPurities: [],
+  weight: '', description: '', imageFile: ''
+}
 
 export default function AdminInventory() {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  
-  const [formData, setFormData] = useState<Partial<InventoryItem>>({
-    slug: '', sku: '', name: '', hasSizeVariants: false, standardSizes: [], customSizes: '', weight: '', description: '', imageFile: ''
-  })
+  const [formData, setFormData] = useState<Partial<InventoryItem>>({ ...emptyForm })
+  const [customSizeInput, setCustomSizeInput] = useState('')
+  const [customPurityInput, setCustomPurityInput] = useState('')
+  const [categoryOpen, setCategoryOpen] = useState(false)
 
   const fetchItems = async () => {
     setLoading(true)
     try {
-      const querySnapshot = await getDocs(collection(db, 'catalog'))
+      const snap = await getDocs(collection(db, 'catalog'))
       const fetched: InventoryItem[] = []
-      querySnapshot.forEach((docSnap) => {
-        fetched.push({ id: docSnap.id, ...docSnap.data() } as InventoryItem)
-      })
+      snap.forEach((d) => fetched.push({ id: d.id, ...d.data() } as InventoryItem))
       setItems(fetched)
-    } catch (err) {
-      console.error("Error fetching inventory", err)
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { console.error("Error fetching inventory", err) }
+    finally { setLoading(false) }
   }
 
-  useEffect(() => {
-    fetchItems()
-  }, [])
+  useEffect(() => { fetchItems() }, [])
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return
-    try {
-      await deleteDoc(doc(db, 'catalog', id))
-      setItems(items.filter(i => i.id !== id))
-    } catch (err) {
-      console.error("Error deleting", err)
-    }
+    if (!confirm('Delete this product?')) return
+    await deleteDoc(doc(db, 'catalog', id))
+    setItems(items.filter(i => i.id !== id))
   }
 
   const handleEdit = (item: InventoryItem) => {
@@ -70,48 +70,69 @@ export default function AdminInventory() {
   const handleCancel = () => {
     setIsFormOpen(false)
     setEditingId(null)
-    setFormData({ slug: '', sku: '', name: '', hasSizeVariants: false, standardSizes: [], customSizes: '', weight: '', description: '', imageFile: '' })
+    setFormData({ ...emptyForm })
+    setCustomSizeInput('')
+    setCustomPurityInput('')
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    try {
-      if (!formData.slug) {
-        alert("Slug is required!")
-        return
-      }
-
-      const docId = editingId || formData.slug
-      const docRef = doc(db, 'catalog', docId)
-      
-      const payload = { ...formData }
-      if (!payload.hasSizeVariants) {
-        payload.standardSizes = []
-        payload.customSizes = ''
-      }
-
-      await setDoc(docRef, payload)
-      
-      if (editingId) {
-        setItems(items.map(i => i.id === editingId ? { id: docId, ...payload } as InventoryItem : i))
-      } else {
-        setItems([...items, { id: docId, ...payload } as InventoryItem])
-      }
-      
-      handleCancel()
-    } catch (err) {
-      console.error("Error saving", err)
+    if (!formData.slug) { alert("Slug is required!"); return }
+    const docId = editingId || formData.slug
+    const payload = { ...formData }
+    if (!payload.hasVariants) {
+      payload.standardSizes = []; payload.customSizes = []
+      payload.standardPurities = []; payload.customPurities = []
     }
+    await setDoc(doc(db, 'catalog', docId), payload)
+    if (editingId) {
+      setItems(items.map(i => i.id === editingId ? { id: docId, ...payload } as InventoryItem : i))
+    } else {
+      setItems([...items, { id: docId, ...payload } as InventoryItem])
+    }
+    handleCancel()
   }
 
   const toggleSize = (size: string) => {
     const current = formData.standardSizes || []
-    if (current.includes(size)) {
-      setFormData({ ...formData, standardSizes: current.filter(s => s !== size) })
-    } else {
-      setFormData({ ...formData, standardSizes: [...current, size] })
-    }
+    setFormData({ ...formData, standardSizes: current.includes(size) ? current.filter(s => s !== size) : [...current, size] })
   }
+
+  const togglePurity = (p: string) => {
+    const current = formData.standardPurities || []
+    setFormData({ ...formData, standardPurities: current.includes(p) ? current.filter(x => x !== p) : [...current, p] })
+  }
+
+  const addCustomSize = () => {
+    const v = customSizeInput.trim()
+    if (!v) return
+    const current = formData.customSizes || []
+    const formatted = `${v}cm`
+    if (!current.includes(formatted)) {
+      setFormData({ ...formData, customSizes: [...current, formatted] })
+    }
+    setCustomSizeInput('')
+  }
+
+  const removeCustomSize = (s: string) => {
+    setFormData({ ...formData, customSizes: (formData.customSizes || []).filter(x => x !== s) })
+  }
+
+  const addCustomPurity = () => {
+    const v = customPurityInput.trim()
+    if (!v) return
+    const current = formData.customPurities || []
+    if (!current.includes(v)) {
+      setFormData({ ...formData, customPurities: [...current, v] })
+    }
+    setCustomPurityInput('')
+  }
+
+  const removeCustomPurity = (p: string) => {
+    setFormData({ ...formData, customPurities: (formData.customPurities || []).filter(x => x !== p) })
+  }
+
+  const numericFilter = (val: string) => val.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')
 
   return (
     <div>
@@ -121,11 +142,11 @@ export default function AdminInventory() {
             <Box size={28} />
             Inventory Manager
           </h1>
-          <p className="text-gray-500">Manage catalog products and sizing variants.</p>
+          <p className="text-gray-500">Manage catalog products, sizes and purity variants.</p>
         </div>
-        <button 
+        <button
           onClick={() => isFormOpen ? handleCancel() : setIsFormOpen(true)}
-          className="bg-black text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors flex items-center gap-2"
+          className="admin-btn-primary flex items-center gap-2"
         >
           <Plus size={18} className={isFormOpen ? "rotate-45 transition-transform" : "transition-transform"} />
           {isFormOpen ? 'Cancel' : 'Add Product'}
@@ -136,116 +157,226 @@ export default function AdminInventory() {
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
           <h2 className="text-xl font-semibold mb-6">{editingId ? 'Edit Product' : 'Add New Product'}</h2>
           <form onSubmit={handleSave} className="space-y-6">
+            {/* Row 1: Slug + SKU */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">URL Slug</label>
-                <input 
-                  type="text" required
-                  disabled={!!editingId}
-                  value={formData.slug} onChange={e => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '')})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black disabled:bg-gray-100 disabled:text-gray-500"
+                <label className="admin-label">URL Slug</label>
+                <input
+                  type="text" required disabled={!!editingId}
+                  value={formData.slug}
+                  onChange={e => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '') })}
+                  className="admin-input disabled:bg-gray-100 disabled:text-gray-500"
                   placeholder="e.g., modern-chair"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">SKU (Internal Code)</label>
-                <input 
+                <label className="admin-label">SKU (Internal Code)</label>
+                <input
                   type="text" required
-                  value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  value={formData.sku}
+                  onChange={e => setFormData({ ...formData, sku: e.target.value })}
+                  className="admin-input"
                   placeholder="e.g., A96-001"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Product Name</label>
-              <input 
-                type="text" required
-                value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
-              />
-            </div>
-
-            <div className="bg-gray-50 p-5 rounded-xl border border-gray-100">
-              <label className="flex items-center cursor-pointer mb-4">
-                <input 
-                  type="checkbox" 
-                  className="w-5 h-5 rounded border-gray-300 text-black focus:ring-black mr-3"
-                  checked={formData.hasSizeVariants}
-                  onChange={e => setFormData({...formData, hasSizeVariants: e.target.checked})}
+            {/* Row 2: Name + Category */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="admin-label">Product Name</label>
+                <input
+                  type="text" required
+                  value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  className="admin-input"
                 />
-                <span className="font-medium text-gray-900">Enable Size Variants</span>
-              </label>
-
-              {formData.hasSizeVariants && (
-                <div className="pl-8 space-y-4 border-l-2 border-gray-200 ml-2 mt-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Standard Sizes</label>
-                    <div className="flex flex-wrap gap-3">
-                      {STANDARD_SIZES_OPTIONS.map(size => (
-                        <label key={size} className="flex items-center">
-                          <input 
-                            type="checkbox" 
-                            className="w-4 h-4 rounded border-gray-300 text-black focus:ring-black mr-2"
-                            checked={(formData.standardSizes || []).includes(size)}
-                            onChange={() => toggleSize(size)}
-                          />
-                          <span className="text-sm text-gray-700">{size}</span>
-                        </label>
+              </div>
+              <div>
+                <label className="admin-label">Category</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryOpen(!categoryOpen)}
+                    className="admin-input flex items-center justify-between text-left"
+                  >
+                    <span className={formData.category ? 'text-black' : 'text-gray-400'}>
+                      {formData.category || 'Select category'}
+                    </span>
+                    <ChevronDown size={16} className={`text-gray-400 transition-transform ${categoryOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {categoryOpen && (
+                    <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden animate-[fadeInUp_150ms_var(--ease-out)_forwards]">
+                      {CATEGORIES.map(cat => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => { setFormData({ ...formData, category: cat }); setCategoryOpen(false) }}
+                          className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                            formData.category === cat
+                              ? 'bg-black text-white'
+                              : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {cat}
+                        </button>
                       ))}
                     </div>
-                  </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ─── Variant Configuration ─── */}
+            <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
+              <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-5">Inventory Configuration</p>
+
+              <label className="admin-checkbox mb-6">
+                <input
+                  type="checkbox"
+                  checked={formData.hasVariants}
+                  onChange={e => setFormData({ ...formData, hasVariants: e.target.checked })}
+                />
+                <span className="admin-checkbox-box" />
+                <span className="text-sm font-medium text-gray-900 tracking-wide uppercase">Product Has Variants (Size, Purity)</span>
+              </label>
+
+              {formData.hasVariants && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                  {/* ── Size Column ── */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Custom Sizes (comma separated)</label>
-                    <input 
-                      type="text"
-                      value={formData.customSizes} onChange={e => setFormData({...formData, customSizes: e.target.value})}
-                      className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
-                      placeholder="e.g., 15cm, 20cm"
-                    />
+                    <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">Available Sizes</p>
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      {STANDARD_SIZES.map(size => (
+                        <button
+                          key={size} type="button"
+                          onClick={() => toggleSize(size)}
+                          className={`admin-pill ${(formData.standardSizes || []).includes(size) ? 'admin-pill-active' : ''}`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Custom sizes already added */}
+                    {(formData.customSizes || []).length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {(formData.customSizes || []).map(s => (
+                          <span key={s} className="admin-pill admin-pill-active flex items-center gap-1.5">
+                            {s}
+                            <button type="button" onClick={() => removeCustomSize(s)} className="opacity-60 hover:opacity-100"><X size={12} /></button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">Custom Size (cm)</p>
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={customSizeInput}
+                          onChange={e => setCustomSizeInput(numericFilter(e.target.value))}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSize() } }}
+                          className="admin-input-underline"
+                          placeholder="e.g., 20"
+                        />
+                      </div>
+                      <button type="button" onClick={addCustomSize} className="admin-btn-outline">
+                        ADD
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ── Purity Column ── */}
+                  <div>
+                    <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">Available Purities</p>
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      {STANDARD_PURITIES.map(p => (
+                        <button
+                          key={p} type="button"
+                          onClick={() => togglePurity(p)}
+                          className={`admin-pill ${(formData.standardPurities || []).includes(p) ? 'admin-pill-active' : ''}`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Custom purities already added */}
+                    {(formData.customPurities || []).length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {(formData.customPurities || []).map(p => (
+                          <span key={p} className="admin-pill admin-pill-active flex items-center gap-1.5">
+                            {p}
+                            <button type="button" onClick={() => removeCustomPurity(p)} className="opacity-60 hover:opacity-100"><X size={12} /></button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">Custom Purity</p>
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={customPurityInput}
+                          onChange={e => setCustomPurityInput(numericFilter(e.target.value))}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomPurity() } }}
+                          className="admin-input-underline"
+                          placeholder="99.9"
+                        />
+                      </div>
+                      <button type="button" onClick={addCustomPurity} className="admin-btn-outline">
+                        ADD
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
 
+            {/* Row 3: Weight + Description */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Approx Weight</label>
-                <input 
+                <label className="admin-label">Approx Weight</label>
+                <input
                   type="text" required
-                  value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  value={formData.weight}
+                  onChange={e => setFormData({ ...formData, weight: e.target.value })}
+                  className="admin-input"
                   placeholder="e.g., 2.5 kg"
                 />
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea 
+                <label className="admin-label">Description</label>
+                <textarea
                   required rows={4}
-                  value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black"
+                  value={formData.description}
+                  onChange={e => setFormData({ ...formData, description: e.target.value })}
+                  className="admin-input resize-none"
                 />
               </div>
             </div>
-            
+
+            {/* Image */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Product Image</label>
-              <ImageDropzone 
-                value={formData.imageFile || ''} 
-                onChange={(url) => setFormData({...formData, imageFile: url})} 
-                path="catalog" 
+              <label className="admin-label">Product Image</label>
+              <ImageDropzone
+                value={formData.imageFile || ''}
+                onChange={(url) => setFormData({ ...formData, imageFile: url })}
+                path="catalog"
               />
             </div>
 
-            <button type="submit" className="bg-black text-white px-6 py-2.5 rounded-lg font-medium hover:bg-gray-800">
+            <button type="submit" className="admin-btn-primary">
               {editingId ? 'Update Product' : 'Save Product'}
             </button>
           </form>
         </div>
       )}
 
+      {/* ─── Table ─── */}
       {loading ? (
         <div className="flex justify-center py-20">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
@@ -253,64 +384,68 @@ export default function AdminInventory() {
       ) : (
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[800px]">
+            <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="px-6 py-4 text-sm font-semibold text-gray-600">Image</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Product Name / Slug</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">SKU</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Variants</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Product / SKU</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Category</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Sizes</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Purities</th>
                   <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
-                  <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50/50">
-                    <td className="px-6 py-4">
-                      {item.imageFile ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.imageFile} alt="Product" className="w-12 h-12 object-cover rounded-md bg-gray-100" />
-                      ) : (
-                        <div className="w-12 h-12 bg-gray-100 rounded-md flex items-center justify-center">
-                          <Box size={20} className="text-gray-400" />
+                {items.map((item) => {
+                  const allSizes = [...(item.standardSizes || []), ...(item.customSizes || [])]
+                  const allPurities = [...(item.standardPurities || []), ...(item.customPurities || [])]
+                  return (
+                    <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50/50">
+                      <td className="px-6 py-4">
+                        {item.imageFile ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.imageFile} alt="Product" className="w-12 h-12 object-cover rounded-md bg-gray-100" />
+                        ) : (
+                          <div className="w-12 h-12 bg-gray-100 rounded-md flex items-center justify-center">
+                            <Box size={20} className="text-gray-400" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-black">{item.name}</div>
+                        <div className="text-xs text-gray-500 mt-1">{item.sku} · /{item.slug}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">{item.category}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {allSizes.length > 0 ? allSizes.map(s => (
+                            <span key={s} className="text-xs border border-gray-200 px-1.5 py-0.5 rounded">{s}</span>
+                          )) : <span className="text-xs text-gray-400">—</span>}
                         </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-black">{item.name}</div>
-                      <div className="text-xs text-gray-500 mt-1">{item.slug}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium text-gray-600">{item.sku}</td>
-                    <td className="px-6 py-4">
-                      {item.hasSizeVariants ? (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-md font-medium">Enabled</span>
-                      ) : (
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">None</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right space-x-2">
-                      <button 
-                        onClick={() => handleEdit(item)}
-                        className="text-gray-400 hover:text-blue-600 transition-colors p-2"
-                        title="Edit"
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(item.id)}
-                        className="text-gray-400 hover:text-red-600 transition-colors p-2"
-                        title="Delete"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {allPurities.length > 0 ? allPurities.map(p => (
+                            <span key={p} className="text-xs border border-gray-200 px-1.5 py-0.5 rounded">{p}</span>
+                          )) : <span className="text-xs text-gray-400">—</span>}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right space-x-2">
+                        <button onClick={() => handleEdit(item)} className="text-gray-400 hover:text-blue-600 transition-colors p-2" title="Edit">
+                          <Edit2 size={18} />
+                        </button>
+                        <button onClick={() => handleDelete(item.id)} className="text-gray-400 hover:text-red-600 transition-colors p-2" title="Delete">
+                          <Trash2 size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
                 {items.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                      No products found.
-                    </td>
+                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No products found.</td>
                   </tr>
                 )}
               </tbody>
