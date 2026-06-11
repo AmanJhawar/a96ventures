@@ -1,0 +1,52 @@
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import Hero from '@/components/hero'
+import NewsletterForm from '@/components/newsletter-form'
+
+export const metadata: Metadata = {
+  title: 'A96 Ventures | Early-Stage Venture Capital',
+  description: 'We partner with visionaries to build tomorrow\'s defining companies.',
+}
+
+export default function Home() {
+  return (
+    <>
+      <Hero />
+
+      {/* Newsletter Section */}
+      <section className="py-20 md:py-32 bg-gray-100 border-y border-gray-300">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="max-w-[800px] mx-auto text-center">
+            <span className="text-xs font-semibold tracking-[2px] text-gray-500 mb-4 block uppercase">STAY INFORMED</span>
+            <h2 className="text-3xl md:text-4xl font-semibold leading-tight tracking-tight text-black mb-12">
+              Our best thinking, in your inbox.
+            </h2>
+            <NewsletterForm />
+          </div>
+        </div>
+      </section>
+
+      {/* Stats Section */}
+      <section className="py-20 md:py-32 bg-white">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
+            <Link href="/portfolio" className="block text-center p-8 bg-white border border-gray-300 rounded-xl transition-all duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98] @media(hover:hover):hover">
+              <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">2+</div>
+              <div className="text-base text-gray-500">Portfolio Companies</div>
+            </Link>
+            
+            <Link href="/brands" className="block text-center p-8 bg-white border border-gray-300 rounded-xl transition-all duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98] @media(hover:hover):hover">
+              <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">2+</div>
+              <div className="text-base text-gray-500">Brands</div>
+            </Link>
+            
+            <div className="block text-center p-8 bg-white border border-gray-300 rounded-xl">
+              <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">9+</div>
+              <div className="text-base text-gray-500">Years of Experience</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  )
+}
