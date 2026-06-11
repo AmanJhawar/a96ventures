@@ -1,19 +1,25 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { portfolioCompanies } from '@/data/portfolio'
+import { getPortfolioCompanies, getPortfolioCompanyBySlug } from '@/lib/firebase/db'
 
 export async function generateStaticParams() {
-  return portfolioCompanies.map((company) => ({
-    slug: company.slug,
-  }))
+  try {
+    const companies = await getPortfolioCompanies()
+    return companies.map((company) => ({
+      slug: company.slug,
+    }))
+  } catch (e) {
+    console.error('Failed to generate static params for portfolio', e)
+    return []
+  }
 }
 
 export async function generateMetadata(
   { params }: { params: Promise<{ slug: string }> }
 ): Promise<Metadata> {
   const resolvedParams = await params
-  const company = portfolioCompanies.find(c => c.slug === resolvedParams.slug)
+  const company = await getPortfolioCompanyBySlug(resolvedParams.slug)
   
   if (!company) {
     return {
@@ -33,7 +39,7 @@ export default async function PortfolioDetail({
   params: Promise<{ slug: string }> 
 }) {
   const resolvedParams = await params
-  const company = portfolioCompanies.find(c => c.slug === resolvedParams.slug)
+  const company = await getPortfolioCompanyBySlug(resolvedParams.slug)
 
   if (!company) {
     notFound()

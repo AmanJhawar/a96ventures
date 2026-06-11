@@ -3,6 +3,8 @@ export interface TeamMember {
   role: string
   bio: string
   expertise: string[]
+  imageFile?: string
+  linkedin?: string
 }
 
 export const teamMembers: TeamMember[] = [

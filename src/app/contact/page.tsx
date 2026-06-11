@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import CustomSelect from '@/components/custom-select'
+import { submitInquiry } from '@/lib/firebase/db'
 
 export default function Contact() {
   const [formData, setFormData] = useState({
@@ -10,24 +12,39 @@ export default function Contact() {
     message: '',
     inquiryType: 'general'
   })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [error, setError] = useState('')
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> | { target: { name: string; value: string } }) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     })
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('Form submitted:', formData)
-    setFormData({
-      name: '',
-      email: '',
-      company: '',
-      message: '',
-      inquiryType: 'general'
-    })
+    setIsSubmitting(true)
+    setError('')
+    
+    try {
+      await submitInquiry(formData)
+      setSuccess(true)
+      setFormData({
+        name: '',
+        email: '',
+        company: '',
+        message: '',
+        inquiryType: 'general'
+      })
+      setTimeout(() => setSuccess(false), 5000)
+    } catch (err) {
+      console.error('Error submitting form:', err)
+      setError('There was an error sending your message. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -75,19 +92,19 @@ export default function Contact() {
             <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
               <div className="flex flex-col">
                 <label htmlFor="inquiryType" className="text-sm font-medium text-black mb-2">Inquiry Type</label>
-                <select
+                <CustomSelect
                   id="inquiryType"
                   name="inquiryType"
                   value={formData.inquiryType}
                   onChange={handleChange}
-                  className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
-                >
-                  <option value="general">General Inquiry</option>
-                  <option value="pitch">Startup Pitch</option>
-                  <option value="lp">Limited Partner</option>
-                  <option value="press">Press &amp; Media</option>
-                  <option value="partnership">Partnership</option>
-                </select>
+                  options={[
+                    { value: "general", label: "General Inquiry" },
+                    { value: "pitch", label: "Startup Pitch" },
+                    { value: "lp", label: "Limited Partner" },
+                    { value: "press", label: "Press & Media" },
+                    { value: "partnership", label: "Partnership" }
+                  ]}
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -143,11 +160,15 @@ export default function Contact() {
                 ></textarea>
               </div>
 
+              {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
+              {success && <p className="text-green-600 text-sm font-medium bg-green-50 p-4 rounded-lg">Thank you! Your inquiry has been sent.</p>}
+
               <button 
                 type="submit" 
-                className="bg-black text-white border-none px-8 py-4 rounded-lg text-base font-semibold cursor-pointer transition-all duration-160 ease-[var(--ease-out)] hover:bg-gray-700 active:scale-[0.97]"
+                disabled={isSubmitting}
+                className={`bg-black text-white border-none px-8 py-4 rounded-lg text-base font-semibold transition-all duration-160 ease-[var(--ease-out)] @media(hover:hover):hover:bg-gray-700 active:scale-[0.97] ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
               >
-                Send Message
+                {isSubmitting ? 'Sending...' : 'Send Message'}
               </button>
             </form>
           </div>

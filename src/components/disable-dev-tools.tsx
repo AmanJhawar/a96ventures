@@ -1,9 +1,14 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { Unlock, Lock } from 'lucide-react'
 
 export default function DisableDevTools() {
+  const [disabled, setDisabled] = useState(false)
+
   useEffect(() => {
+    if (disabled) return;
+
     // Disable right-click
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault()
@@ -38,7 +43,17 @@ export default function DisableDevTools() {
       document.removeEventListener('keydown', handleKeyDown)
       document.removeEventListener('dragstart', handleDragStart)
     }
-  }, [])
+  }, [disabled])
 
-  return null
+  return (
+    <div className="fixed bottom-4 right-4 z-[9999] opacity-20 hover:opacity-100 transition-opacity">
+      <button 
+        onClick={() => setDisabled(!disabled)}
+        className={`p-3 rounded-full shadow-lg flex items-center justify-center border transition-colors ${disabled ? 'bg-red-500 border-red-600 text-white' : 'bg-black border-gray-800 text-white'}`}
+        title={disabled ? "Lock DevTools" : "Unlock DevTools"}
+      >
+        {disabled ? <Unlock size={18} /> : <Lock size={18} />}
+      </button>
+    </div>
+  )
 }
