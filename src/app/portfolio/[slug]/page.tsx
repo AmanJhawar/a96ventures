@@ -46,7 +46,7 @@ export default async function PortfolioDetail({
   }
 
   return (
-    <div className="py-20 min-h-[calc(100vh-160px)]">
+    <div className="pt-10 pb-20 min-h-[calc(100vh-160px)]">
       <div className="max-w-7xl mx-auto px-6">
         <Link 
           href="/portfolio" 

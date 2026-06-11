@@ -1,14 +1,14 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { collection, setDoc, deleteDoc, doc, getDocs } from 'firebase/firestore'
+import { doc, getDoc, setDoc, getDocs, collection, deleteDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { Trash2, Plus, Box, Edit2, X, ChevronDown } from 'lucide-react'
+import { Trash2, Plus, Box, Edit2, X, ChevronDown, Settings } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 
 const STANDARD_SIZES = ['4cm', '7cm', '10cm', '12.5cm']
 const STANDARD_PURITIES = ['92.5', '80.0']
-const CATEGORIES = ['Silver Idols', 'Silver Animals', 'Marble Photoframes', 'MMTC Bullions']
+const DEFAULT_CATEGORIES = ['Silver Idols', 'Silver Animals', 'Marble Photoframes', 'MMTC Bullions']
 
 interface InventoryItem {
   id: string
@@ -34,6 +34,7 @@ const emptyForm: Partial<InventoryItem> = {
 
 export default function AdminInventory() {
   const [items, setItems] = useState<InventoryItem[]>([])
+  const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -41,19 +42,36 @@ export default function AdminInventory() {
   const [customSizeInput, setCustomSizeInput] = useState('')
   const [customPurityInput, setCustomPurityInput] = useState('')
   const [categoryOpen, setCategoryOpen] = useState(false)
+  const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false)
+  const [newCategoryInput, setNewCategoryInput] = useState('')
 
-  const fetchItems = async () => {
+  const fetchData = async () => {
     setLoading(true)
     try {
+      // Fetch categories
+      const catDoc = await getDoc(doc(db, 'settings', 'categories'))
+      if (catDoc.exists() && catDoc.data().list) {
+        setCategories(catDoc.data().list)
+      } else {
+        setCategories(DEFAULT_CATEGORIES)
+        await setDoc(doc(db, 'settings', 'categories'), { list: DEFAULT_CATEGORIES })
+      }
+
+      // Fetch inventory items
       const snap = await getDocs(collection(db, 'catalog'))
       const fetched: InventoryItem[] = []
       snap.forEach((d) => fetched.push({ id: d.id, ...d.data() } as InventoryItem))
       setItems(fetched)
-    } catch (err) { console.error("Error fetching inventory", err) }
-    finally { setLoading(false) }
+    } catch (err) {
+      console.error("Error fetching data", err)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  useEffect(() => { fetchItems() }, [])
+  useEffect(() => {
+    fetchData()
+  }, [])
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this product?')) return
@@ -119,17 +137,43 @@ export default function AdminInventory() {
   }
 
   const addCustomPurity = () => {
-    const v = customPurityInput.trim()
-    if (!v) return
-    const current = formData.customPurities || []
-    if (!current.includes(v)) {
-      setFormData({ ...formData, customPurities: [...current, v] })
-    }
+    const val = customPurityInput.trim()
+    if (!val) return
+    const newCustoms = [...(formData.customPurities || []), val]
+    setFormData({ ...formData, customPurities: Array.from(new Set(newCustoms)) })
     setCustomPurityInput('')
   }
 
   const removeCustomPurity = (p: string) => {
     setFormData({ ...formData, customPurities: (formData.customPurities || []).filter(x => x !== p) })
+  }
+
+  // --- Category Management ---
+  const handleAddCategory = async () => {
+    const val = newCategoryInput.trim()
+    if (!val || categories.includes(val)) return
+    
+    const newCategories = [...categories, val]
+    setCategories(newCategories)
+    setNewCategoryInput('')
+    
+    try {
+      await setDoc(doc(db, 'settings', 'categories'), { list: newCategories }, { merge: true })
+    } catch (err) {
+      console.error("Failed to add category", err)
+    }
+  }
+
+  const handleRemoveCategory = async (cat: string) => {
+    if (!confirm(`Are you sure you want to remove the category "${cat}"?`)) return
+    const newCategories = categories.filter(c => c !== cat)
+    setCategories(newCategories)
+    
+    try {
+      await setDoc(doc(db, 'settings', 'categories'), { list: newCategories }, { merge: true })
+    } catch (err) {
+      console.error("Failed to remove category", err)
+    }
   }
 
   const numericFilter = (val: string) => val.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')
@@ -160,7 +204,7 @@ export default function AdminInventory() {
             {/* Row 1: Slug + SKU */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="admin-label">URL Slug</label>
+                <label className="admin-label required">URL Slug</label>
                 <input
                   type="text" required disabled={!!editingId}
                   value={formData.slug}
@@ -170,7 +214,7 @@ export default function AdminInventory() {
                 />
               </div>
               <div>
-                <label className="admin-label">SKU (Internal Code)</label>
+                <label className="admin-label required">SKU (Internal Code)</label>
                 <input
                   type="text" required
                   value={formData.sku}
@@ -184,7 +228,7 @@ export default function AdminInventory() {
             {/* Row 2: Name + Category */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="admin-label">Product Name</label>
+                <label className="admin-label required">Product Name</label>
                 <input
                   type="text" required
                   value={formData.name}
@@ -193,37 +237,72 @@ export default function AdminInventory() {
                 />
               </div>
               <div>
-                <label className="admin-label">Category</label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setCategoryOpen(!categoryOpen)}
-                    className="admin-input flex items-center justify-between text-left"
+                <div className="flex items-center justify-between mb-2">
+                  <label className="admin-label required mb-0">Category</label>
+                  <button 
+                    type="button" 
+                    onClick={() => setIsManageCategoriesOpen(!isManageCategoriesOpen)}
+                    className="text-[0.65rem] uppercase font-bold tracking-wider text-blue-600 hover:text-blue-800 flex items-center gap-1"
                   >
-                    <span className={formData.category ? 'text-black' : 'text-gray-400'}>
-                      {formData.category || 'Select category'}
-                    </span>
-                    <ChevronDown size={16} className={`text-gray-400 transition-transform ${categoryOpen ? 'rotate-180' : ''}`} />
+                    <Settings size={12} />
+                    Manage
                   </button>
-                  {categoryOpen && (
-                    <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden animate-[fadeInUp_150ms_var(--ease-out)_forwards]">
-                      {CATEGORIES.map(cat => (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => { setFormData({ ...formData, category: cat }); setCategoryOpen(false) }}
-                          className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-                            formData.category === cat
-                              ? 'bg-black text-white'
-                              : 'text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
+                </div>
+                
+                {isManageCategoriesOpen ? (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 animate-[fadeInUp_200ms_var(--ease-out)_forwards]">
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {categories.map(cat => (
+                        <span key={cat} className="admin-pill admin-pill-active flex items-center gap-1.5 text-xs">
                           {cat}
-                        </button>
+                          <button type="button" onClick={() => handleRemoveCategory(cat)} className="opacity-60 hover:opacity-100"><X size={12} /></button>
+                        </span>
                       ))}
                     </div>
-                  )}
-                </div>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={newCategoryInput}
+                        onChange={e => setNewCategoryInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory() } }}
+                        placeholder="New category..."
+                        className="admin-input py-1.5 px-3 text-sm flex-1"
+                      />
+                      <button type="button" onClick={handleAddCategory} className="admin-btn-primary py-1.5 px-3 text-xs">Add</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setCategoryOpen(!categoryOpen)}
+                      className="admin-input flex items-center justify-between text-left"
+                    >
+                      <span className={formData.category ? 'text-black' : 'text-gray-400'}>
+                        {formData.category || 'Select category'}
+                      </span>
+                      <ChevronDown size={16} className={`text-gray-400 transition-transform ${categoryOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {categoryOpen && (
+                      <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden origin-top animate-[fadeInUp_150ms_var(--ease-out)_forwards]">
+                        {categories.map(cat => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => { setFormData({ ...formData, category: cat }); setCategoryOpen(false) }}
+                            className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                              formData.category === cat
+                                ? 'bg-black text-white'
+                                : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -234,7 +313,7 @@ export default function AdminInventory() {
               <label className="admin-checkbox mb-6">
                 <input
                   type="checkbox"
-                  checked={formData.hasVariants}
+                  checked={formData.hasVariants || false}
                   onChange={e => setFormData({ ...formData, hasVariants: e.target.checked })}
                 />
                 <span className="admin-checkbox-box" />
@@ -339,7 +418,7 @@ export default function AdminInventory() {
             {/* Row 3: Weight + Description */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="admin-label">Approx Weight</label>
+                <label className="admin-label required">Approx Weight</label>
                 <input
                   type="text" required
                   value={formData.weight}
@@ -349,7 +428,7 @@ export default function AdminInventory() {
                 />
               </div>
               <div>
-                <label className="admin-label">Description</label>
+                <label className="admin-label required">Description</label>
                 <textarea
                   required rows={4}
                   value={formData.description}
@@ -361,7 +440,7 @@ export default function AdminInventory() {
 
             {/* Image */}
             <div>
-              <label className="admin-label">Product Image</label>
+              <label className="admin-label required">Product Image</label>
               <ImageDropzone
                 value={formData.imageFile || ''}
                 onChange={(url) => setFormData({ ...formData, imageFile: url })}

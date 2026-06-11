@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { getBrands } from '@/lib/firebase/db'
+import { ProtectedImage } from '@/components/protected-image'
 import { Brand } from '@/data/brands'
 
 export default function BrandsClient() {
@@ -25,7 +25,7 @@ export default function BrandsClient() {
   }, [])
 
   return (
-    <div className="py-20 min-h-[calc(100vh-160px)]">
+    <div className="pt-10 pb-20 min-h-[calc(100vh-160px)]">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-20">
           <h1 className="text-4xl md:text-5xl font-bold leading-tight tracking-tight text-black mb-6">
@@ -60,10 +60,11 @@ export default function BrandsClient() {
               >
                 <div className="w-full md:w-[35%] bg-gray-100 flex items-center justify-center border-b md:border-b-0 md:border-r border-gray-300 min-h-[200px] p-6">
                   <div className="relative w-full h-full flex items-center justify-center">
-                    <img 
+                    <ProtectedImage 
                       src={`/assets/${brand.logoFile}`} 
                       alt={`${brand.name} logo`}
                       className="max-w-[150px] max-h-[150px] object-contain w-auto h-auto transition-transform duration-200 ease-[var(--ease-out)] @media(hover:hover):group-hover:scale-105"
+                      containerClassName="flex items-center justify-center w-full h-full"
                     />
                   </div>
                 </div>

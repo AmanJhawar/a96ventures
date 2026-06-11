@@ -104,7 +104,7 @@ export default function AdminInsights() {
           <form onSubmit={handleSave} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
-                <label className="admin-label">Title</label>
+                <label className="admin-label required">Title</label>
                 <input 
                   type="text" required
                   value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})}
@@ -112,7 +112,7 @@ export default function AdminInsights() {
                 />
               </div>
               <div>
-                <label className="admin-label">Category</label>
+                <label className="admin-label required">Category</label>
                 <input 
                   type="text" required
                   value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}
@@ -120,7 +120,7 @@ export default function AdminInsights() {
                 />
               </div>
               <div>
-                <label className="admin-label">Date</label>
+                <label className="admin-label required">Date</label>
                 <input 
                   type="text" required
                   value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})}
@@ -129,7 +129,7 @@ export default function AdminInsights() {
                 />
               </div>
               <div>
-                <label className="admin-label">Read Time</label>
+                <label className="admin-label required">Read Time</label>
                 <input 
                   type="text" required
                   value={formData.readTime} onChange={e => setFormData({...formData, readTime: e.target.value})}
@@ -140,7 +140,7 @@ export default function AdminInsights() {
             </div>
             
             <div>
-              <label className="admin-label">Excerpt</label>
+              <label className="admin-label required">Excerpt</label>
               <textarea 
                 required rows={3}
                 value={formData.excerpt} onChange={e => setFormData({...formData, excerpt: e.target.value})}

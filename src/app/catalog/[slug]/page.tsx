@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
-import Image from 'next/image'
 import Link from 'next/link'
+import { ProtectedImage } from '@/components/protected-image'
 import { getCatalogItems, getCatalogItemById } from '@/lib/firebase/db'
 
 export async function generateStaticParams() {
@@ -24,7 +24,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   }
 
   return (
-    <div className="py-20 min-h-[calc(100vh-160px)]">
+    <div className="pt-10 pb-20 min-h-[calc(100vh-160px)]">
       <div className="max-w-7xl mx-auto px-6">
         
         {/* Breadcrumb */}
@@ -37,14 +37,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
           {/* Image Gallery Area */}
           <div className="flex flex-col gap-4 opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]">
-            <div className="aspect-square bg-gray-100 rounded-2xl flex items-center justify-center p-8 relative overflow-hidden border border-gray-200">
+            <div className="aspect-square bg-gray-100 rounded-2xl flex items-center justify-center relative overflow-hidden border border-gray-200">
               {item.imageFile ? (
-                <Image
+                <ProtectedImage
                   src={`/assets/${item.imageFile}`}
                   alt={item.name}
-                  fill
-                  className="object-contain p-12"
-                  unoptimized
+                  className="w-full h-full object-contain p-12"
+                  containerClassName="w-full h-full flex items-center justify-center absolute inset-0"
                 />
               ) : (
                 <span className="text-gray-400">Image not available</span>
@@ -53,7 +52,14 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             {/* Thumbnails row (placeholder for future multiple images) */}
             <div className="grid grid-cols-4 gap-4">
               <div className="aspect-square bg-gray-100 rounded-lg border-2 border-black relative overflow-hidden cursor-pointer">
-                {item.imageFile && <Image src={`/assets/${item.imageFile}`} alt="Thumbnail" fill className="object-contain p-2" unoptimized />}
+                {item.imageFile && (
+                  <ProtectedImage 
+                    src={`/assets/${item.imageFile}`} 
+                    alt="Thumbnail" 
+                    className="w-full h-full object-contain p-2" 
+                    containerClassName="w-full h-full absolute inset-0"
+                  />
+                )}
               </div>
             </div>
           </div>

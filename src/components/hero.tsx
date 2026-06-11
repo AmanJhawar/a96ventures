@@ -1,50 +1,98 @@
 'use client'
 
-import { useState } from 'react'
+import Link from 'next/link'
+import { useEffect, useRef } from 'react'
 
 export default function Hero() {
-  const [mousePosition, setMousePosition] = useState({ x: 50, y: 50 })
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const x = ((e.clientX - rect.left) / rect.width) * 100
-    const y = ((e.clientY - rect.top) / rect.height) * 100
-    setMousePosition({ x, y })
-  }
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    let w = 0
+    let h = 0
+
+    const resizeCanvas = () => {
+      const parent = canvas.parentElement
+      if (parent) {
+        w = canvas.width = parent.clientWidth
+        h = canvas.height = parent.clientHeight
+      }
+    }
+    resizeCanvas()
+
+    let targetX = w / 2
+    let targetY = h / 2
+    let currentX = targetX
+    let currentY = targetY
+
+    const onMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect()
+      targetX = e.clientX - rect.left
+      targetY = e.clientY - rect.top
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('resize', resizeCanvas)
+
+    let animationFrameId: number
+
+    const render = () => {
+      currentX += (targetX - currentX) * 0.05
+      currentY += (targetY - currentY) * 0.05
+
+      ctx.clearRect(0, 0, w, h)
+      
+      const gradient = ctx.createRadialGradient(currentX, currentY, 0, currentX, currentY, Math.max(w, h) * 0.5)
+      gradient.addColorStop(0, 'rgba(170, 175, 185, 0.4)')
+      gradient.addColorStop(0.4, 'rgba(210, 215, 225, 0.15)')
+      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+
+      ctx.fillStyle = gradient
+      ctx.fillRect(0, 0, w, h)
+
+      animationFrameId = requestAnimationFrame(render)
+    }
+
+    render()
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('resize', resizeCanvas)
+      cancelAnimationFrame(animationFrameId)
+    }
+  }, [])
 
   return (
-    <section
-      className="min-h-[80vh] flex items-center justify-center text-center pb-20 relative pt-[100px] md:pt-0"
-      onMouseMove={handleMouseMove}
-      style={{
-        background: `radial-gradient(circle at ${mousePosition.x}% ${mousePosition.y}%, 
-          rgba(200, 200, 200, 0.25) 0%, 
-          rgba(150, 150, 150, 0.15) 30%, 
-          rgba(100, 100, 100, 0.08) 60%, 
-          rgba(0, 0, 0, 0.05) 100%)`
-      }}
-    >
-      <div className="max-w-7xl mx-auto px-6 w-full">
-        <div className="max-w-[900px] mx-auto relative z-10">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight text-black mb-6 animate-clip-reveal">
+    <section className="min-h-[80vh] flex flex-col items-center justify-center text-center pb-20 relative pt-[100px] md:pt-0 overflow-hidden">
+      {/* Interactive Motion Canvas */}
+      <canvas 
+        ref={canvasRef} 
+        className="absolute inset-0 z-0 pointer-events-none"
+        style={{ width: '100%', height: '100%' }}
+      />
+
+      <div className="max-w-7xl mx-auto px-6 w-full relative z-10">
+        <div className="max-w-[900px] mx-auto">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight text-black mb-6 animate-[clipReveal_800ms_var(--ease-out)_forwards]">
             We partner with <span className="relative inline-block after:absolute after:bottom-1 after:left-0 after:right-0 after:h-0.5 after:bg-black after:animate-[underlineGrow_600ms_var(--ease-out)_0.8s_both]">visionaries</span> &nbsp;to build tomorrow&apos;s defining companies.
           </h1>
-          <p className="text-xl font-normal text-gray-500 leading-relaxed max-w-[600px] mx-auto opacity-0 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:400ms]">
+          <p className="text-xl font-normal text-gray-500 leading-relaxed max-w-[600px] mx-auto opacity-0 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:400ms] mb-12">
             Early-stage venture capital focused on transformative technologies and exceptional founders.
           </p>
+          <div className="opacity-0 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:600ms]">
+            <Link 
+              href="/portfolio" 
+              className="inline-block bg-black text-white px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-all duration-[160ms] ease-[var(--ease-out)] hover:bg-gray-800 active:scale-[0.97] shadow-lg hover:shadow-xl"
+            >
+              View Portfolio
+            </Link>
+          </div>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes underlineGrow {
-          from { width: 0; }
-          to { width: 100%; }
-        }
-      `}</style>
     </section>
   )
 }

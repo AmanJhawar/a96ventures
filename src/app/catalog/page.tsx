@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { getCatalogItems } from '@/lib/firebase/db'
 import { CatalogItem } from '@/data/catalog'
+import { ProtectedImage } from '@/components/protected-image'
 
 export default function Catalog() {
   const [items, setItems] = useState<CatalogItem[]>([])
@@ -28,27 +29,36 @@ export default function Catalog() {
   const categories = ['All', 'Silver Idols', 'Silver Animals', 'Marble Photoframes', 'MMTC Bullions']
   const filteredItems = activeFilter === 'All' ? items : items.filter(item => item.category === activeFilter)
   return (
-    <div className="py-20 min-h-[calc(100vh-160px)]">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold leading-tight tracking-tight text-black mb-6">
-            Exclusive Collections
-          </h1>
-          <p className="text-xl font-normal text-gray-500 leading-relaxed max-w-[600px] mx-auto">
-            A curated selection of our premium products.
-          </p>
+    <div className="pt-10 pb-20 min-h-[calc(100vh-160px)]">
+      {/* Catalog Hero */}
+      <div className="relative py-12 mb-12 overflow-hidden border-b border-gray-100">
+        <div className="absolute inset-0 z-0 flex items-center justify-center">
+          <div className="w-[600px] h-[600px] bg-gradient-to-t from-gray-100/50 to-transparent rounded-full blur-[80px] opacity-70"></div>
         </div>
+        <div className="max-w-7xl mx-auto px-6 relative z-10">
+          <div className="text-center">
+            <h1 className="text-4xl md:text-5xl font-bold leading-tight tracking-tight text-black mb-6 animate-[clipReveal_600ms_var(--ease-out)_forwards]">
+              Exclusive Collections
+            </h1>
+            <p className="text-xl font-normal text-gray-500 leading-relaxed max-w-[600px] mx-auto opacity-0 animate-[fadeInUp_500ms_var(--ease-out)_forwards] [animation-delay:200ms]">
+              A curated selection of our premium products.
+            </p>
+          </div>
+        </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-6">
         <div className="flex flex-wrap justify-center gap-3 mb-16">
-          {categories.map(cat => (
+          {categories.map((cat, index) => (
             <button
               key={cat}
               onClick={() => setActiveFilter(cat)}
-              className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-200 ease-[var(--ease-out)] ${
+              className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-[160ms] ease-[var(--ease-out)] active:scale-[0.97] opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards] ${
                 activeFilter === cat 
                   ? 'bg-black text-white shadow-md' 
                   : 'bg-gray-100 text-gray-600 @media(hover:hover):hover:bg-gray-200'
               }`}
+              style={{ animationDelay: `${300 + (index * 40)}ms` }}
             >
               {cat}
             </button>
@@ -74,16 +84,16 @@ export default function Catalog() {
               >
               <div className="aspect-[4/3] bg-gray-100 flex items-center justify-center p-8 relative overflow-hidden">
                 <div className="w-full h-full relative flex items-center justify-center text-gray-400 text-sm">
-                  {/* Using standard img to avoid next/image errors before assets are uploaded */}
-                  <img 
-                    src={`/assets/${item.imageFile}`} 
-                    alt={item.name}
-                    className="max-w-full max-h-full object-contain transition-transform duration-500 ease-[var(--ease-out)] @media(hover:hover):group-hover:scale-105"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                      (e.target as HTMLImageElement).parentElement!.innerHTML = 'Image Coming Soon';
-                    }}
-                  />
+                  {item.imageFile ? (
+                    <ProtectedImage 
+                      src={`/assets/${item.imageFile}`} 
+                      alt={item.name}
+                      className="max-w-full max-h-full object-contain transition-transform duration-500 ease-[var(--ease-out)] @media(hover:hover):group-hover:scale-105"
+                      containerClassName="w-full h-full flex items-center justify-center"
+                    />
+                  ) : (
+                    <span>Image Coming Soon</span>
+                  )}
                 </div>
               </div>
               <div className="p-8 flex flex-col flex-1">

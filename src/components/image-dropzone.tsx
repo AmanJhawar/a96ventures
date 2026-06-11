@@ -44,51 +44,24 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
     setIsUploading(true)
 
     try {
-      // We will read the file and compress it heavily so it fits inside a Firestore Document (1MB limit)
       const reader = new FileReader()
       reader.readAsDataURL(file)
       reader.onload = (event) => {
-        const img = new window.Image()
-        img.src = event.target?.result as string
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          // Set max dimensions
-          const MAX_WIDTH = 1200
-          const MAX_HEIGHT = 1200
-          let width = img.width
-          let height = img.height
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width
-              width = MAX_WIDTH
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height
-              height = MAX_HEIGHT
-            }
-          }
-          canvas.width = width
-          canvas.height = height
-          
-          const ctx = canvas.getContext('2d')
-          ctx?.drawImage(img, 0, 0, width, height)
-          
-          // Compress to JPEG with 80% quality
-          const base64String = canvas.toDataURL('image/jpeg', 0.8)
-          
-          // Check size (rough estimate of base64 size)
-          const sizeInBytes = (base64String.length * (3/4)) - 2
-          if (sizeInBytes > 900000) { // Safety margin below 1MB
-            alert('Image is still too large after compression. Please upload a smaller image.')
-            setIsUploading(false)
-            return
-          }
-
-          onChange(base64String)
+        const base64String = event.target?.result as string
+        
+        // Firestore has a strict 1MB document limit.
+        // A Base64 string is roughly 4/3 the size of the original file.
+        // We calculate the byte size of the base64 string (accounting for padding)
+        const sizeInBytes = (base64String.length * (3/4)) - (base64String.endsWith('==') ? 2 : base64String.endsWith('=') ? 1 : 0)
+        
+        if (sizeInBytes > 1000000) { // Limit to 1MB (giving a small buffer for other document fields)
+          alert('Image exceeds 1MB Firestore limit. Please manually compress your image before uploading, or it will fail to save.')
           setIsUploading(false)
+          return
         }
+
+        onChange(base64String)
+        setIsUploading(false)
       }
     } catch (err) {
       console.error("Error processing image", err)

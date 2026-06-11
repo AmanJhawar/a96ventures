@@ -111,7 +111,7 @@ export default function AdminPortfolio() {
           <form onSubmit={handleSave} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="admin-label">Company Name</label>
+                <label className="admin-label required">Company Name</label>
                 <input 
                   type="text" required
                   value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
@@ -119,7 +119,7 @@ export default function AdminPortfolio() {
                 />
               </div>
               <div>
-                <label className="admin-label">URL Slug</label>
+                <label className="admin-label required">URL Slug</label>
                 <input 
                   type="text" required
                   disabled={!!editingId}
@@ -128,7 +128,7 @@ export default function AdminPortfolio() {
                 />
               </div>
               <div>
-                <label className="admin-label">Stage</label>
+                <label className="admin-label required">Stage</label>
                 <input 
                   type="text" required
                   value={formData.stage} onChange={e => setFormData({...formData, stage: e.target.value})}
@@ -137,7 +137,7 @@ export default function AdminPortfolio() {
                 />
               </div>
               <div>
-                <label className="admin-label">Sector</label>
+                <label className="admin-label required">Sector</label>
                 <input 
                   type="text" required
                   value={formData.sector} onChange={e => setFormData({...formData, sector: e.target.value})}
@@ -147,7 +147,7 @@ export default function AdminPortfolio() {
             </div>
             
             <div>
-              <label className="admin-label">Description</label>
+              <label className="admin-label required">Description</label>
               <textarea 
                 required rows={3}
                 value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})}

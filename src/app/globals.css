@@ -49,7 +49,7 @@
   @keyframes fadeInUp {
     from {
       opacity: 0;
-      transform: translateY(12px) scale(0.98);
+      transform: translateY(12px) scale(0.95);
     }
     to {
       opacity: 1;
@@ -64,6 +64,16 @@
     to {
       clip-path: inset(0 0 0 0);
     }
+  }
+
+  @keyframes underlineGrow {
+    from { width: 0; }
+    to { width: 100%; }
+  }
+
+  @keyframes pulseGlow {
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+    100% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.7; }
   }
 }
 
@@ -82,6 +92,11 @@
   margin-bottom: 0.5rem;
 }
 
+.admin-label.required::after {
+  content: " *";
+  color: #ef4444;
+}
+
 /* ── Standard Input ── */
 .admin-input {
   width: 100%;
@@ -90,7 +105,7 @@
   border: 1px solid #d1d5db;
   background: white;
   font-size: 0.875rem;
-  transition: border-color 200ms, box-shadow 200ms;
+  transition: border-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
 }
 .admin-input:focus {
   outline: none;
@@ -108,7 +123,7 @@
   font-size: 1rem;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-  transition: border-color 200ms;
+  transition: border-color 160ms var(--ease-out);
 }
 .admin-input-underline:focus {
   outline: none;
@@ -124,11 +139,14 @@
   font-size: 0.875rem;
   font-weight: 500;
   letter-spacing: 0.02em;
-  transition: background 200ms;
+  transition: background-color 160ms var(--ease-out), transform 160ms var(--ease-out);
   cursor: pointer;
 }
 .admin-btn-primary:hover {
   background: #1f2937;
+}
+.admin-btn-primary:active {
+  transform: scale(0.97);
 }
 
 /* ── Outline Button (ADD) ── */
@@ -143,11 +161,14 @@
   text-transform: uppercase;
   color: #374151;
   cursor: pointer;
-  transition: border-color 200ms, background 200ms;
+  transition: border-color 160ms var(--ease-out), background-color 160ms var(--ease-out), transform 160ms var(--ease-out);
 }
 .admin-btn-outline:hover {
   border-color: #000;
   background: #f9fafb;
+}
+.admin-btn-outline:active {
+  transform: scale(0.97);
 }
 
 /* ── Pill / Tag Buttons (for sizes & purities) ── */
@@ -160,10 +181,13 @@
   font-variant-numeric: tabular-nums;
   color: #6b7280;
   cursor: pointer;
-  transition: all 200ms;
+  transition: border-color 160ms var(--ease-out), color 160ms var(--ease-out), background-color 160ms var(--ease-out), transform 160ms var(--ease-out);
 }
 .admin-pill:hover {
   border-color: #9ca3af;
+}
+.admin-pill:active {
+  transform: scale(0.97);
 }
 .admin-pill-active {
   border-color: #000;
@@ -199,7 +223,7 @@
   border-radius: 0.1875rem;
   background: transparent;
   flex-shrink: 0;
-  transition: all 150ms;
+  transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out);
 }
 .admin-checkbox input[type="checkbox"]:checked + .admin-checkbox-box {
   background: #000;
@@ -216,4 +240,37 @@
 .admin-checkbox input[type="checkbox"]:focus-visible + .admin-checkbox-box {
   outline: 2px solid #000;
   outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════
+   Protected Image System
+   ═══════════════════════════════════════════════════ */
+.protected-image-container {
+  position: relative;
+  display: inline-block;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.protected-image-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: inherit;
+  transition: opacity 0.3s ease;
+  pointer-events: none; /* Let events pass through to the container/shield if needed, but the shield handles it */
+}
+
+.protected-image-shield {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  background: transparent;
+  cursor: default;
 }

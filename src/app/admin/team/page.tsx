@@ -100,7 +100,7 @@ export default function AdminTeam() {
           <form onSubmit={handleSave} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="admin-label">Full Name</label>
+                <label className="admin-label required">Full Name</label>
                 <input 
                   type="text" required
                   value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
@@ -108,7 +108,7 @@ export default function AdminTeam() {
                 />
               </div>
               <div>
-                <label className="admin-label">Role</label>
+                <label className="admin-label required">Role</label>
                 <input 
                   type="text" required
                   value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})}
@@ -119,7 +119,7 @@ export default function AdminTeam() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="admin-label">Profile Image</label>
+                <label className="admin-label required">Profile Image</label>
                 <ImageDropzone 
                   value={formData.imageFile || ''} 
                   onChange={(url) => setFormData({...formData, imageFile: url})} 
@@ -137,7 +137,7 @@ export default function AdminTeam() {
             </div>
 
             <div>
-              <label className="admin-label">Expertise (comma separated)</label>
+              <label className="admin-label required">Expertise (comma separated)</label>
               <input 
                 type="text" required
                 value={(formData.expertise || []).join(', ')} onChange={e => setFormData({...formData, expertise: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})}
@@ -147,7 +147,7 @@ export default function AdminTeam() {
             </div>
 
             <div>
-              <label className="admin-label">Bio</label>
+              <label className="admin-label required">Bio</label>
               <textarea 
                 required rows={3}
                 value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})}
