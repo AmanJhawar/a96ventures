@@ -4,6 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { ShoppingBag } from 'lucide-react'
+import { useCart } from './cart-provider'
 
 function NavLink({ href, children, isActive, onClick }: { href: string; children: React.ReactNode; isActive: boolean; onClick: () => void }) {
   return (
@@ -22,6 +24,9 @@ function NavLink({ href, children, isActive, onClick }: { href: string; children
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const pathname = usePathname()
+  const { cartItems, setIsCartOpen, isInitialized } = useCart()
+
+  const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen)
   const closeMenu = () => setIsMenuOpen(false)
@@ -49,20 +54,46 @@ export default function Header() {
             <NavLink href="/insights" isActive={pathname === '/insights'} onClick={closeMenu}>INSIGHTS</NavLink>
             <NavLink href="/about" isActive={pathname === '/about'} onClick={closeMenu}>ABOUT</NavLink>
             <NavLink href="/contact" isActive={pathname === '/contact'} onClick={closeMenu}>CONTACT</NavLink>
+            <button 
+              onClick={() => setIsCartOpen(true)}
+              className="relative p-2 ml-2 hover:bg-gray-100 rounded-full transition-colors active:scale-95"
+              aria-label="Open cart"
+            >
+              <ShoppingBag size={20} strokeWidth={1.5} />
+              {isInitialized && totalItems > 0 && (
+                <span className="absolute top-1 right-1 bg-black text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transform translate-x-1 -translate-y-1">
+                  {totalItems}
+                </span>
+              )}
+            </button>
           </nav>
 
-          {/* Mobile Menu Button */}
-          <button 
-            className="md:hidden absolute right-0 p-2 bg-transparent border-none cursor-pointer"
-            onClick={toggleMenu}
-            aria-label="Toggle menu"
-          >
-            <div className="flex flex-col w-6 h-[18px] relative justify-between">
-              <span className={`block h-[2px] w-full bg-black transition-all duration-200 ease-[var(--ease-out)] ${isMenuOpen ? 'rotate-45 translate-y-[8px]' : ''}`}></span>
-              <span className={`block h-[2px] w-full bg-black transition-opacity duration-200 ease-[var(--ease)] ${isMenuOpen ? 'opacity-0' : ''}`}></span>
-              <span className={`block h-[2px] w-full bg-black transition-all duration-200 ease-[var(--ease-out)] ${isMenuOpen ? '-rotate-45 -translate-y-[8px]' : ''}`}></span>
-            </div>
-          </button>
+          {/* Mobile Menu & Cart Container */}
+          <div className="md:hidden absolute right-0 flex items-center gap-4">
+            <button 
+              className="p-2 relative flex items-center justify-center transition-transform active:scale-95"
+              onClick={() => setIsCartOpen(true)}
+              aria-label="Open cart"
+            >
+              <ShoppingBag size={20} strokeWidth={1.5} />
+              {isInitialized && totalItems > 0 && (
+                <span className="absolute top-1 right-1 bg-black text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                  {totalItems}
+                </span>
+              )}
+            </button>
+            <button 
+              className="p-2 bg-transparent border-none cursor-pointer flex items-center justify-center"
+              onClick={toggleMenu}
+              aria-label="Toggle menu"
+            >
+              <div className="flex flex-col w-6 h-[18px] relative justify-between">
+                <span className={`block h-[2px] w-full bg-black transition-all duration-200 ease-[var(--ease-out)] ${isMenuOpen ? 'rotate-45 translate-y-[8px]' : ''}`}></span>
+                <span className={`block h-[2px] w-full bg-black transition-opacity duration-200 ease-[var(--ease)] ${isMenuOpen ? 'opacity-0' : ''}`}></span>
+                <span className={`block h-[2px] w-full bg-black transition-all duration-200 ease-[var(--ease-out)] ${isMenuOpen ? '-rotate-45 -translate-y-[8px]' : ''}`}></span>
+              </div>
+            </button>
+          </div>
         </div>
 
         {/* Mobile Navigation */}

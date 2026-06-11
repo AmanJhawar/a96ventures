@@ -1,5 +1,5 @@
 export interface Brand {
-  id: number
+  id: string
   name: string
   description: string
   sector: string
@@ -8,14 +8,14 @@ export interface Brand {
 
 export const brands: Brand[] = [
   {
-    id: 1,
+    id: "white-and-yellow",
     name: "White and Yellow",
     description: "Finest Gold and Silver Bullions.",
     sector: "Bullions",
     logoFile: "white-and-yellow.png"
   },
   {
-    id: 2,
+    id: "idolize",
     name: "IDOLIZE",
     description: "Handcrafted Silver Idols and Home Decor.",
     sector: "Home Decor",

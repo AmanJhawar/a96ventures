@@ -1,22 +1,26 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
-import { getCatalogItems } from '@/lib/firebase/db'
+import { getCatalogItems, getStoreCategories } from '@/lib/firebase/db'
 import { CatalogItem } from '@/data/catalog'
 import { ProtectedImage } from '@/components/protected-image'
 
 export default function Catalog() {
   const [items, setItems] = useState<CatalogItem[]>([])
+  const [categories, setCategories] = useState<string[]>(['All'])
   const [loading, setLoading] = useState(true)
   const [activeFilter, setActiveFilter] = useState('All')
 
   useEffect(() => {
     async function load() {
       try {
-        const fetched = await getCatalogItems()
-        setItems(fetched)
+        const [fetchedItems, fetchedCategories] = await Promise.all([
+          getCatalogItems(),
+          getStoreCategories()
+        ])
+        setItems(fetchedItems)
+        setCategories(['All', ...fetchedCategories])
       } catch (err) {
         console.error("Failed to load catalog:", err)
       } finally {
@@ -26,7 +30,6 @@ export default function Catalog() {
     load()
   }, [])
 
-  const categories = ['All', 'Silver Idols', 'Silver Animals', 'Marble Photoframes', 'MMTC Bullions']
   const filteredItems = activeFilter === 'All' ? items : items.filter(item => item.category === activeFilter)
   return (
     <div className="pt-10 pb-20 min-h-[calc(100vh-160px)]">
@@ -86,7 +89,7 @@ export default function Catalog() {
                 <div className="w-full h-full relative flex items-center justify-center text-gray-400 text-sm">
                   {item.imageFile ? (
                     <ProtectedImage 
-                      src={`/assets/${item.imageFile}`} 
+                      src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
                       alt={item.name}
                       className="max-w-full max-h-full object-contain transition-transform duration-500 ease-[var(--ease-out)] @media(hover:hover):group-hover:scale-105"
                       containerClassName="w-full h-full flex items-center justify-center"
@@ -104,16 +107,35 @@ export default function Catalog() {
                 <p className="text-gray-500 leading-relaxed mb-8">
                   {item.description}
                 </p>
-                <div className="mt-auto">
-                  <span className="text-xs font-semibold tracking-wider text-black uppercase mb-3 block">Available Variants</span>
-                  <div className="flex flex-wrap gap-2">
-                    {item.variants.map((variant) => (
-                      <span key={variant} className="px-3 py-1 bg-gray-50 text-gray-600 rounded-md text-sm border border-gray-200">
-                        {variant}
-                      </span>
-                    ))}
+                <div className="mt-auto flex flex-col gap-4">
+                    {(item.standardSizes?.length > 0 || item.customSizes?.length > 0) && (
+                      <div>
+                        <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase mb-2 block">Sizes</span>
+                        <div className="flex flex-wrap gap-2">
+                          {item.standardSizes?.map((s) => (
+                            <span key={`std-size-${s}`} className="px-2 py-1 bg-gray-50 text-gray-600 rounded text-xs border border-gray-200">{s}</span>
+                          ))}
+                          {item.customSizes?.map((s) => (
+                            <span key={`cust-size-${s}`} className="px-2 py-1 bg-white text-gray-500 rounded text-xs border border-gray-200 border-dashed">{s} (Custom)</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {(item.standardPurities?.length > 0 || item.customPurities?.length > 0) && (
+                      <div>
+                        <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase mb-2 block">Purity</span>
+                        <div className="flex flex-wrap gap-2">
+                          {item.standardPurities?.map((p) => (
+                            <span key={`std-pur-${p}`} className="px-2 py-1 bg-gray-50 text-gray-600 rounded text-xs border border-gray-200">{p}{p.includes('%') ? '' : '%'}</span>
+                          ))}
+                          {item.customPurities?.map((p) => (
+                            <span key={`cust-pur-${p}`} className="px-2 py-1 bg-white text-gray-500 rounded text-xs border border-gray-200 border-dashed">{p}{p.includes('%') ? '' : '%'} (Custom)</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+
               </div>
             </Link>
           ))}

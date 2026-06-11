@@ -2,13 +2,27 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import Hero from '@/components/hero'
 import NewsletterForm from '@/components/newsletter-form'
+import { getBrands, getPortfolioCompanies } from '@/lib/firebase/db'
 
 export const metadata: Metadata = {
   title: 'A96 Ventures | Early-Stage Venture Capital',
   description: 'We partner with visionaries to build tomorrow\'s defining companies.',
 }
 
-export default function Home() {
+export default async function Home() {
+  let brandsCount = 2
+  let portfolioCount = 2
+  try {
+    const brands = await getBrands()
+    const portfolio = await getPortfolioCompanies()
+    brandsCount = brands.length
+    portfolioCount = portfolio.length
+  } catch (err) {
+    console.error("Error fetching stats:", err)
+  }
+  
+  const yearsExp = new Date().getFullYear() - 2017
+
   return (
     <>
       <Hero />
@@ -31,17 +45,17 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
             <Link href="/portfolio" className="block text-center p-8 bg-white border border-gray-300 rounded-xl transition-all duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98] @media(hover:hover):hover">
-              <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">2+</div>
+              <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{portfolioCount}+</div>
               <div className="text-base text-gray-500">Portfolio Companies</div>
             </Link>
             
             <Link href="/brands" className="block text-center p-8 bg-white border border-gray-300 rounded-xl transition-all duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98] @media(hover:hover):hover">
-              <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">2+</div>
+              <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{brandsCount}+</div>
               <div className="text-base text-gray-500">Brands</div>
             </Link>
             
             <div className="block text-center p-8 bg-white border border-gray-300 rounded-xl">
-              <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">9+</div>
+              <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{yearsExp}+</div>
               <div className="text-base text-gray-500">Years of Experience</div>
             </div>
           </div>

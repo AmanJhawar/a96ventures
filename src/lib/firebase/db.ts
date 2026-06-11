@@ -16,6 +16,16 @@ export async function getCatalogItems(): Promise<CatalogItem[]> {
   return items;
 }
 
+// Fetch store categories
+export async function getStoreCategories(): Promise<string[]> {
+  const docRef = doc(db, 'settings', 'categories');
+  const docSnap = await getDoc(docRef);
+  if (docSnap.exists() && docSnap.data().list) {
+    return docSnap.data().list;
+  }
+  return ['Silver Idols', 'Silver Animals', 'Marble Photoframes', 'MMTC Bullions'];
+}
+
 // Fetch a single catalog item by ID
 export async function getCatalogItemById(id: string): Promise<CatalogItem | null> {
   const docRef = doc(db, 'catalog', id);
@@ -56,7 +66,7 @@ export async function getBrands(): Promise<Brand[]> {
   const querySnapshot = await getDocs(collection(db, 'brands'));
   const items: Brand[] = [];
   querySnapshot.forEach((docSnap) => {
-    items.push({ id: parseInt(docSnap.id), ...docSnap.data() } as Brand);
+    items.push({ id: docSnap.id, ...docSnap.data() } as Brand);
   });
   return items;
 }

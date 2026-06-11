@@ -4,6 +4,14 @@ import { values, milestones } from '@/data/about'
 export const metadata: Metadata = {
   title: 'About | A96 Ventures',
   description: 'We are early-stage investors focused on transformative technologies and exceptional founders.',
+  openGraph: {
+    title: 'About | A96 Ventures',
+    description: 'We are early-stage investors focused on transformative technologies and exceptional founders.',
+  },
+  twitter: {
+    title: 'About | A96 Ventures',
+    description: 'We are early-stage investors focused on transformative technologies and exceptional founders.',
+  }
 }
 
 export default function About() {

@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ProtectedImage } from '@/components/protected-image'
 import { getCatalogItems, getCatalogItemById } from '@/lib/firebase/db'
+import { AddToCartSection } from './add-to-cart-section'
+import { ProductCarousel } from './product-carousel'
 
 export async function generateStaticParams() {
   try {
@@ -36,32 +37,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
           {/* Image Gallery Area */}
-          <div className="flex flex-col gap-4 opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]">
-            <div className="aspect-square bg-gray-100 rounded-2xl flex items-center justify-center relative overflow-hidden border border-gray-200">
-              {item.imageFile ? (
-                <ProtectedImage
-                  src={`/assets/${item.imageFile}`}
-                  alt={item.name}
-                  className="w-full h-full object-contain p-12"
-                  containerClassName="w-full h-full flex items-center justify-center absolute inset-0"
-                />
-              ) : (
-                <span className="text-gray-400">Image not available</span>
-              )}
-            </div>
-            {/* Thumbnails row (placeholder for future multiple images) */}
-            <div className="grid grid-cols-4 gap-4">
-              <div className="aspect-square bg-gray-100 rounded-lg border-2 border-black relative overflow-hidden cursor-pointer">
-                {item.imageFile && (
-                  <ProtectedImage 
-                    src={`/assets/${item.imageFile}`} 
-                    alt="Thumbnail" 
-                    className="w-full h-full object-contain p-2" 
-                    containerClassName="w-full h-full absolute inset-0"
-                  />
-                )}
-              </div>
-            </div>
+          <div className="opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]">
+            <ProductCarousel 
+              images={[item.imageFile, ...(item.additionalImages || [])]} 
+              productName={item.name} 
+            />
           </div>
 
           {/* Details Area */}
@@ -74,40 +54,37 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               {item.description}
             </p>
 
-            {item.variants && item.variants.length > 0 && (
-              <div className="mb-10">
-                <h3 className="text-sm font-semibold text-black uppercase tracking-wider mb-4">Available Variants</h3>
-                <div className="flex flex-wrap gap-3">
-                  {item.variants.map((variant) => (
-                    <div 
-                      key={variant} 
-                      className="px-4 py-3 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-800"
-                    >
-                      {variant}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="pt-8 border-t border-gray-200 flex flex-col sm:flex-row gap-4">
-              <Link 
-                href={`/contact?inquiryType=general&product=${slug}`}
-                className="inline-flex justify-center items-center bg-black text-white px-8 py-4 rounded-lg text-base font-semibold transition-all duration-160 ease-[var(--ease-out)] @media(hover:hover):hover:bg-gray-800 active:scale-[0.97]"
-              >
-                Inquire About This Piece
-              </Link>
-            </div>
+            {/* Add to Cart Section (Client Component) */}
+            <AddToCartSection item={item} />
 
             <div className="mt-12 space-y-4 text-sm text-gray-500">
               <div className="flex justify-between py-3 border-b border-gray-100">
                 <span className="font-medium">Category</span>
-                <span className="text-black">{item.category}</span>
+                <span className="text-black text-right">{item.category}</span>
               </div>
               <div className="flex justify-between py-3 border-b border-gray-100">
                 <span className="font-medium">Material</span>
-                <span className="text-black">{item.category.includes('Silver') ? 'Pure Silver' : 'Semi-precious Marble'}</span>
+                <span className="text-black text-right">{item.material || 'Unspecified'}</span>
               </div>
+              {item.weight && (
+                <div className="flex justify-between py-3 border-b border-gray-100">
+                  <span className="font-medium">Approx Weight</span>
+                  <span className="text-black text-right">{item.weight}</span>
+                </div>
+              )}
+              {item.hasVariants && (item.standardSizes?.length > 0 || item.customSizes?.length > 0) && (
+                <div className="flex justify-between py-3 border-b border-gray-100">
+                  <span className="font-medium">Available Sizes</span>
+                  <span className="text-black text-right">{[...(item.standardSizes || []), ...(item.customSizes || [])].join(', ')}</span>
+                </div>
+              )}
+              {item.hasVariants && (item.standardPurities?.length > 0 || item.customPurities?.length > 0) && (
+                <div className="flex justify-between py-3 border-b border-gray-100">
+                  <span className="font-medium">Available Purities</span>
+                  <span className="text-black text-right">{[...(item.standardPurities || []), ...(item.customPurities || [])].join(', ')}</span>
+                </div>
+              )}
+
             </div>
 
           </div>

@@ -1,9 +1,59 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Function to check if the user is the authorized admin
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'aman@a96ventures.com';
+    }
+
+    // Function to validate inquiry submissions and block bloated payloads
+    function isValidInquiry() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['name', 'email', 'message', 'inquiryType', 'createdAt'])
+        && data.name is string && data.name.size() > 0 && data.name.size() < 100
+        && data.email is string && data.email.size() > 0 && data.email.size() < 100
+        && data.message is string && data.message.size() > 0 && data.message.size() < 5000
+        && data.inquiryType is string
+        && data.createdAt == request.time
+        && (!('company' in data) || (data.company is string && data.company.size() < 200));
+    }
+
+    // Publicly readable collections (Admin write only)
+    match /catalog/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /team/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /brands/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /portfolio/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /insights/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /settings/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Secure PII Collection (Public create only with validation, Admin read/write)
+    match /inquiries/{inquiryId} {
+      allow create: if isValidInquiry();
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Default deny for anything else
     match /{document=**} {
-      // DEV MODE: Security disabled for testing
-      allow read, write: if true; 
+      allow read, write: if false;
     }
   }
 }

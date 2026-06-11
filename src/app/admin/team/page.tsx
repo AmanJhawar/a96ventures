@@ -123,7 +123,6 @@ export default function AdminTeam() {
                 <ImageDropzone 
                   value={formData.imageFile || ''} 
                   onChange={(url) => setFormData({...formData, imageFile: url})} 
-                  path="team" 
                 />
               </div>
               <div>

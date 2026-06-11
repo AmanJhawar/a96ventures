@@ -11,9 +11,11 @@ export interface CatalogItem {
   standardPurities: string[] // e.g., ["92.5", "80.0"]
   customPurities: string[]   // e.g., ["99.9"]
   weight: string
+  material?: string
   imageFile: string
-  // computed helper for display
-  variants: string[]
+  additionalImages?: string[]
+  // mapped SKUs for variant combinations
+  variantSkus?: Record<string, string>
 }
 
 export const catalogItems: CatalogItem[] = [
@@ -30,7 +32,7 @@ export const catalogItems: CatalogItem[] = [
     standardPurities: ["92.5"],
     customPurities: [],
     weight: "50g",
-    variants: ["4cm", "7cm", "10cm"],
+    material: "999 Pure Silver",
     imageFile: "silver-ganesha.png"
   },
   {
@@ -46,7 +48,7 @@ export const catalogItems: CatalogItem[] = [
     standardPurities: ["92.5", "80.0"],
     customPurities: [],
     weight: "75g",
-    variants: ["4cm", "7cm"],
+    material: "Pure Silver",
     imageFile: "silver-elephant.png"
   },
   {
@@ -62,7 +64,7 @@ export const catalogItems: CatalogItem[] = [
     standardPurities: [],
     customPurities: [],
     weight: "200g",
-    variants: ["Rose Quartz", "Lapis Lazuli", "Malachite"],
+    material: "Marble",
     imageFile: "marble-frame.png"
   }
 ];

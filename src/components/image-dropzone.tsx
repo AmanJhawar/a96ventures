@@ -6,7 +6,6 @@ import { UploadCloud, X, Loader2 } from 'lucide-react'
 interface ImageDropzoneProps {
   value: string;
   onChange: (url: string) => void;
-  path?: string; // Kept for API compatibility but not used since we use Base64
 }
 
 export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
@@ -23,19 +22,7 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
     setIsDragging(false)
   }, [])
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) await processFile(file)
-  }, [])
-
-  const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) await processFile(file)
-  }
-
-  const processFile = async (file: File) => {
+  const processFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Please upload an image file.')
       return
@@ -68,7 +55,21 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
       alert("Failed to process image")
       setIsUploading(false)
     }
+  }, [onChange])
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) await processFile(file)
+  }, [processFile])
+
+  const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) await processFile(file)
   }
+
+
 
   if (value) {
     return (
@@ -99,7 +100,7 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
         type="file"
         accept="image/*"
         onChange={handleChange}
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         disabled={isUploading}
       />
       

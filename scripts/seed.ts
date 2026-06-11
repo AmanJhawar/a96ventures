@@ -1,18 +1,5 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc } from 'firebase/firestore';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyC9u17jg46lvVUsZwjgbDzqe_Ot6ZkXB-w",
-  authDomain: "a96ventures-882ec.firebaseapp.com",
-  projectId: "a96ventures-882ec",
-  storageBucket: "a96ventures-882ec.firebasestorage.app",
-  messagingSenderId: "579157315760",
-  appId: "1:579157315760:web:56a93fc80c4372c51bab75",
-  measurementId: "G-E2VBCYP5YX"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../src/lib/firebase/config';
 
 const catalogItems = [
   {
@@ -20,7 +7,9 @@ const catalogItems = [
     name: "Pure Silver Ganesha Idol",
     category: 'Silver Idols',
     description: "Intricately crafted Lord Ganesha idol made from 999 pure silver, perfect for gifting and pooja.",
-    variants: ["3 inch", "5 inch", "7 inch"],
+    hasVariants: true,
+    standardSizes: ["3 inch", "5 inch", "7 inch"],
+    standardPurities: ["99.9"],
     imageFile: "silver-ganesha.png"
   },
   {
@@ -28,7 +17,9 @@ const catalogItems = [
     name: "Silver Elephant Figurine",
     category: 'Silver Animals',
     description: "Detailed pure silver elephant showpiece symbolizing strength, wisdom, and good luck.",
-    variants: ["Small", "Medium", "Large"],
+    hasVariants: true,
+    standardSizes: ["Small", "Medium", "Large"],
+    standardPurities: ["99.9"],
     imageFile: "silver-elephant.png"
   },
   {
@@ -36,7 +27,9 @@ const catalogItems = [
     name: "Semi-Precious Marble Photoframe",
     category: 'Marble Photoframes',
     description: "Handcrafted white marble photoframe inlaid with natural semi-precious stones.",
-    variants: ["Rose Quartz", "Lapis Lazuli", "Malachite"],
+    hasVariants: true,
+    standardSizes: ["Rose Quartz", "Lapis Lazuli", "Malachite"],
+    standardPurities: [],
     imageFile: "marble-frame.png"
   }
 ];

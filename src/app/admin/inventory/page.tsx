@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { doc, getDoc, setDoc, getDocs, collection, deleteDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { Trash2, Plus, Box, Edit2, X, ChevronDown, Settings } from 'lucide-react'
+import { Trash2, Plus, Box, Edit2, X, ChevronDown } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 
 const STANDARD_SIZES = ['4cm', '7cm', '10cm', '12.5cm']
@@ -22,14 +22,18 @@ interface InventoryItem {
   standardPurities: string[]
   customPurities: string[]
   weight: string
+  material?: string
+  additionalImages?: string[]
   description: string
   imageFile: string
+  variantSkus?: Record<string, string>
 }
 
 const emptyForm: Partial<InventoryItem> = {
   slug: '', sku: '', name: '', category: '', hasVariants: false,
   standardSizes: [], customSizes: [], standardPurities: [], customPurities: [],
-  weight: '', description: '', imageFile: ''
+  variantSkus: {},
+  weight: '', material: '', description: '', imageFile: ''
 }
 
 export default function AdminInventory() {
@@ -42,8 +46,41 @@ export default function AdminInventory() {
   const [customSizeInput, setCustomSizeInput] = useState('')
   const [customPurityInput, setCustomPurityInput] = useState('')
   const [categoryOpen, setCategoryOpen] = useState(false)
-  const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false)
-  const [newCategoryInput, setNewCategoryInput] = useState('')
+  const [categoryFocusedIndex, setCategoryFocusedIndex] = useState(-1)
+  const categoryRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (categoryRef.current && !categoryRef.current.contains(e.target as Node)) setCategoryOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    if (categoryOpen) {
+      const idx = categories.findIndex(c => c === formData.category)
+      setCategoryFocusedIndex(idx >= 0 ? idx : 0)
+    } else {
+      setCategoryFocusedIndex(-1)
+    }
+  }, [categoryOpen, formData.category, categories])
+
+  const handleCategoryKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!categoryOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault(); setCategoryOpen(true)
+      }
+      return
+    }
+    switch (e.key) {
+      case 'Escape': e.preventDefault(); setCategoryOpen(false); break
+      case 'ArrowDown': e.preventDefault(); setCategoryFocusedIndex(prev => prev < categories.length - 1 ? prev + 1 : prev); break
+      case 'ArrowUp': e.preventDefault(); setCategoryFocusedIndex(prev => prev > 0 ? prev - 1 : prev); break
+      case 'Enter':
+      case ' ': e.preventDefault(); if (categoryFocusedIndex >= 0 && categoryFocusedIndex < categories.length) { setFormData({ ...formData, category: categories[categoryFocusedIndex] }); setCategoryOpen(false) }; break
+    }
+  }
 
   const fetchData = async () => {
     setLoading(true)
@@ -97,18 +134,66 @@ export default function AdminInventory() {
     e.preventDefault()
     if (!formData.slug) { alert("Slug is required!"); return }
     const docId = editingId || formData.slug
-    const payload = { ...formData }
-    if (!payload.hasVariants) {
-      payload.standardSizes = []; payload.customSizes = []
-      payload.standardPurities = []; payload.customPurities = []
+
+    try {
+      // Uniqueness check for new products
+      if (!editingId) {
+        const existingDoc = await getDoc(doc(db, 'catalog', docId))
+        if (existingDoc.exists()) {
+          alert(`A product with the slug "${docId}" already exists. Please choose a unique slug.`)
+          return
+        }
+      }
+
+      const payload = { ...formData }
+
+      let totalSize = payload.imageFile ? payload.imageFile.length * 0.75 : 0
+      if (payload.additionalImages) {
+        payload.additionalImages.forEach(img => {
+          totalSize += img.length * 0.75
+        })
+      }
+      if (totalSize > 1000000) {
+        alert("Total image size exceeds the 1MB Firestore limit. Please remove or compress images before saving.")
+        return
+      }
+
+      if (payload.hasVariants) {
+        const sizes = [...(payload.standardSizes || []), ...(payload.customSizes || [])]
+        const purities = [...(payload.standardPurities || []), ...(payload.customPurities || [])]
+        
+        if (sizes.length === 0 || purities.length === 0) {
+          alert("You must select at least one Size and one Purity to configure variant SKUs.")
+          return
+        }
+
+        const combos: string[] = []
+        sizes.forEach(s => purities.forEach(p => combos.push(`${s} | ${p}`)))
+
+        for (const combo of combos) {
+          if (!payload.variantSkus?.[combo] || payload.variantSkus[combo].trim() === '') {
+            alert(`Variant SKU for "${combo}" is required.`)
+            return
+          }
+        }
+      } else {
+        payload.standardSizes = []; payload.customSizes = []
+        payload.standardPurities = []; payload.customPurities = []
+        payload.variantSkus = {}
+      }
+
+      await setDoc(doc(db, 'catalog', docId), payload)
+
+      if (editingId) {
+        setItems(items.map(i => i.id === editingId ? { id: docId, ...payload } as InventoryItem : i))
+      } else {
+        setItems([...items, { id: docId, ...payload } as InventoryItem])
+      }
+      handleCancel()
+    } catch (err) {
+      console.error("Error saving product:", err)
+      alert("Failed to save product. Please check your connection and permissions.")
     }
-    await setDoc(doc(db, 'catalog', docId), payload)
-    if (editingId) {
-      setItems(items.map(i => i.id === editingId ? { id: docId, ...payload } as InventoryItem : i))
-    } else {
-      setItems([...items, { id: docId, ...payload } as InventoryItem])
-    }
-    handleCancel()
   }
 
   const toggleSize = (size: string) => {
@@ -148,33 +233,7 @@ export default function AdminInventory() {
     setFormData({ ...formData, customPurities: (formData.customPurities || []).filter(x => x !== p) })
   }
 
-  // --- Category Management ---
-  const handleAddCategory = async () => {
-    const val = newCategoryInput.trim()
-    if (!val || categories.includes(val)) return
-    
-    const newCategories = [...categories, val]
-    setCategories(newCategories)
-    setNewCategoryInput('')
-    
-    try {
-      await setDoc(doc(db, 'settings', 'categories'), { list: newCategories }, { merge: true })
-    } catch (err) {
-      console.error("Failed to add category", err)
-    }
-  }
 
-  const handleRemoveCategory = async (cat: string) => {
-    if (!confirm(`Are you sure you want to remove the category "${cat}"?`)) return
-    const newCategories = categories.filter(c => c !== cat)
-    setCategories(newCategories)
-    
-    try {
-      await setDoc(doc(db, 'settings', 'categories'), { list: newCategories }, { merge: true })
-    } catch (err) {
-      console.error("Failed to remove category", err)
-    }
-  }
 
   const numericFilter = (val: string) => val.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')
 
@@ -216,10 +275,10 @@ export default function AdminInventory() {
               <div>
                 <label className="admin-label required">SKU (Internal Code)</label>
                 <input
-                  type="text" required
-                  value={formData.sku}
+                  type="text" required={!formData.hasVariants} disabled={formData.hasVariants}
+                  value={formData.hasVariants ? 'Variant SKUs Configured Below' : (formData.sku || '')}
                   onChange={e => setFormData({ ...formData, sku: e.target.value })}
-                  className="admin-input"
+                  className="admin-input disabled:bg-gray-100 disabled:text-gray-500"
                   placeholder="e.g., A96-001"
                 />
               </div>
@@ -237,44 +296,14 @@ export default function AdminInventory() {
                 />
               </div>
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="admin-label required mb-0">Category</label>
-                  <button 
-                    type="button" 
-                    onClick={() => setIsManageCategoriesOpen(!isManageCategoriesOpen)}
-                    className="text-[0.65rem] uppercase font-bold tracking-wider text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                  >
-                    <Settings size={12} />
-                    Manage
-                  </button>
-                </div>
-                
-                {isManageCategoriesOpen ? (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 animate-[fadeInUp_200ms_var(--ease-out)_forwards]">
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {categories.map(cat => (
-                        <span key={cat} className="admin-pill admin-pill-active flex items-center gap-1.5 text-xs">
-                          {cat}
-                          <button type="button" onClick={() => handleRemoveCategory(cat)} className="opacity-60 hover:opacity-100"><X size={12} /></button>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <input 
-                        type="text" 
-                        value={newCategoryInput}
-                        onChange={e => setNewCategoryInput(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory() } }}
-                        placeholder="New category..."
-                        className="admin-input py-1.5 px-3 text-sm flex-1"
-                      />
-                      <button type="button" onClick={handleAddCategory} className="admin-btn-primary py-1.5 px-3 text-xs">Add</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="relative">
+                <label className="admin-label required mb-2">Category</label>
+                  <div className="relative" ref={categoryRef} onKeyDown={handleCategoryKeyDown}>
                     <button
                       type="button"
+                      role="combobox"
+                      aria-haspopup="listbox"
+                      aria-expanded={categoryOpen}
+                      aria-controls="admin-category-listbox"
                       onClick={() => setCategoryOpen(!categoryOpen)}
                       className="admin-input flex items-center justify-between text-left"
                     >
@@ -285,24 +314,27 @@ export default function AdminInventory() {
                     </button>
                     {categoryOpen && (
                       <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden origin-top animate-[fadeInUp_150ms_var(--ease-out)_forwards]">
-                        {categories.map(cat => (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => { setFormData({ ...formData, category: cat }); setCategoryOpen(false) }}
-                            className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-                              formData.category === cat
-                                ? 'bg-black text-white'
-                                : 'text-gray-700 hover:bg-gray-50'
-                            }`}
-                          >
-                            {cat}
-                          </button>
-                        ))}
+                        <ul id="admin-category-listbox" role="listbox" className="m-0 p-0 list-none max-h-60 overflow-y-auto">
+                          {categories.map((cat, idx) => (
+                            <li key={cat} role="option" aria-selected={formData.category === cat}>
+                              <button
+                                type="button"
+                                tabIndex={-1}
+                                onClick={() => { setFormData({ ...formData, category: cat }); setCategoryOpen(false) }}
+                                className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                                  categoryFocusedIndex === idx ? 'bg-gray-100' : ''
+                                } ${
+                                  formData.category === cat ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-50'
+                                }`}
+                              >
+                                {cat}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </div>
-                )}
               </div>
             </div>
 
@@ -321,7 +353,8 @@ export default function AdminInventory() {
               </label>
 
               {formData.hasVariants && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
                   {/* ── Size Column ── */}
                   <div>
                     <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">Available Sizes</p>
@@ -403,7 +436,7 @@ export default function AdminInventory() {
                           onChange={e => setCustomPurityInput(numericFilter(e.target.value))}
                           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomPurity() } }}
                           className="admin-input-underline"
-                          placeholder="99.9"
+                          placeholder="e.g., 99.9"
                         />
                       </div>
                       <button type="button" onClick={addCustomPurity} className="admin-btn-outline">
@@ -412,10 +445,51 @@ export default function AdminInventory() {
                     </div>
                   </div>
                 </div>
+                
+                {/* Variant SKUs Matrix */}
+                {(() => {
+                  const sizes = [...(formData.standardSizes || []), ...(formData.customSizes || [])]
+                  const purities = [...(formData.standardPurities || []), ...(formData.customPurities || [])]
+                  let combos: string[] = []
+                  if (sizes.length > 0 && purities.length > 0) {
+                    sizes.forEach(s => purities.forEach(p => combos.push(`${s} | ${p}`)))
+                  }
+
+                  if (combos.length === 0) return (
+                    <div className="mt-8 pt-6 border-t border-gray-200">
+                      <p className="text-sm text-gray-500 italic">Select at least one Size and one Purity to configure variant SKUs.</p>
+                    </div>
+                  )
+
+                  return (
+                    <div className="mt-8 pt-6 border-t border-gray-200">
+                      <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">Variant SKUs</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {combos.map(combo => (
+                          <div key={combo} className="flex flex-col gap-1">
+                            <label className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">{combo}</label>
+                            <input 
+                              type="text"
+                              value={formData.variantSkus?.[combo] || ''}
+                              onChange={(e) => setFormData({ 
+                                ...formData, 
+                                variantSkus: { ...(formData.variantSkus || {}), [combo]: e.target.value }
+                              })}
+                              className="admin-input text-sm py-2"
+                              placeholder={`SKU`}
+                              required
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </>
               )}
             </div>
 
-            {/* Row 3: Weight + Description */}
+            {/* Row 3: Weight + Material */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="admin-label required">Approx Weight</label>
@@ -428,24 +502,66 @@ export default function AdminInventory() {
                 />
               </div>
               <div>
-                <label className="admin-label required">Description</label>
-                <textarea
-                  required rows={4}
-                  value={formData.description}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  className="admin-input resize-none"
+                <label className="admin-label">Material (Optional)</label>
+                <input
+                  type="text"
+                  value={formData.material || ''}
+                  onChange={e => setFormData({ ...formData, material: e.target.value })}
+                  className="admin-input"
+                  placeholder="e.g., 999 Pure Silver"
                 />
               </div>
             </div>
 
-            {/* Image */}
+            {/* Row 4: Description */}
             <div>
-              <label className="admin-label required">Product Image</label>
+              <label className="admin-label required">Description</label>
+              <textarea
+                required rows={4}
+                value={formData.description}
+                onChange={e => setFormData({ ...formData, description: e.target.value })}
+                className="admin-input resize-none"
+              />
+            </div>
+
+            {/* Images */}
+            <div>
+              <label className="admin-label required">Primary Image</label>
               <ImageDropzone
                 value={formData.imageFile || ''}
                 onChange={(url) => setFormData({ ...formData, imageFile: url })}
-                path="catalog"
               />
+            </div>
+            
+            <div>
+              <label className="admin-label">Additional Images (Optional)</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {(formData.additionalImages || []).map((img, idx) => (
+                  <ImageDropzone
+                    key={idx}
+                    value={img}
+                    onChange={(url) => {
+                      const newImages = [...(formData.additionalImages || [])]
+                      if (url) {
+                        newImages[idx] = url
+                      } else {
+                        newImages.splice(idx, 1)
+                      }
+                      setFormData({ ...formData, additionalImages: newImages })
+                    }}
+                  />
+                ))}
+                {(formData.additionalImages || []).length < 4 && (
+                  <ImageDropzone
+                    value=""
+                    onChange={(url) => {
+                      if (url) {
+                        setFormData({ ...formData, additionalImages: [...(formData.additionalImages || []), url] })
+                      }
+                    }}
+                  />
+                )}
+              </div>
             </div>
 
             <button type="submit" className="admin-btn-primary">

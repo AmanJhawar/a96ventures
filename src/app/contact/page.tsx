@@ -1,20 +1,48 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import CustomSelect from '@/components/custom-select'
 import { submitInquiry } from '@/lib/firebase/db'
+import { useCart } from '@/components/cart-provider'
 
-export default function Contact() {
+function ContactForm() {
+  const searchParams = useSearchParams()
+  const { cartItems, clearCart } = useCart()
+  const fromCart = searchParams.get('fromCart') === 'true'
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     company: '',
     message: '',
-    inquiryType: 'general'
+    inquiryType: fromCart ? 'general' : 'general'
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+
+  // Pre-fill from Cart
+  useEffect(() => {
+    if (fromCart && cartItems.length > 0 && !formData.message) {
+      const intro = "I would like to inquire about the following items from my cart:\n\n"
+      const itemsList = cartItems.map(item => {
+        let text = `- [${item.sku}] ${item.quantity}x ${item.productName}`
+        const opts = []
+        if (item.selectedSize) opts.push(`Size: ${item.selectedSize}`)
+        if (item.selectedPurity) opts.push(`Purity: ${item.selectedPurity}`)
+        if (opts.length > 0) {
+          text += ` (${opts.join(', ')})`
+        }
+        return text
+      }).join('\n')
+      
+      setFormData(prev => ({
+        ...prev,
+        message: intro + itemsList + "\n\nAdditional comments:\n"
+      }))
+    }
+  }, [fromCart, cartItems, formData.message])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> | { target: { name: string; value: string } }) => {
     setFormData({
@@ -30,6 +58,9 @@ export default function Contact() {
     
     try {
       await submitInquiry(formData)
+      if (fromCart) {
+        clearCart()
+      }
       setSuccess(true)
       setFormData({
         name: '',
@@ -47,6 +78,93 @@ export default function Contact() {
     }
   }
 
+  return (
+    <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
+      <div className="flex flex-col">
+        <label htmlFor="inquiryType" className="text-sm font-medium text-black mb-2">Inquiry Type</label>
+        <CustomSelect
+          id="inquiryType"
+          name="inquiryType"
+          value={formData.inquiryType}
+          onChange={handleChange}
+          options={[
+            { value: "general", label: "General Inquiry" },
+            { value: "pitch", label: "Startup Pitch" },
+            { value: "lp", label: "Limited Partner" },
+            { value: "press", label: "Press & Media" },
+            { value: "partnership", label: "Partnership" }
+          ]}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="flex flex-col">
+          <label htmlFor="name" className="text-sm font-medium text-black mb-2">Full Name *</label>
+          <input
+            type="text"
+            id="name"
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
+            required
+          />
+        </div>
+
+        <div className="flex flex-col">
+          <label htmlFor="email" className="text-sm font-medium text-black mb-2">Email Address *</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
+            required
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col">
+        <label htmlFor="company" className="text-sm font-medium text-black mb-2">Company</label>
+        <input
+          type="text"
+          id="company"
+          name="company"
+          value={formData.company}
+          onChange={handleChange}
+          className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
+        />
+      </div>
+
+      <div className="flex flex-col">
+        <label htmlFor="message" className="text-sm font-medium text-black mb-2">Message *</label>
+        <textarea
+          id="message"
+          name="message"
+          value={formData.message}
+          onChange={handleChange}
+          className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10 resize-y min-h-[160px]"
+          rows={8}
+          required
+        ></textarea>
+      </div>
+
+      {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
+      {success && <p className="text-green-600 text-sm font-medium bg-green-50 p-4 rounded-lg">Thank you! Your inquiry has been sent.</p>}
+
+      <button 
+        type="submit" 
+        disabled={isSubmitting}
+        className={`bg-black text-white border-none px-8 py-4 rounded-lg text-base font-semibold transition-all duration-160 ease-[var(--ease-out)] @media(hover:hover):hover:bg-gray-700 active:scale-[0.97] ${isSubmitting ? 'opacity-50' : 'cursor-pointer'}`}
+      >
+        {isSubmitting ? 'Sending...' : 'Send Message'}
+      </button>
+    </form>
+  )
+}
+
+export default function Contact() {
   return (
     <div className="pt-10 pb-20 min-h-[calc(100vh-160px)]">
       <div className="max-w-7xl mx-auto px-6">
@@ -89,88 +207,9 @@ export default function Contact() {
           </div>
 
           <div className="bg-gray-100 p-6 md:p-10 rounded-xl">
-            <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
-              <div className="flex flex-col">
-                <label htmlFor="inquiryType" className="text-sm font-medium text-black mb-2">Inquiry Type</label>
-                <CustomSelect
-                  id="inquiryType"
-                  name="inquiryType"
-                  value={formData.inquiryType}
-                  onChange={handleChange}
-                  options={[
-                    { value: "general", label: "General Inquiry" },
-                    { value: "pitch", label: "Startup Pitch" },
-                    { value: "lp", label: "Limited Partner" },
-                    { value: "press", label: "Press & Media" },
-                    { value: "partnership", label: "Partnership" }
-                  ]}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="flex flex-col">
-                  <label htmlFor="name" className="text-sm font-medium text-black mb-2">Full Name *</label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
-                    required
-                  />
-                </div>
-
-                <div className="flex flex-col">
-                  <label htmlFor="email" className="text-sm font-medium text-black mb-2">Email Address *</label>
-                  <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col">
-                <label htmlFor="company" className="text-sm font-medium text-black mb-2">Company</label>
-                <input
-                  type="text"
-                  id="company"
-                  name="company"
-                  value={formData.company}
-                  onChange={handleChange}
-                  className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
-                />
-              </div>
-
-              <div className="flex flex-col">
-                <label htmlFor="message" className="text-sm font-medium text-black mb-2">Message *</label>
-                <textarea
-                  id="message"
-                  name="message"
-                  value={formData.message}
-                  onChange={handleChange}
-                  className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10 resize-y min-h-[120px]"
-                  rows={6}
-                  required
-                ></textarea>
-              </div>
-
-              {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
-              {success && <p className="text-green-600 text-sm font-medium bg-green-50 p-4 rounded-lg">Thank you! Your inquiry has been sent.</p>}
-
-              <button 
-                type="submit" 
-                disabled={isSubmitting}
-                className={`bg-black text-white border-none px-8 py-4 rounded-lg text-base font-semibold transition-all duration-160 ease-[var(--ease-out)] @media(hover:hover):hover:bg-gray-700 active:scale-[0.97] ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-              >
-                {isSubmitting ? 'Sending...' : 'Send Message'}
-              </button>
-            </form>
+            <Suspense fallback={<div className="h-[500px] flex items-center justify-center">Loading form...</div>}>
+              <ContactForm />
+            </Suspense>
           </div>
         </div>
       </div>

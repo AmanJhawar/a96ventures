@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase/auth'
 import Link from 'next/link'
-import { LogOut, LayoutDashboard, Package, Users, Briefcase, Bookmark, MessageSquare, Newspaper } from 'lucide-react'
+import { LogOut, LayoutDashboard, Package, Users, Briefcase, Bookmark, MessageSquare, Newspaper, Tags } from 'lucide-react'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -49,6 +49,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navItems = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Inventory', href: '/admin/inventory', icon: Package },
+    { name: 'Categories', href: '/admin/categories', icon: Tags },
     { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare },
     { name: 'Team', href: '/admin/team', icon: Users },
     { name: 'Brands', href: '/admin/brands', icon: Bookmark },
@@ -89,7 +90,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="p-4 border-t border-gray-100 mt-auto">
           <button
             onClick={() => {
-              if (typeof window !== 'undefined') localStorage.removeItem('devBypass')
               signOut(auth)
               router.push('/admin/login')
             }}
