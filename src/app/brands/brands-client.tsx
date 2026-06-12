@@ -45,7 +45,7 @@ export default function BrandsClient() {
 
         {loading ? (
           <SkeletonGrid count={6} />
-        ) : (brands.length === 0 ? (
+        ) : brands.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             No brands found.
           </div>
