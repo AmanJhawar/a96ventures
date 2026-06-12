@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
-    "postinstall": "rm -rf functions"
+    "postinstall": "rm -rf functions",
+    "prebuild": "rm -rf functions"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
