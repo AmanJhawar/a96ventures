@@ -4,12 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "rm -rf functions && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed": "tsx --env-file=.env.local scripts/seed.ts",
-    "postinstall": "rm -rf functions",
-    "prebuild": "rm -rf functions"
+    "seed": "tsx --env-file=.env.local scripts/seed.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
