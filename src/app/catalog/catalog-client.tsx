@@ -211,7 +211,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 <div className="mt-auto flex flex-col gap-4">
                   {(item.standardSizes?.length > 0 || item.customSizes?.length > 0) && (
                     <div>
-                      <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase mb-2 block">
+                      <span className="text-xs font-semibold tracking-widest text-gray-400 uppercase mb-2 block">
                         {item.category?.includes('Marble') ? 'Stones' : item.category?.includes('Bullion') ? 'Weights' : 'Sizes'}
                       </span>
                       <div className="flex flex-wrap gap-2">
@@ -226,7 +226,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                   )}
                   {(item.standardPurities?.length > 0 || item.customPurities?.length > 0) && (
                     <div>
-                      <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase mb-2 block">Purity</span>
+                      <span className="text-xs font-semibold tracking-widest text-gray-400 uppercase mb-2 block">Purity</span>
                       <div className="flex flex-wrap gap-2">
                         {item.standardPurities?.map((p) => (
                           <span key={`std-pur-${p}`} className="px-2 py-1 bg-gray-50 text-gray-600 rounded text-xs border border-gray-200">{p}%</span>
