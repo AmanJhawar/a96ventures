@@ -464,7 +464,7 @@ export default function AdminInventory() {
                           {(formData.customSizes || []).map(s => (
                             <span key={s} className="admin-pill admin-pill-active flex items-center gap-1.5">
                               {s}
-                              <button type="button" onClick={() => removeCustomSize(s)} className="opacity-60 hover:opacity-100"><X size={12} /></button>
+                              <button type="button" onClick={() => removeCustomSize(s)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-95"><X size={12} /></button>
                             </span>
                           ))}
                         </div>
@@ -512,7 +512,7 @@ export default function AdminInventory() {
                             {(formData.customPurities || []).map(p => (
                               <span key={p} className="admin-pill admin-pill-active flex items-center gap-1.5">
                                 {p}
-                                <button type="button" onClick={() => removeCustomPurity(p)} className="opacity-60 hover:opacity-100"><X size={12} /></button>
+                                <button type="button" onClick={() => removeCustomPurity(p)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-95"><X size={12} /></button>
                               </span>
                             ))}
                           </div>
@@ -764,10 +764,10 @@ export default function AdminInventory() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right space-x-2">
-                          <button onClick={() => handleEdit(item)} className="text-gray-400 hover:text-blue-600 transition-colors p-2" title="Edit">
+                          <button onClick={() => handleEdit(item)} className="text-gray-400 hover:text-blue-600 transition-[color,transform] active:scale-95 p-2" title="Edit">
                             <Edit2 size={18} />
                           </button>
-                          <button onClick={() => handleDelete(item.id)} className="text-gray-400 hover:text-red-600 transition-colors p-2" title="Delete">
+                          <button onClick={() => handleDelete(item.id)} className="text-gray-400 hover:text-red-600 transition-[color,transform] active:scale-95 p-2" title="Delete">
                             <Trash2 size={18} />
                           </button>
                         </td>

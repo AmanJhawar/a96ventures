@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { CatalogItem } from '@/lib/types'
 import { ProtectedImage } from '@/components/protected-image'
+import { EmptyState } from '@/components/empty-state'
 
 interface CatalogClientProps {
   initialItems: CatalogItem[]
@@ -174,9 +175,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
 
       {/* Grid of Items */}
       {paginatedItems.length === 0 ? (
-        <div className="text-center py-20 text-gray-500">
-          No products found in this category.
-        </div>
+        <EmptyState title="No products found in this category." />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {paginatedItems.map((item, index) => (

@@ -6,6 +6,7 @@ import { getBrands } from '@/lib/firebase/db'
 import { ProtectedImage } from '@/components/protected-image'
 import { Brand } from '@/lib/types'
 import { SkeletonGrid } from '@/components/skeleton-grid'
+import { EmptyState } from '@/components/empty-state'
 
 export default function BrandsClient() {
   const [brands, setBrands] = useState<Brand[]>([])
@@ -46,9 +47,7 @@ export default function BrandsClient() {
         {loading ? (
           <SkeletonGrid count={6} />
         ) : brands.length === 0 ? (
-          <div className="text-center py-20 text-gray-500">
-            No brands found.
-          </div>
+          <EmptyState title="No brands found." />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
             {brands.map((brand, index) => (

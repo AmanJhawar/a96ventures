@@ -2,8 +2,9 @@
 
 import { useRef, useEffect } from 'react'
 import { useCart } from './cart-provider'
-import { X, Plus, Minus, ArrowRight } from 'lucide-react'
+import { ShoppingBag, X, Plus, Minus, ArrowRight } from 'lucide-react'
 import { ProtectedImage } from './protected-image'
+import { EmptyState } from '@/components/empty-state'
 import Link from 'next/link'
 
 export function CartDrawer() {
@@ -98,7 +99,7 @@ export function CartDrawer() {
           <h2 id="enquiry-drawer-title" className="text-xl font-bold tracking-tight">Your Enquiry</h2>
           <button 
             onClick={() => setIsCartOpen(false)}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors active:scale-95"
+            className="p-2 hover:bg-gray-100 rounded-full transition-[background-color,transform] active:scale-95"
           >
             <X size={20} />
           </button>
@@ -106,15 +107,18 @@ export function CartDrawer() {
 
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
           {cartItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-4">
-              <p>Your enquiry is empty.</p>
-              <button 
-                onClick={() => setIsCartOpen(false)}
-                className="text-sm font-medium text-black underline underline-offset-4"
-              >
-                Continue Browsing
-              </button>
-            </div>
+            <EmptyState 
+              title="Your enquiry is empty."
+              icon={<ShoppingBag size={32} strokeWidth={1} />}
+              action={
+                <button 
+                  onClick={() => setIsCartOpen(false)}
+                  className="text-sm font-medium text-black underline underline-offset-4 transition-transform active:scale-95"
+                >
+                  Continue Browsing
+                </button>
+              }
+            />
           ) : (
             cartItems.map((item) => (
               <div key={item.cartId} className="flex gap-4">
@@ -131,7 +135,7 @@ export function CartDrawer() {
                     <h3 className="font-semibold text-sm line-clamp-2 pr-4">{item.productName}</h3>
                     <button 
                       onClick={() => removeFromCart(item.cartId)}
-                      className="text-gray-400 hover:text-red-500 transition-colors"
+                      className="text-gray-400 hover:text-red-500 transition-[color,transform] active:scale-95 p-1 -mr-1"
                     >
                       <X size={16} />
                     </button>

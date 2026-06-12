@@ -177,7 +177,7 @@ export default function AdminInquiries() {
                       <td className="px-6 py-4 text-right">
                         <button 
                           onClick={() => handleDelete(inquiry.id)}
-                          className="text-gray-400 hover:text-red-600 transition-colors p-2"
+                          className="text-gray-400 hover:text-red-600 transition-[color,transform] active:scale-95 p-2"
                           title="Delete"
                         >
                           <Trash2 size={18} />

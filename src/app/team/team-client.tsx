@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { getTeamMembers } from '@/lib/firebase/db'
 import { TeamMember } from '@/lib/types'
 import { SkeletonGrid } from '@/components/skeleton-grid'
+import { EmptyState } from '@/components/empty-state'
 
 export default function TeamClient() {
   const [teamMembers, setTeamMembers] = useState<(TeamMember & {id: string})[]>([])
@@ -38,9 +39,7 @@ export default function TeamClient() {
         {loading ? (
           <SkeletonGrid count={6} />
         ) : teamMembers.length === 0 ? (
-          <div className="text-center py-20 text-gray-500">
-            No team members found.
-          </div>
+          <EmptyState title="No team members found." />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 mb-20">
             {teamMembers.map((member, index) => (
