@@ -41,6 +41,7 @@ interface InventoryItem {
   imageFile: string
   variantSkus?: Record<string, string>
   variantWeights?: Record<string, string>
+  orderIndex?: number
 }
 
 const emptyForm: Partial<InventoryItem> = {
@@ -48,7 +49,8 @@ const emptyForm: Partial<InventoryItem> = {
   standardSizes: [], customSizes: [], standardPurities: [], customPurities: [],
   variantSkus: {},
   variantWeights: {},
-  weight: '', material: '', description: '', imageFile: ''
+  weight: '', material: '', description: '', imageFile: '',
+  orderIndex: 0
 }
 
 export default function AdminInventory() {
@@ -607,8 +609,8 @@ export default function AdminInventory() {
               )}
             </div>
 
-            {/* Row 3: Weight + Material */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Row 3: Weight + Material + Display Order */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="admin-label required">Approx Weight</label>
                 <input
@@ -627,6 +629,16 @@ export default function AdminInventory() {
                   onChange={e => setFormData({ ...formData, material: e.target.value })}
                   className="admin-input"
                   placeholder="e.g., 999 Pure Silver"
+                />
+              </div>
+              <div>
+                <label className="admin-label">Display Order (Optional)</label>
+                <input
+                  type="number"
+                  value={formData.orderIndex ?? ''}
+                  onChange={e => setFormData({ ...formData, orderIndex: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                  className="admin-input"
+                  placeholder="Lowest numbers first"
                 />
               </div>
             </div>

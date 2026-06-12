@@ -87,7 +87,11 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
   const sortedItems = [...filteredItems].sort((a, b) => {
     if (sortBy === 'name-asc') return a.name.localeCompare(b.name)
     if (sortBy === 'name-desc') return b.name.localeCompare(a.name)
-    return 0 // default: Firestore order
+    // default: Merchandising orderIndex (lowest first)
+    const orderA = a.orderIndex ?? 999999;
+    const orderB = b.orderIndex ?? 999999;
+    if (orderA !== orderB) return orderA - orderB;
+    return 0 // fallback: Firestore order
   })
 
   // Paginate items

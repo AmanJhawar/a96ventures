@@ -14,6 +14,7 @@ export interface CatalogItem {
   additionalImages?: string[];
   variantSkus?: Record<string, string>;
   variantWeights?: Record<string, string>;
+  orderIndex?: number;
 }
 
 export const DEFAULT_CATEGORIES = ['Silver Articles', 'Marble Photoframes', 'Bullions'];
