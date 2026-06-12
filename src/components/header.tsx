@@ -44,9 +44,9 @@ export default function Header() {
             <NavLink href="/team" isActive={pathname === '/team'} onClick={closeMenu}>TEAM</NavLink>
           </nav>
  
-          <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center h-full">
             <Link href="/">
-              <Image src="/assets/logo.png" alt="A96 Ventures" width={120} height={40} className="h-10 w-auto object-contain mt-2" priority style={{ width: 'auto' }} />
+              <Image src="/assets/logo.png" alt="A96 Ventures" width={120} height={40} className="w-auto h-10 object-contain" priority />
             </Link>
           </div>
  
@@ -54,38 +54,42 @@ export default function Header() {
           <nav className="hidden md:flex absolute right-0 gap-10 items-center">
             <NavLink href="/about" isActive={pathname === '/about'} onClick={closeMenu}>ABOUT</NavLink>
             <NavLink href="/contact" isActive={pathname === '/contact'} onClick={closeMenu}>CONTACT</NavLink>
-            {pathname.startsWith('/catalog') && (
-              <button 
-                onClick={() => setIsCartOpen(true)}
-                className="relative p-2 ml-2 hover:bg-gray-100 rounded-full transition-colors active:scale-95"
-                aria-label="Open enquiry"
-              >
-                <ShoppingBag size={20} strokeWidth={1.5} />
-                {isInitialized && totalItems > 0 && (
-                  <span className="absolute top-1 right-1 bg-black text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transform translate-x-1 -translate-y-1">
-                    {totalItems}
-                  </span>
-                )}
-              </button>
-            )}
+            <div className="w-10 h-10 ml-2 flex items-center justify-center">
+              {(pathname.startsWith('/catalog') || (isInitialized && totalItems > 0)) && (
+                <button 
+                  onClick={() => setIsCartOpen(true)}
+                  className="relative p-2 hover:bg-gray-100 rounded-full transition-colors active:scale-95"
+                  aria-label="Open enquiry"
+                >
+                  <ShoppingBag size={20} strokeWidth={1.5} />
+                  {isInitialized && totalItems > 0 && (
+                    <span className="absolute top-1 right-1 bg-black text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transform translate-x-1 -translate-y-1">
+                      {totalItems}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
           </nav>
  
           {/* Mobile Menu & Cart Container */}
-          <div className="md:hidden absolute right-0 flex items-center gap-4">
-            {pathname.startsWith('/catalog') && (
-              <button 
-                className="p-2 relative flex items-center justify-center transition-transform active:scale-95"
-                onClick={() => setIsCartOpen(true)}
-                aria-label="Open enquiry"
-              >
-                <ShoppingBag size={20} strokeWidth={1.5} />
-                {isInitialized && totalItems > 0 && (
-                  <span className="absolute top-1 right-1 bg-black text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
-                    {totalItems}
-                  </span>
-                )}
-              </button>
-            )}
+          <div className="md:hidden absolute right-0 flex items-center gap-2 pr-4 h-full">
+            <div className="w-10 h-10 flex items-center justify-center">
+              {(pathname.startsWith('/catalog') || (isInitialized && totalItems > 0)) && (
+                <button 
+                  className="p-2 relative flex items-center justify-center transition-transform active:scale-95"
+                  onClick={() => setIsCartOpen(true)}
+                  aria-label="Open enquiry"
+                >
+                  <ShoppingBag size={20} strokeWidth={1.5} />
+                  {isInitialized && totalItems > 0 && (
+                    <span className="absolute top-1 right-1 bg-black text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                      {totalItems}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
             <button 
               className="p-2 bg-transparent border-none cursor-pointer flex items-center justify-center"
               onClick={toggleMenu}

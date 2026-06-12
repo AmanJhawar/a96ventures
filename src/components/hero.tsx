@@ -101,7 +101,7 @@ export default function Hero() {
   const show3D = mounted && !prefersReducedMotion
 
   return (
-    <section className="min-h-[80vh] flex flex-col items-center justify-center pb-20 pt-[100px] lg:pt-[150px] overflow-hidden">
+    <section className="min-h-[80vh] flex flex-col items-center justify-center pb-20 pt-12 lg:pt-20 overflow-hidden">
       <div className="max-w-7xl mx-auto px-6 w-full relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
           
