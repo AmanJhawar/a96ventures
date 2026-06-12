@@ -117,7 +117,7 @@ export default function CustomSelect({ id, name, value, onChange, options }: Cus
                   className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 ease-[var(--ease-out)] hover:bg-gray-100 ${
                     focusedIndex === idx ? 'bg-gray-100' : ''
                   } ${
-                    value === option.value ? 'font-medium text-black' : 'text-gray-600'
+                    value === option.value ? 'bg-gray-50 font-semibold text-black' : 'text-gray-700'
                   }`}
                 >
                   {option.label}

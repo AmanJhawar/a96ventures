@@ -70,7 +70,7 @@ function FallbackCanvas() {
   return (
     <canvas 
       ref={canvasRef} 
-      className="absolute inset-0 z-0 pointer-events-none"
+      className="absolute inset-0 pointer-events-none"
       style={{ width: '100%', height: '100%' }}
     />
   )
@@ -101,35 +101,35 @@ export default function Hero() {
   const show3D = mounted && !prefersReducedMotion
 
   return (
-    <section className="min-h-[80vh] flex flex-col items-center justify-center text-center pb-20 relative pt-[100px] md:pt-0 overflow-hidden">
-      {/* Interactive Motion Canvas or Fallback */}
-      {show3D ? (
-        <HeroScene />
-      ) : (
-        <FallbackCanvas />
-      )}
-
+    <section className="min-h-[80vh] flex flex-col items-center justify-center pb-20 pt-[100px] lg:pt-[150px] overflow-hidden">
       <div className="max-w-7xl mx-auto px-6 w-full relative z-10">
-        <div className="max-w-[900px] mx-auto">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight text-black mb-6 animate-[clipReveal_800ms_var(--ease-out)_forwards]">
-            We partner with <span className="relative inline-block after:absolute after:bottom-1 after:left-0 after:right-0 after:h-0.5 after:bg-black after:animate-[underlineGrow_600ms_var(--ease-out)_0.8s_both]">visionaries</span> &nbsp;to build tomorrow&apos;s defining companies.
-          </h1>
-          <p className="text-xl font-normal text-gray-500 leading-relaxed max-w-[600px] mx-auto opacity-0 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:400ms] mb-12">
-            Early-stage venture capital focused on transformative technologies and exceptional founders.
-          </p>
-          <div className="opacity-0 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:600ms] flex flex-wrap gap-4 justify-center">
-            <Link 
-              href="/portfolio" 
-              className="inline-block bg-black text-white px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,transform,box-shadow] duration-[160ms] ease-[var(--ease-out)] hover:bg-gray-800 active:scale-[0.97] shadow-lg hover:shadow-xl"
-            >
-              View Portfolio
-            </Link>
-            <Link 
-              href="/catalog" 
-              className="inline-block bg-white text-black border border-gray-300 px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,border-color,transform,box-shadow] duration-[160ms] ease-[var(--ease-out)] hover:bg-gray-50 hover:border-gray-400 active:scale-[0.97] shadow-sm hover:shadow-md"
-            >
-              Explore Catalog
-            </Link>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
+          
+          <div className="order-1 lg:order-2 h-[45vh] lg:h-[600px] w-full relative">
+            {show3D ? <HeroScene /> : <FallbackCanvas />}
+          </div>
+
+          <div className="order-2 lg:order-1 text-center lg:text-left flex flex-col items-center lg:items-start">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight text-black mb-6 animate-[clipReveal_800ms_var(--ease-out)_forwards]">
+              We partner with <span className="relative inline-block after:absolute after:bottom-1 after:left-0 after:right-0 after:h-0.5 after:bg-black after:animate-[underlineGrow_600ms_var(--ease-out)_0.8s_both]">visionaries</span> &nbsp;to build tomorrow&apos;s defining companies.
+            </h1>
+            <p className="text-xl font-normal text-gray-500 leading-relaxed max-w-[600px] lg:max-w-none opacity-0 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:400ms] mb-12">
+              Early-stage venture capital focused on transformative technologies and exceptional founders.
+            </p>
+            <div className="opacity-0 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:600ms] flex flex-wrap gap-4 justify-center lg:justify-start">
+              <Link 
+                href="/portfolio" 
+                className="inline-block bg-black text-white px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,transform,box-shadow] duration-[160ms] ease-[var(--ease-out)] hover:bg-gray-800 active:scale-[0.97] shadow-lg hover:shadow-xl"
+              >
+                View Portfolio
+              </Link>
+              <Link 
+                href="/catalog" 
+                className="inline-block bg-white text-black border border-gray-300 px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,border-color,transform,box-shadow] duration-[160ms] ease-[var(--ease-out)] hover:bg-gray-50 hover:border-gray-400 active:scale-[0.97] shadow-sm hover:shadow-md"
+              >
+                Explore Catalog
+              </Link>
+            </div>
           </div>
         </div>
       </div>

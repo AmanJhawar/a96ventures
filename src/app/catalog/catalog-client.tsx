@@ -125,7 +125,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
           <button
             onClick={() => setIsSortOpen(!isSortOpen)}
             onKeyDown={handleDropdownKeyDown}
-            className="flex items-center gap-2 px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:border-black/30 active:scale-[0.97] transition-[border-color,transform] duration-[160ms] ease-[var(--ease-out)]"
+            className="flex items-center gap-2 px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-black bg-white hover:border-black/30 active:scale-[0.97] transition-[border-color,transform] duration-[160ms] ease-[var(--ease-out)]"
             aria-haspopup="listbox"
             aria-expanded={isSortOpen}
             aria-label="Sort products"
@@ -143,7 +143,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 role="option"
                 aria-selected={sortBy === 'default'}
                 onClick={() => { setSortBy('default'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-[160ms] hover:bg-gray-50 ${sortBy === 'default' || focusedIndex === 0 ? 'bg-gray-50 font-semibold text-black' : 'text-gray-600'}`}
+                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-[160ms] hover:bg-gray-100 ${sortBy === 'default' || focusedIndex === 0 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
               >
                 Default
               </button>
@@ -151,7 +151,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 role="option"
                 aria-selected={sortBy === 'name-asc'}
                 onClick={() => { setSortBy('name-asc'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-[160ms] hover:bg-gray-50 ${sortBy === 'name-asc' || focusedIndex === 1 ? 'bg-gray-50 font-semibold text-black' : 'text-gray-600'}`}
+                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-[160ms] hover:bg-gray-100 ${sortBy === 'name-asc' || focusedIndex === 1 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
               >
                 Name (A-Z)
               </button>
@@ -159,7 +159,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 role="option"
                 aria-selected={sortBy === 'name-desc'}
                 onClick={() => { setSortBy('name-desc'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-[160ms] hover:bg-gray-50 ${sortBy === 'name-desc' || focusedIndex === 2 ? 'bg-gray-50 font-semibold text-black' : 'text-gray-600'}`}
+                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-[160ms] hover:bg-gray-100 ${sortBy === 'name-desc' || focusedIndex === 2 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
               >
                 Name (Z-A)
               </button>
@@ -207,7 +207,9 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 <div className="mt-auto flex flex-col gap-4">
                   {(item.standardSizes?.length > 0 || item.customSizes?.length > 0) && (
                     <div>
-                      <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase mb-2 block">Sizes</span>
+                      <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase mb-2 block">
+                        {item.category?.includes('Marble') ? 'Stones' : item.category?.includes('Bullion') ? 'Weights' : 'Sizes'}
+                      </span>
                       <div className="flex flex-wrap gap-2">
                         {item.standardSizes?.map((s) => (
                           <span key={`std-size-${s}`} className="px-2 py-1 bg-gray-50 text-gray-600 rounded text-xs border border-gray-200">{s}</span>
