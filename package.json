@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "rm -rf functions && next build",
     "start": "next start",
     "lint": "next lint",
     "seed": "tsx --env-file=.env.local scripts/seed.ts"
