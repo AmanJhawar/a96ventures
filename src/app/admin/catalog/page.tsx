@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react'
-import { doc, getDoc, setDoc, getDocs, collection, deleteDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, getDocs, collection, deleteDoc } from 'firebase/firestore/lite'
 import { db } from '@/lib/firebase/config'
 import { Trash2, Plus, Box, Edit2, X, ChevronDown } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'

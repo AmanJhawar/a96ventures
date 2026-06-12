@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { doc, getDoc, setDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore'
+import { doc, getDoc, setDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore/lite'
 import { db } from '@/lib/firebase/config'
 import { Tags, Trash2, Edit2, X, Check } from 'lucide-react'
 import { DEFAULT_CATEGORIES } from '@/lib/types'

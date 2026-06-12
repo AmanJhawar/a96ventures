@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { collection, deleteDoc, updateDoc, doc, getDocs, orderBy, query, limit, startAfter, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore'
+import { collection, deleteDoc, updateDoc, doc, getDocs, orderBy, query, limit, startAfter, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore/lite'
 import { db } from '@/lib/firebase/config'
 import { Trash2, MessageSquare, CheckCircle, Circle } from 'lucide-react'
 

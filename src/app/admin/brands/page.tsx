@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { collection, addDoc, setDoc, deleteDoc, doc, getDocs } from 'firebase/firestore'
+import { collection, addDoc, setDoc, deleteDoc, doc, getDocs } from 'firebase/firestore/lite'
 import { db } from '@/lib/firebase/config'
 import { Brand } from '@/lib/types'
 import { Trash2, Plus, Bookmark, Edit2 } from 'lucide-react'
