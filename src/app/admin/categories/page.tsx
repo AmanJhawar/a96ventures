@@ -1,10 +1,13 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { doc, getDoc, setDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore/lite'
-import { db } from '@/lib/firebase/config'
+import { doc, getDoc, setDoc, collection, query, where, getDocs, writeBatch, getFirestore } from 'firebase/firestore/lite'
+import { app } from '@/lib/firebase/config'
 import { Tags, Trash2, Edit2, X, Check } from 'lucide-react'
 import { DEFAULT_CATEGORIES } from '@/lib/types'
+import { ConfirmModal } from '@/components/confirm-modal'
+
+const db = getFirestore(app)
 
 export default function AdminCategories() {
   const [categories, setCategories] = useState<string[]>([])
@@ -12,16 +15,17 @@ export default function AdminCategories() {
   const [newCategoryInput, setNewCategoryInput] = useState('')
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editInput, setEditInput] = useState('')
+  const [deleteCategory, setDeleteCategory] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchCategories = async () => {
     try {
-        const catDoc = await getDoc(doc(collection(db, 'settings'), 'categories'))
+        const catDoc = await getDoc(doc(db, 'settings', 'categories'))
         if (catDoc.exists() && catDoc.data().list) {
           setCategories(catDoc.data().list)
         } else {
           setCategories(DEFAULT_CATEGORIES)
-          await setDoc(doc(collection(db, 'settings'), 'categories'), { list: DEFAULT_CATEGORIES })
+          await setDoc(doc(db, 'settings', 'categories'), { list: DEFAULT_CATEGORIES })
         }
       } catch (err) {
         console.error("Error fetching categories", err)
@@ -45,24 +49,27 @@ export default function AdminCategories() {
     setNewCategoryInput('')
 
     try {
-      await setDoc(doc(collection(db, 'settings'), 'categories'), { list: newCategories }, { merge: true })
+      await setDoc(doc(db, 'settings', 'categories'), { list: newCategories }, { merge: true })
     } catch (err) {
       console.error("Failed to add category", err)
       alert("Failed to save category. Please check your permissions.")
     }
   }
 
-  const handleRemoveCategory = async (cat: string) => {
-    if (!confirm(`Are you sure you want to remove the category "${cat}"? Products in this category will not be deleted but may be orphaned in the UI.`)) return
-    
-    const newCategories = categories.filter(c => c !== cat)
+  const confirmRemove = (cat: string) => setDeleteCategory(cat)
+
+  const executeRemove = async () => {
+    if (!deleteCategory) return
+    const newCategories = categories.filter(c => c !== deleteCategory)
     setCategories(newCategories)
 
     try {
-      await setDoc(doc(collection(db, 'settings'), 'categories'), { list: newCategories }, { merge: true })
+      await setDoc(doc(db, 'settings', 'categories'), { list: newCategories }, { merge: true })
     } catch (err) {
       console.error("Failed to remove category", err)
       alert("Failed to delete category. Please check your permissions.")
+    } finally {
+      setDeleteCategory(null)
     }
   }
 
@@ -96,7 +103,7 @@ export default function AdminCategories() {
 
     try {
       // 1. Update the categories list in settings
-      await setDoc(doc(collection(db, 'settings'), 'categories'), { list: newCategories }, { merge: true })
+      await setDoc(doc(db, 'settings', 'categories'), { list: newCategories }, { merge: true })
       
       // 2. Batch update any products that have the old category name
       const q = query(collection(db, 'catalog'), where('category', '==', oldName))
@@ -158,7 +165,7 @@ export default function AdminCategories() {
                       className="admin-input py-1 text-sm flex-1"
                       autoFocus
                     />
-                    <button onClick={() => saveEdit(idx, cat)} className="text-green-600 hover:text-green-700 p-1 transition-[color,transform] active:scale-95" title="Save">
+                    <button onClick={() => saveEdit(idx, cat)} className="text-gray-400 hover:text-black p-1 transition-[color,transform] active:scale-95" title="Save">
                       <Check size={18} />
                     </button>
                     <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600 p-1 transition-[color,transform] active:scale-95" title="Cancel">
@@ -171,14 +178,14 @@ export default function AdminCategories() {
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => startEdit(idx, cat)}
-                        className="text-gray-400 hover:text-blue-600 transition-[color,transform] active:scale-95 p-2"
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
                         title="Edit Category"
                       >
                         <Edit2 size={18} />
                       </button>
                       <button
-                        onClick={() => handleRemoveCategory(cat)}
-                        className="text-gray-400 hover:text-red-600 transition-[color,transform] active:scale-95 p-2"
+                        onClick={() => confirmRemove(cat)}
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
                         title="Remove Category"
                       >
                         <Trash2 size={18} />
@@ -194,6 +201,15 @@ export default function AdminCategories() {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={!!deleteCategory}
+        title="Delete Category"
+        description={`Are you sure you want to remove the category "${deleteCategory}"? Products in this category will not be deleted but may be orphaned in the UI.`}
+        confirmText="Delete"
+        onClose={() => setDeleteCategory(null)}
+        onConfirm={executeRemove}
+      />
     </div>
   )
 }

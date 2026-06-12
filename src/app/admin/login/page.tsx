@@ -23,7 +23,7 @@ export default function AdminLogin() {
       // Verify they are in the admins collection
       const { collection, doc, getDoc } = await import('firebase/firestore/lite')
       const { db } = await import('@/lib/firebase/config')
-      const adminDoc = await getDoc(doc(collection(db, 'admins'), userCredential.user.uid))
+      const adminDoc = await getDoc(doc(db, 'admins', userCredential.user.uid))
       
       if (!adminDoc.exists()) {
         const { signOut } = await import('firebase/auth')
@@ -49,7 +49,7 @@ export default function AdminLogin() {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-lg text-sm font-medium text-center border border-red-100">
+          <div className="mb-6 p-4 bg-gray-50 text-black rounded-lg text-sm font-semibold text-center border border-gray-200">
             {error}
           </div>
         )}
@@ -62,7 +62,7 @@ export default function AdminLogin() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-[border-color,box-shadow] duration-200"
+              className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:border-black focus:ring-4 focus:ring-black/10 transition-[border-color,box-shadow] duration-200"
               placeholder="you@example.com"
             />
           </div>
@@ -74,7 +74,7 @@ export default function AdminLogin() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-[border-color,box-shadow] duration-200"
+              className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:border-black focus:ring-4 focus:ring-black/10 transition-[border-color,box-shadow] duration-200"
               placeholder="••••••••"
             />
           </div>

@@ -1,9 +1,12 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { collection, deleteDoc, updateDoc, doc, getDocs, orderBy, query, limit, startAfter, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore/lite'
-import { db } from '@/lib/firebase/config'
+import { collection, deleteDoc, setDoc, doc, getDocs, orderBy, query, limit, startAfter, QueryDocumentSnapshot, DocumentData, getFirestore } from 'firebase/firestore/lite'
+import { app } from '@/lib/firebase/config'
 import { Trash2, MessageSquare, CheckCircle, Circle } from 'lucide-react'
+import { ConfirmModal } from '@/components/confirm-modal'
+
+const db = getFirestore(app)
 
 interface Inquiry {
   id: string;
@@ -24,6 +27,7 @@ export default function AdminInquiries() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [lastVisible, setLastVisible] = useState<QueryDocumentSnapshot<DocumentData> | null>(null)
   const [hasMore, setHasMore] = useState(true)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
 
   const fetchInquiries = async () => {
     try {
@@ -31,7 +35,7 @@ export default function AdminInquiries() {
       const querySnapshot = await getDocs(q)
       const items: Inquiry[] = []
       querySnapshot.forEach((docSnap) => {
-        items.push({ id: docSnap.id, ...docSnap.data() } as Inquiry)
+        items.push({ ...docSnap.data(), id: docSnap.id } as Inquiry)
       })
       
       setInquiries(items)
@@ -59,7 +63,7 @@ export default function AdminInquiries() {
       const querySnapshot = await getDocs(q)
       const items: Inquiry[] = []
       querySnapshot.forEach((docSnap) => {
-        items.push({ id: docSnap.id, ...docSnap.data() } as Inquiry)
+        items.push({ ...docSnap.data(), id: docSnap.id } as Inquiry)
       })
       
       setInquiries(prev => [...prev, ...items])
@@ -79,19 +83,23 @@ export default function AdminInquiries() {
     fetchInquiries()
   }, [])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this inquiry?')) return
+  const confirmDelete = (id: string) => setDeleteId(id)
+
+  const executeDelete = async () => {
+    if (!deleteId) return
     try {
-      await deleteDoc(doc(collection(db, 'inquiries'), id))
-      setInquiries(inquiries.filter(i => i.id !== id))
+      await deleteDoc(doc(db, 'inquiries', deleteId))
+      setInquiries(inquiries.filter(i => i.id !== deleteId))
     } catch (err) {
       console.error("Error deleting", err)
+    } finally {
+      setDeleteId(null)
     }
   }
 
   const handleStatusChange = async (id: string, newStatus: 'unread' | 'read' | 'handled') => {
     try {
-      await updateDoc(doc(collection(db, 'inquiries'), id), { status: newStatus })
+      await setDoc(doc(db, 'inquiries', id), { status: newStatus }, { merge: true })
       setInquiries(inquiries.map(i => i.id === id ? { ...i, status: newStatus } : i))
     } catch (err) {
       console.error("Error updating status", err)
@@ -112,6 +120,7 @@ export default function AdminInquiries() {
 
   return (
     <div>
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
@@ -146,7 +155,7 @@ export default function AdminInquiries() {
                   const isUnread = !inquiry.status || inquiry.status === 'unread';
 
                   return (
-                    <tr key={inquiry.id} className={`border-b border-gray-100 align-top transition-colors ${isHandled ? 'bg-gray-50 opacity-60' : isUnread ? 'bg-blue-50/30' : 'hover:bg-gray-50/50'}`}>
+                    <tr key={inquiry.id} className={`border-b border-gray-100 align-top transition-colors ${isHandled ? 'bg-gray-50 opacity-60' : isUnread ? 'bg-gray-50/50' : 'hover:bg-gray-50/50'}`}>
                       <td className="px-6 py-4">
                         <select 
                           value={inquiry.status || 'unread'}
@@ -176,9 +185,9 @@ export default function AdminInquiries() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button 
-                          onClick={() => handleDelete(inquiry.id)}
-                          className="text-gray-400 hover:text-red-600 transition-[color,transform] active:scale-95 p-2"
-                          title="Delete"
+                          onClick={() => confirmDelete(inquiry.id)}
+                          className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
+                          title="Delete Inquiry"
                         >
                           <Trash2 size={18} />
                         </button>
@@ -210,6 +219,15 @@ export default function AdminInquiries() {
           )}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteId}
+        title="Delete Inquiry"
+        description="Are you sure you want to delete this inquiry? This action cannot be undone."
+        confirmText="Delete"
+        onClose={() => setDeleteId(null)}
+        onConfirm={executeDelete}
+      />
     </div>
   )
 }

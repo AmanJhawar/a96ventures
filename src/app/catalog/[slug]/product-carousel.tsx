@@ -48,7 +48,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
                 key={idx}
                 type="button"
                 onClick={() => setActiveIndex(idx)}
-                className={`relative flex-shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-xl overflow-hidden border-2 transition-[border-color,box-shadow,transform,opacity] duration-200 ease-[var(--ease-out)] snap-start outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+                className={`relative flex-shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-xl overflow-hidden border-2 transition-[border-color,box-shadow,transform,opacity] duration-200 ease-[var(--ease-out)] snap-start ${
                   isActive 
                     ? 'border-black shadow-md scale-100' 
                     : 'border-transparent bg-white shadow-sm scale-95 opacity-60 hover:opacity-100 hover:scale-[0.98]'

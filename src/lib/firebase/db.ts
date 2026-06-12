@@ -26,14 +26,14 @@ export async function getCatalogItems(): Promise<CatalogItem[]> {
   const querySnapshot = await withTimeout(getDocs(collection(db, 'catalog')));
   const items: CatalogItem[] = [];
   querySnapshot.forEach((docSnap) => {
-    items.push({ id: docSnap.id, ...docSnap.data() } as CatalogItem);
+    items.push({ ...docSnap.data(), id: docSnap.id } as CatalogItem);
   });
   return items;
 }
 
 // Fetch store categories
 export async function getStoreCategories(): Promise<string[]> {
-  const docRef = doc(collection(db, 'settings'), 'categories');
+  const docRef = doc(db, 'settings', 'categories');
   const docSnap = await withTimeout(getDoc(docRef));
   if (docSnap.exists() && docSnap.data().list) {
     return docSnap.data().list;
@@ -43,11 +43,11 @@ export async function getStoreCategories(): Promise<string[]> {
 
 // Fetch a single catalog item by ID
 export async function getCatalogItemById(id: string): Promise<CatalogItem | null> {
-  const docRef = doc(collection(db, 'catalog'), id);
+  const docRef = doc(db, 'catalog', id);
   const docSnap = await withTimeout(getDoc(docRef));
   
   if (docSnap.exists()) {
-    return { id: docSnap.id, ...docSnap.data() } as CatalogItem;
+    return { ...docSnap.data(), id: docSnap.id } as CatalogItem;
   }
   return null;
 }
@@ -72,7 +72,7 @@ export async function getTeamMembers(): Promise<(TeamMember & { id: string })[]>
   const querySnapshot = await withTimeout(getDocs(collection(db, 'team')));
   const items: (TeamMember & { id: string })[] = [];
   querySnapshot.forEach((docSnap) => {
-    items.push({ id: docSnap.id, ...docSnap.data() } as (TeamMember & { id: string }));
+    items.push({ ...docSnap.data(), id: docSnap.id } as (TeamMember & { id: string }));
   });
   return items;
 }
@@ -82,7 +82,7 @@ export async function getBrands(): Promise<Brand[]> {
   const querySnapshot = await withTimeout(getDocs(collection(db, 'brands')));
   const items: Brand[] = [];
   querySnapshot.forEach((docSnap) => {
-    items.push({ id: docSnap.id, ...docSnap.data() } as Brand);
+    items.push({ ...docSnap.data(), id: docSnap.id } as Brand);
   });
   return items;
 }
@@ -92,16 +92,16 @@ export async function getPortfolioCompanies(): Promise<(PortfolioCompany & { id:
   const querySnapshot = await withTimeout(getDocs(collection(db, 'portfolio')));
   const items: (PortfolioCompany & { id: string })[] = [];
   querySnapshot.forEach((docSnap) => {
-    items.push({ id: docSnap.id, ...docSnap.data() } as (PortfolioCompany & { id: string }));
+    items.push({ ...docSnap.data(), id: docSnap.id } as (PortfolioCompany & { id: string }));
   });
   return items;
 }
 
 export async function getPortfolioCompanyById(id: string): Promise<(PortfolioCompany & { id: string }) | null> {
-  const docRef = doc(collection(db, 'portfolio'), id);
+  const docRef = doc(db, 'portfolio', id);
   const docSnap = await withTimeout(getDoc(docRef));
   if (docSnap.exists()) {
-    return { id: docSnap.id, ...docSnap.data() } as (PortfolioCompany & { id: string });
+    return { ...docSnap.data(), id: docSnap.id } as (PortfolioCompany & { id: string });
   }
   return null;
 }

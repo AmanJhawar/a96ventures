@@ -114,7 +114,7 @@ function ContactForm() {
             name="name"
             value={formData.name}
             onChange={handleChange}
-            className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
+            className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10"
             required
           />
         </div>
@@ -127,7 +127,7 @@ function ContactForm() {
             name="email"
             value={formData.email}
             onChange={handleChange}
-            className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
+            className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10"
             required
           />
         </div>
@@ -141,7 +141,7 @@ function ContactForm() {
           name="company"
           value={formData.company}
           onChange={handleChange}
-          className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
+          className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10"
         />
       </div>
 
@@ -152,19 +152,26 @@ function ContactForm() {
           name="message"
           value={formData.message}
           onChange={handleChange}
-          className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10 resize-y min-h-[160px]"
+          className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10 resize-y min-h-[160px]"
           rows={8}
           required
         ></textarea>
       </div>
 
-      {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
-      {success && <p className="text-green-600 text-sm font-medium bg-green-50 p-4 rounded-lg">Thank you! Your inquiry has been sent.</p>}
+      {error && <p className="text-black text-sm font-semibold bg-gray-50 border border-gray-200 p-4 rounded-lg">{error}</p>}
+      {success && (
+        <div className="bg-black text-white text-sm font-medium p-4 rounded-lg flex items-center gap-3">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          Thank you! Your inquiry has been sent.
+        </div>
+      )}
 
       <button 
         type="submit" 
         disabled={isSubmitting}
-        className={`bg-black text-white border-none px-8 py-4 rounded-full text-base font-semibold transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-gray-800 active:scale-[0.97] ${isSubmitting ? 'opacity-50' : 'cursor-pointer'}`}
+        className={`btn-primary border-none ${isSubmitting ? 'opacity-50' : 'cursor-pointer'}`}
       >
         {isSubmitting ? 'Sending...' : 'Send Message'}
       </button>

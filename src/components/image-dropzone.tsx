@@ -124,7 +124,7 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
         <button
           type="button"
           onClick={() => onChange('')}
-          className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-gray-700 p-2 rounded-full shadow-sm hover:bg-red-50 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+          className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-gray-700 p-2 rounded-full shadow-sm hover:bg-gray-100 hover:text-black transition-colors opacity-0 group-hover:opacity-100"
         >
           <X size={16} />
         </button>
@@ -138,7 +138,7 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-        isDragging ? 'border-black bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+        isDragging ? 'border-black bg-gray-50' : 'border-gray-300 hover:border-black'
       }`}
     >
       <input

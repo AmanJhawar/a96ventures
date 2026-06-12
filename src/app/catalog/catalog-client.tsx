@@ -148,7 +148,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 role="option"
                 aria-selected={sortBy === 'default'}
                 onClick={() => { setSortBy('default'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'default' || focusedIndex === 0 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
+                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'default' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 0 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
               >
                 Default
               </button>
@@ -156,7 +156,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 role="option"
                 aria-selected={sortBy === 'name-asc'}
                 onClick={() => { setSortBy('name-asc'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-asc' || focusedIndex === 1 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
+                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-asc' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 1 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
               >
                 Name (A-Z)
               </button>
@@ -164,7 +164,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 role="option"
                 aria-selected={sortBy === 'name-desc'}
                 onClick={() => { setSortBy('name-desc'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-desc' || focusedIndex === 2 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
+                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-desc' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 2 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
               >
                 Name (Z-A)
               </button>
@@ -234,7 +234,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
         <div className="flex justify-center mt-16">
           <button
             onClick={() => setVisibleCount(prev => prev + 6)}
-            className="px-8 py-3 bg-black text-white text-sm font-semibold rounded-full shadow-md hover:bg-gray-800 active:scale-[0.97] transition-[background-color,transform,box-shadow] duration-150 ease-[var(--ease-out)]"
+            className="btn-primary"
           >
             Load More
           </button>

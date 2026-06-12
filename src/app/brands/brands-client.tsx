@@ -38,7 +38,7 @@ export default function BrandsClient() {
           </p>
           <Link 
             href="/catalog" 
-            className="inline-block px-8 py-4 bg-black text-white rounded-full text-base font-semibold transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-gray-700 active:scale-[0.97] active:opacity-60"
+            className="btn-primary"
           >
             View The Catalog
           </Link>

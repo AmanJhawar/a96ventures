@@ -1,16 +1,19 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { collection, setDoc, deleteDoc, doc, getDocs } from 'firebase/firestore/lite'
-import { db } from '@/lib/firebase/config'
+import { collection, setDoc, deleteDoc, doc, getDocs, getFirestore } from 'firebase/firestore/lite'
+import { app } from '@/lib/firebase/config'
+const db = getFirestore(app)
 import { PortfolioCompany } from '@/lib/types'
 import { Trash2, Plus, Briefcase, Edit2 } from 'lucide-react'
+import { ConfirmModal } from '@/components/confirm-modal'
 
 export default function AdminPortfolio() {
   const [companies, setCompanies] = useState<(PortfolioCompany & { id: string })[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
   
   const [formData, setFormData] = useState<Partial<PortfolioCompany & { id: string }>>({
     name: '', id: '', description: '', stage: '', sector: ''
@@ -21,7 +24,7 @@ export default function AdminPortfolio() {
       const querySnapshot = await getDocs(collection(db, 'portfolio'))
       const items: (PortfolioCompany & { id: string })[] = []
       querySnapshot.forEach((docSnap) => {
-        items.push({ id: docSnap.id, ...docSnap.data() } as (PortfolioCompany & { id: string }))
+        items.push({ ...docSnap.data(), id: docSnap.id } as (PortfolioCompany & { id: string }))
       })
       setCompanies(items)
     } catch (err) {
@@ -36,18 +39,22 @@ export default function AdminPortfolio() {
     fetchCompanies()
   }, [])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this company?')) return
+  const confirmDelete = (id: string) => setDeleteId(id)
+
+  const executeDelete = async () => {
+    if (!deleteId) return
     try {
-      await deleteDoc(doc(collection(db, 'portfolio'), id))
+      await deleteDoc(doc(db, 'portfolio', deleteId))
       
       // Trigger dynamic path revalidation in background
       fetch(`/api/revalidate?path=${encodeURIComponent('/portfolio')}`).catch(err => console.error(err))
-      fetch(`/api/revalidate?path=${encodeURIComponent(`/portfolio/${id}`)}`).catch(err => console.error(err))
-
-      setCompanies(companies.filter(c => c.id !== id))
+      fetch(`/api/revalidate?path=${encodeURIComponent(`/portfolio/${deleteId}`)}`).catch(err => console.error(err))
+      
+      setCompanies(companies.filter(c => c.id !== deleteId))
     } catch (err) {
       console.error("Error deleting", err)
+    } finally {
+      setDeleteId(null)
     }
   }
 
@@ -72,7 +79,7 @@ export default function AdminPortfolio() {
       }
       
       const docId = editingId || formData.id
-      const docRef = doc(collection(db, 'portfolio'), docId)
+      const docRef = doc(db, 'portfolio', docId)
       
       const { id, ...saveData } = formData
       await setDoc(docRef, saveData)
@@ -198,14 +205,14 @@ export default function AdminPortfolio() {
                     <td className="px-6 py-4 text-right space-x-2">
                       <button 
                         onClick={() => handleEdit(company)}
-                        className="text-gray-400 hover:text-blue-600 transition-[color,transform] active:scale-95 p-2"
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
                         title="Edit"
                       >
                         <Edit2 size={18} />
                       </button>
                       <button 
-                        onClick={() => handleDelete(company.id)}
-                        className="text-gray-400 hover:text-red-600 transition-[color,transform] active:scale-95 p-2"
+                        onClick={() => confirmDelete(company.id)}
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
                         title="Delete"
                       >
                         <Trash2 size={18} />
@@ -225,6 +232,15 @@ export default function AdminPortfolio() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteId}
+        title="Delete Portfolio Company"
+        description="Are you sure you want to delete this company? This action cannot be undone."
+        confirmText="Delete"
+        onClose={() => setDeleteId(null)}
+        onConfirm={executeDelete}
+      />
     </div>
   )
 }

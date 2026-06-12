@@ -1,5 +1,6 @@
 import { getCatalogItems, getStoreCategories } from '@/lib/firebase/db'
 import { CatalogClient } from './catalog-client'
+import { EmptyState } from '@/components/empty-state'
 
 import { CatalogItem } from '@/lib/types'
 
@@ -41,11 +42,16 @@ export default async function Catalog() {
       </div>
 
       {error ? (
-        <div className="max-w-7xl mx-auto px-6 text-center py-20">
-          <h3 className="text-xl font-semibold text-black mb-2">Failed to Load Products</h3>
-          <p className="text-gray-500 max-w-md mx-auto">
-            We encountered a problem loading our catalog collection. Please try again later.
-          </p>
+        <div className="py-20">
+          <EmptyState 
+            title="Failed to Load Products" 
+            description="We encountered a problem loading our catalog collection. Please try again later."
+            action={
+              <a href="/catalog" className="btn-primary text-sm py-3 px-6">
+                Retry
+              </a>
+            }
+          />
         </div>
       ) : (
         <CatalogClient initialItems={items} initialCategories={allCategories} />

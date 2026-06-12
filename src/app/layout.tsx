@@ -11,6 +11,7 @@ const inter = localFont({
   src: '../../public/fonts/inter.woff2',
   display: 'swap',
   variable: '--font-inter',
+  weight: '100 900',
 })
 
 import { CartProvider } from '@/components/cart-provider'

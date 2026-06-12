@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import PulseTerrainHero from '@/components/PulseTerrainHero'
+import GoldenThreadHero from '@/components/GoldenThreadHero'
 import NewsletterForm from '@/components/newsletter-form'
 import { getBrands, getPortfolioCompanies } from '@/lib/firebase/db'
 
@@ -26,7 +26,7 @@ export default async function Home() {
 
   return (
     <>
-      <PulseTerrainHero />
+      <GoldenThreadHero />
 
       {/* Newsletter Section */}
       <section className="py-20 md:py-32 bg-gray-100 border-y border-gray-100">
@@ -45,17 +45,17 @@ export default async function Home() {
       <section className="py-20 md:py-32 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
-            <Link href="/portfolio" className="block text-center p-8 bg-white border border-gray-200 rounded-xl transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98]">
+            <Link href="/portfolio" className="block text-center p-8 bg-white border border-gray-200 rounded-xl transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 active:scale-[0.98]">
               <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{portfolioCount}+</div>
               <div className="text-base text-gray-500">Portfolio Companies</div>
             </Link>
             
-            <Link href="/brands" className="block text-center p-8 bg-white border border-gray-200 rounded-xl transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98]">
+            <Link href="/brands" className="block text-center p-8 bg-white border border-gray-200 rounded-xl transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 active:scale-[0.98]">
               <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{brandsCount}+</div>
               <div className="text-base text-gray-500">Brands</div>
             </Link>
             
-            <div className="block text-center p-8 bg-white border border-gray-200 rounded-xl">
+            <div className="block text-center p-8">
               <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{yearsExp}+</div>
               <div className="text-base text-gray-500">Years of Experience</div>
             </div>

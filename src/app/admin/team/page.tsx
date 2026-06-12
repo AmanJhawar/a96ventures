@@ -1,17 +1,21 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { collection, setDoc, addDoc, deleteDoc, doc, getDocs } from 'firebase/firestore/lite'
-import { db } from '@/lib/firebase/config'
+import { collection, addDoc, setDoc, deleteDoc, doc, getDocs, getFirestore } from 'firebase/firestore/lite'
+import { app } from '@/lib/firebase/config'
+
+const db = getFirestore(app)
 import { TeamMember } from '@/lib/types'
 import { Trash2, Plus, Users, Edit2 } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
+import { ConfirmModal } from '@/components/confirm-modal'
 
 export default function AdminTeam() {
   const [team, setTeam] = useState<(TeamMember & { id: string })[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
   
   const [formData, setFormData] = useState<Partial<TeamMember>>({
     name: '', role: '', bio: '', imageFile: '', linkedin: '', expertise: []
@@ -22,7 +26,7 @@ export default function AdminTeam() {
       const querySnapshot = await getDocs(collection(db, 'team'))
       const fetchedTeam: (TeamMember & { id: string })[] = []
       querySnapshot.forEach((docSnap) => {
-        fetchedTeam.push({ id: docSnap.id, ...docSnap.data() } as (TeamMember & { id: string }))
+        fetchedTeam.push({ ...docSnap.data(), id: docSnap.id } as (TeamMember & { id: string }))
       })
       setTeam(fetchedTeam)
     } catch (err) {
@@ -37,13 +41,17 @@ export default function AdminTeam() {
     fetchTeam()
   }, [])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this team member?')) return
+  const confirmDelete = (id: string) => setDeleteId(id)
+
+  const executeDelete = async () => {
+    if (!deleteId) return
     try {
-      await deleteDoc(doc(collection(db, 'team'), id))
-      setTeam(team.filter(t => t.id !== id))
+      await deleteDoc(doc(db, 'team', deleteId))
+      setTeam(team.filter(t => t.id !== deleteId))
     } catch (err) {
       console.error("Error deleting", err)
+    } finally {
+      setDeleteId(null)
     }
   }
 
@@ -63,7 +71,7 @@ export default function AdminTeam() {
     e.preventDefault()
     try {
       if (editingId) {
-        await setDoc(doc(collection(db, 'team'), editingId), formData)
+        await setDoc(doc(db, 'team', editingId), formData)
         setTeam(team.map(t => t.id === editingId ? { id: editingId, ...formData } as (TeamMember & { id: string }) : t))
       } else {
         const docRef = await addDoc(collection(db, 'team'), formData)
@@ -197,14 +205,14 @@ export default function AdminTeam() {
                     <td className="px-6 py-4 text-right space-x-2">
                       <button 
                         onClick={() => handleEdit(member)}
-                        className="text-gray-400 hover:text-blue-600 transition-[color,transform] active:scale-95 p-2"
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
                         title="Edit"
                       >
                         <Edit2 size={18} />
                       </button>
                       <button 
-                        onClick={() => handleDelete(member.id)}
-                        className="text-gray-400 hover:text-red-600 transition-[color,transform] active:scale-95 p-2"
+                        onClick={() => confirmDelete(member.id)}
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
                         title="Delete"
                       >
                         <Trash2 size={18} />
@@ -224,6 +232,15 @@ export default function AdminTeam() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteId}
+        title="Delete Team Member"
+        description="Are you sure you want to delete this team member? This action cannot be undone."
+        confirmText="Delete"
+        onClose={() => setDeleteId(null)}
+        onConfirm={executeDelete}
+      />
     </div>
   )
 }

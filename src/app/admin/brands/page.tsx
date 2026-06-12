@@ -1,17 +1,21 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { collection, addDoc, setDoc, deleteDoc, doc, getDocs } from 'firebase/firestore/lite'
-import { db } from '@/lib/firebase/config'
+import { collection, addDoc, setDoc, deleteDoc, doc, getDocs, getFirestore } from 'firebase/firestore/lite'
+import { app } from '@/lib/firebase/config'
+
+const db = getFirestore(app)
 import { Brand } from '@/lib/types'
 import { Trash2, Plus, Bookmark, Edit2 } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
+import { ConfirmModal } from '@/components/confirm-modal'
 
 export default function AdminBrands() {
   const [brands, setBrands] = useState<Brand[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
   const [formData, setFormData] = useState<Partial<Brand>>({
     name: '', sector: '', description: '', logoFile: ''
   })
@@ -21,7 +25,7 @@ export default function AdminBrands() {
       const querySnapshot = await getDocs(collection(db, 'brands'))
       const items: Brand[] = []
       querySnapshot.forEach((docSnap) => {
-        items.push({ id: docSnap.id, ...docSnap.data() } as Brand)
+        items.push({ ...docSnap.data(), id: docSnap.id } as Brand)
       })
       setBrands(items)
     } catch (err) {
@@ -36,13 +40,17 @@ export default function AdminBrands() {
     fetchBrands()
   }, [])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this brand?')) return
+  const confirmDelete = (id: string) => setDeleteId(id)
+
+  const executeDelete = async () => {
+    if (!deleteId) return
     try {
-      await deleteDoc(doc(collection(db, 'brands'), id))
-      setBrands(brands.filter(t => t.id !== id))
+      await deleteDoc(doc(db, 'brands', String(deleteId)))
+      setBrands(brands.filter(t => t.id !== deleteId))
     } catch (err) {
       console.error("Error deleting", err)
+    } finally {
+      setDeleteId(null)
     }
   }
 
@@ -62,7 +70,7 @@ export default function AdminBrands() {
     e.preventDefault()
     try {
       if (editingId) {
-        await setDoc(doc(collection(db, 'brands'), editingId), formData)
+        await setDoc(doc(db, 'brands', editingId), formData)
         setBrands(brands.map(b => b.id === editingId ? { id: editingId, ...formData } as Brand : b))
       } else {
         const docRef = await addDoc(collection(db, 'brands'), formData)
@@ -176,14 +184,14 @@ export default function AdminBrands() {
                     <td className="px-6 py-4 text-right space-x-2">
                       <button 
                         onClick={() => handleEdit(brand)}
-                        className="text-gray-400 hover:text-blue-600 transition-[color,transform] active:scale-95 p-2"
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
                         title="Edit"
                       >
                         <Edit2 size={18} />
                       </button>
                       <button 
-                        onClick={() => handleDelete(brand.id)}
-                        className="text-gray-400 hover:text-red-600 transition-[color,transform] active:scale-95 p-2"
+                        onClick={() => confirmDelete(brand.id)}
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
                         title="Delete"
                       >
                         <Trash2 size={18} />
@@ -203,6 +211,15 @@ export default function AdminBrands() {
           </div>
         </div>
       )}
+      
+      <ConfirmModal
+        isOpen={!!deleteId}
+        title="Delete Brand"
+        description="Are you sure you want to delete this brand? This action cannot be undone."
+        confirmText="Delete"
+        onClose={() => setDeleteId(null)}
+        onConfirm={executeDelete}
+      />
     </div>
   )
 }

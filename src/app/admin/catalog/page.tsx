@@ -1,10 +1,13 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react'
-import { doc, getDoc, setDoc, getDocs, collection, deleteDoc } from 'firebase/firestore/lite'
-import { db } from '@/lib/firebase/config'
+import { collection, setDoc, deleteDoc, doc, getDocs, getDoc, getFirestore } from 'firebase/firestore/lite'
+import { app } from '@/lib/firebase/config'
+
+const db = getFirestore(app)
 import { Trash2, Plus, Box, Edit2, X, ChevronDown } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
+import { ConfirmModal } from '@/components/confirm-modal'
 
 const STANDARD_SIZES = ['4cm', '7cm', '10cm', '12.5cm']
 const STANDARD_PURITIES = ['92.5', '80.0']
@@ -59,6 +62,7 @@ export default function AdminInventory() {
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
   const [formData, setFormData] = useState<Partial<InventoryItem>>({ ...emptyForm })
   const [customSizeInput, setCustomSizeInput] = useState('')
   const [customPurityInput, setCustomPurityInput] = useState('')
@@ -105,18 +109,18 @@ export default function AdminInventory() {
   const fetchData = async () => {
     try {
       // Fetch categories
-      const catDoc = await getDoc(doc(collection(db, 'settings'), 'categories'))
+      const catDoc = await getDoc(doc(db, 'settings', 'categories'))
       if (catDoc.exists() && catDoc.data().list) {
         setCategories(catDoc.data().list)
       } else {
         setCategories(DEFAULT_CATEGORIES)
-        await setDoc(doc(collection(db, 'settings'), 'categories'), { list: DEFAULT_CATEGORIES })
+        await setDoc(doc(db, 'settings', 'categories'), { list: DEFAULT_CATEGORIES })
       }
 
       // Fetch inventory items
       const snap = await getDocs(collection(db, 'catalog'))
       const fetched: InventoryItem[] = []
-      snap.forEach((d) => fetched.push({ id: d.id, ...d.data() } as InventoryItem))
+      snap.forEach((d) => fetched.push({ ...d.data(), id: d.id } as InventoryItem))
       setItems(fetched)
     } catch (err) {
       console.error("Error fetching data", err)
@@ -130,20 +134,24 @@ export default function AdminInventory() {
     fetchData()
   }, [])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this product? Note: The static pages on the live site may take a moment to update and will continue to serve until the cache is cleared.')) return
+  const confirmDelete = (id: string) => setDeleteId(id)
+
+  const executeDelete = async () => {
+    if (!deleteId) return
 
     try {
-      await deleteDoc(doc(collection(db, 'catalog'), id))
+      await deleteDoc(doc(db, 'catalog', deleteId))
 
       // Trigger dynamic path revalidation in background
       fetch(`/api/revalidate?path=${encodeURIComponent('/catalog')}`).catch(err => console.error(err))
-      fetch(`/api/revalidate?path=${encodeURIComponent(`/catalog/${id}`)}`).catch(err => console.error(err))
+      fetch(`/api/revalidate?path=${encodeURIComponent(`/catalog/${deleteId}`)}`).catch(err => console.error(err))
 
-      setItems(items.filter(i => i.id !== id))
+      setItems(items.filter(i => i.id !== deleteId))
     } catch (err) {
-      console.error("Failed to delete product", err)
-      alert("Failed to delete product. Please check your connection and permissions.")
+      console.error("Error deleting", err)
+      alert("Failed to delete product. Please check your permissions.")
+    } finally {
+      setDeleteId(null)
     }
   }
 
@@ -184,7 +192,7 @@ export default function AdminInventory() {
     try {
       // Uniqueness check for new products
       if (!editingId) {
-        const existingDoc = await getDoc(doc(collection(db, 'catalog'), docId))
+        const existingDoc = await getDoc(doc(db, 'catalog', docId))
         if (existingDoc.exists()) {
           alert(`A product with the ID "${docId}" already exists. Please choose a unique ID.`)
           return
@@ -253,7 +261,7 @@ export default function AdminInventory() {
         payload.variantWeights = {}
       }
 
-      await setDoc(doc(collection(db, 'catalog'), docId), payload)
+      await setDoc(doc(db, 'catalog', docId), payload)
 
       // Trigger dynamic path revalidation in background
       fetch(`/api/revalidate?path=${encodeURIComponent('/catalog')}`).catch(err => console.error(err))
@@ -764,10 +772,10 @@ export default function AdminInventory() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right space-x-2">
-                          <button onClick={() => handleEdit(item)} className="text-gray-400 hover:text-blue-600 transition-[color,transform] active:scale-95 p-2" title="Edit">
+                          <button onClick={() => handleEdit(item)} className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2" title="Edit">
                             <Edit2 size={18} />
                           </button>
-                          <button onClick={() => handleDelete(item.id)} className="text-gray-400 hover:text-red-600 transition-[color,transform] active:scale-95 p-2" title="Delete">
+                          <button onClick={() => confirmDelete(item.id)} className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2" title="Delete">
                             <Trash2 size={18} />
                           </button>
                         </td>
@@ -784,6 +792,15 @@ export default function AdminInventory() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteId}
+        title="Delete Product"
+        description="Are you sure you want to delete this product? The live site might take a moment to reflect the change as caches clear."
+        confirmText="Delete"
+        onClose={() => setDeleteId(null)}
+        onConfirm={executeDelete}
+      />
     </div>
   )
 }

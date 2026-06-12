@@ -135,7 +135,7 @@ export function CartDrawer() {
                     <h3 className="font-semibold text-sm line-clamp-2 pr-4">{item.productName}</h3>
                     <button 
                       onClick={() => removeFromCart(item.cartId)}
-                      className="text-gray-400 hover:text-red-500 transition-[color,transform] active:scale-95 p-1 -mr-1"
+                      className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-1 -mr-1"
                     >
                       <X size={16} />
                     </button>

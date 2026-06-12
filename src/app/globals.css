@@ -75,6 +75,12 @@
   }
 }
 
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-8 py-4 bg-black text-white rounded-full text-base font-semibold tracking-wide transition-[background-color,transform] duration-200 ease-[var(--ease-out)] hover:bg-gray-800 active:scale-[0.97];
+  }
+}
+
 /* ═══════════════════════════════════════════════════
    Admin Design System — Minimal, Elegant Controls
    ═══════════════════════════════════════════════════ */
@@ -106,9 +112,8 @@
   transition: border-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
 }
 .admin-input:focus {
-  outline: none;
   border-color: #000;
-  box-shadow: 0 0 0 1px #000;
+  box-shadow: 0 0 0 4px rgba(0,0,0,0.1);
 }
 
 /* ── Underline Input (for custom numeric entry) ── */

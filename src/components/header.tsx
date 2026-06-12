@@ -73,7 +73,7 @@ export default function Header() {
           </nav>
  
           {/* Mobile Menu & Cart Container */}
-          <div className="md:hidden absolute right-0 flex items-center gap-2 pr-4 h-full">
+          <div className="md:hidden absolute right-0 flex items-center gap-2 h-full">
             <div className="w-10 h-10 flex items-center justify-center">
               {(pathname.startsWith('/catalog') || (isInitialized && totalItems > 0)) && (
                 <button 

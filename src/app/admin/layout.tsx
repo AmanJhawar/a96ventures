@@ -58,7 +58,7 @@ function SidebarContent({ setIsMobileMenuOpen }: { setIsMobileMenuOpen: (v: bool
             signOut(auth)
             router.push('/admin/login')
           }}
-          className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-150"
+          className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-gray-500 hover:text-black hover:bg-gray-100 rounded-lg transition-colors duration-150"
         >
           <LogOut size={18} />
           Sign Out
@@ -81,7 +81,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         try {
           const { collection, doc, getDoc } = await import('firebase/firestore/lite')
           const { db } = await import('@/lib/firebase/config')
-          const adminDoc = await getDoc(doc(collection(db, 'admins'), currentUser.uid))
+          const adminDoc = await getDoc(doc(db, 'admins', currentUser.uid))
           
           if (adminDoc.exists()) {
             setUser(currentUser)
