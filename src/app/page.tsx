@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import Hero from '@/components/hero'
+import NetworkHero from '@/components/NetworkHero'
 import NewsletterForm from '@/components/newsletter-form'
 import { getBrands, getPortfolioCompanies } from '@/lib/firebase/db'
 
@@ -26,7 +26,7 @@ export default async function Home() {
 
   return (
     <>
-      <Hero />
+      <NetworkHero />
 
       {/* Newsletter Section */}
       <section className="py-20 md:py-32 bg-gray-100 border-y border-gray-300">
