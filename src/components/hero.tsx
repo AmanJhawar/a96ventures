@@ -125,7 +125,7 @@ export default function Hero() {
               </Link>
               <Link 
                 href="/catalog" 
-                className="inline-block bg-white text-black border border-gray-300 px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,border-color,transform,box-shadow] duration-150 ease-[var(--ease-out)] hover:bg-gray-50 hover:border-gray-400 active:scale-[0.97] shadow-sm hover:shadow-md"
+                className="inline-block bg-white text-black border border-gray-200 px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,border-color,transform,box-shadow] duration-150 ease-[var(--ease-out)] hover:bg-gray-50 hover:border-gray-400 active:scale-[0.97] shadow-sm hover:shadow-md"
               >
                 Explore Catalog
               </Link>

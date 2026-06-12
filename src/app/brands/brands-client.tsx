@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { getBrands } from '@/lib/firebase/db'
 import { ProtectedImage } from '@/components/protected-image'
 import { Brand } from '@/lib/types'
+import { SkeletonGrid } from '@/components/skeleton-grid'
 
 export default function BrandsClient() {
   const [brands, setBrands] = useState<Brand[]>([])
@@ -43,10 +44,8 @@ export default function BrandsClient() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
-          </div>
-        ) : brands.length === 0 ? (
+          <SkeletonGrid count={6} />
+        ) : (brands.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             No brands found.
           </div>
@@ -55,10 +54,10 @@ export default function BrandsClient() {
             {brands.map((brand, index) => (
               <div 
                 key={brand.id} 
-                className="flex flex-col md:flex-row items-stretch p-0 overflow-hidden border border-gray-300 rounded-xl bg-white transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-[0_12px_24px_rgba(0,0,0,0.1)] min-h-[200px] group opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]"
+                className="flex flex-col md:flex-row items-stretch p-0 overflow-hidden border border-gray-200 rounded-xl bg-white transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-[0_12px_24px_rgba(0,0,0,0.1)] min-h-[200px] group opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="w-full md:w-[35%] bg-gray-100 flex items-center justify-center border-b md:border-b-0 md:border-r border-gray-300 min-h-[200px] p-6">
+                <div className="w-full md:w-[35%] bg-gray-100 flex items-center justify-center border-b md:border-b-0 md:border-r border-gray-200 min-h-[200px] p-6">
                   <div className="relative w-full h-full flex items-center justify-center">
                     <ProtectedImage 
                       src={brand.logoFile.startsWith('data:') || brand.logoFile.startsWith('http') ? brand.logoFile : `/assets/${brand.logoFile}`} 

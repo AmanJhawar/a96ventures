@@ -29,7 +29,7 @@ export default async function Home() {
       <NetworkHero />
 
       {/* Newsletter Section */}
-      <section className="py-20 md:py-32 bg-gray-100 border-y border-gray-300">
+      <section className="py-20 md:py-32 bg-gray-100 border-y border-gray-100">
         <div className="max-w-7xl mx-auto px-6">
           <div className="max-w-[800px] mx-auto text-center">
             <span className="text-xs font-semibold tracking-widest text-gray-500 mb-4 block uppercase">STAY INFORMED</span>
@@ -45,17 +45,17 @@ export default async function Home() {
       <section className="py-20 md:py-32 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
-            <Link href="/portfolio" className="block text-center p-8 bg-white border border-gray-300 rounded-xl transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98]">
+            <Link href="/portfolio" className="block text-center p-8 bg-white border border-gray-200 rounded-xl transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98]">
               <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{portfolioCount}+</div>
               <div className="text-base text-gray-500">Portfolio Companies</div>
             </Link>
             
-            <Link href="/brands" className="block text-center p-8 bg-white border border-gray-300 rounded-xl transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98]">
+            <Link href="/brands" className="block text-center p-8 bg-white border border-gray-200 rounded-xl transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98]">
               <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{brandsCount}+</div>
               <div className="text-base text-gray-500">Brands</div>
             </Link>
             
-            <div className="block text-center p-8 bg-white border border-gray-300 rounded-xl">
+            <div className="block text-center p-8 bg-white border border-gray-200 rounded-xl">
               <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{yearsExp}+</div>
               <div className="text-base text-gray-500">Years of Experience</div>
             </div>

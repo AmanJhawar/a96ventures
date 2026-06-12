@@ -129,7 +129,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
           <button
             onClick={() => setIsSortOpen(!isSortOpen)}
             onKeyDown={handleDropdownKeyDown}
-            className="flex items-center gap-2 px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-black bg-white hover:border-black/30 active:scale-[0.97] transition-[border-color,transform] duration-150 ease-[var(--ease-out)]"
+            className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-black bg-white hover:border-black/30 active:scale-[0.97] transition-[border-color,transform] duration-150 ease-[var(--ease-out)]"
             aria-haspopup="listbox"
             aria-expanded={isSortOpen}
             aria-label="Sort products"
@@ -183,10 +183,10 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
             <Link 
               href={`/catalog/${item.id}`}
               key={item.id} 
-              className="flex flex-col border border-gray-300 rounded-xl overflow-hidden bg-white group opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
+              className="flex flex-col border border-gray-200 rounded-xl overflow-hidden bg-white group opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
               style={{ animationDelay: `${index * 50}ms` }}
             >
-              <div className="aspect-[3/2] bg-gray-100 relative overflow-hidden">
+              <div className="aspect-[3/2] bg-white relative overflow-hidden">
                 <div className="w-full h-full relative flex items-center justify-center text-gray-400 text-sm">
                   {item.imageFile ? (
                     <ProtectedImage 
@@ -205,39 +205,25 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                   <h3 className="text-xl font-semibold text-black">{item.name}</h3>
                   <span className="text-xs font-semibold tracking-widest uppercase text-gray-400 mt-1">{item.category}</span>
                 </div>
-                <p className="text-gray-500 leading-relaxed mb-8 line-clamp-3 min-h-[4.5rem]">
-                  {item.description}
-                </p>
-                <div className="mt-auto flex flex-col gap-4">
-                  {(item.standardSizes?.length > 0 || item.customSizes?.length > 0) && (
-                    <div>
-                      <span className="text-xs font-semibold tracking-widest text-gray-400 uppercase mb-2 block">
-                        {item.category?.includes('Marble') ? 'Stones' : item.category?.includes('Bullion') ? 'Weights' : 'Sizes'}
-                      </span>
-                      <div className="flex flex-wrap gap-2">
-                        {item.standardSizes?.map((s) => (
-                          <span key={`std-size-${s}`} className="px-2 py-1 bg-gray-50 text-gray-600 rounded text-xs border border-gray-200">{s}</span>
-                        ))}
-                        {item.customSizes?.map((s) => (
-                          <span key={`cust-size-${s}`} className="px-2 py-1 bg-white text-gray-500 rounded text-xs border border-gray-200 border-dashed">{s} (Custom)</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {(item.standardPurities?.length > 0 || item.customPurities?.length > 0) && (
-                    <div>
-                      <span className="text-xs font-semibold tracking-widest text-gray-400 uppercase mb-2 block">Purity</span>
-                      <div className="flex flex-wrap gap-2">
-                        {item.standardPurities?.map((p) => (
-                          <span key={`std-pur-${p}`} className="px-2 py-1 bg-gray-50 text-gray-600 rounded text-xs border border-gray-200">{p}%</span>
-                        ))}
-                        {item.customPurities?.map((p) => (
-                          <span key={`cust-pur-${p}`} className="px-2 py-1 bg-white text-gray-500 rounded text-xs border border-gray-200 border-dashed">{p}% (Custom)</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                {((item.standardSizes?.length || 0) > 0 || (item.customSizes?.length || 0) > 0 || (item.standardPurities?.length || 0) > 0 || (item.customPurities?.length || 0) > 0) && (
+                  <div className="mt-auto pt-4">
+                    {(() => {
+                      const sizes = (item.standardSizes?.length || 0) + (item.customSizes?.length || 0);
+                      const purities = (item.standardPurities?.length || 0) + (item.customPurities?.length || 0);
+                      const sizeLabel = item.category?.includes('Marble') ? 'stones' : item.category?.includes('Bullion') ? 'weights' : 'sizes';
+                      
+                      const parts = [];
+                      if (sizes > 0) parts.push(`${sizes} ${sizeLabel}`);
+                      if (purities > 0) parts.push(`${purities} purities`);
+                      
+                      return (
+                        <span className="text-sm text-gray-500">
+                          {parts.join(' · ')}
+                        </span>
+                      )
+                    })()}
+                  </div>
+                )}
               </div>
             </Link>
           ))}

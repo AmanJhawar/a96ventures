@@ -84,7 +84,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                       className={`px-4 py-3 rounded-lg text-sm font-medium transition-[background-color,color,border-color,transform] duration-150 active:scale-95 ${
                         isSelected 
                           ? 'bg-black text-white border-black' 
-                          : 'bg-white text-gray-800 border-gray-300 hover:border-black'
+                          : 'bg-white text-gray-800 border-gray-200 hover:border-black'
                       } border`}
                     >
                       {s}
@@ -100,7 +100,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                       className={`px-4 py-3 rounded-lg text-sm font-medium transition-[background-color,color,border-color,transform] duration-150 active:scale-95 border-dashed ${
                         isSelected 
                           ? 'bg-black text-white border-black border-solid' 
-                          : 'bg-gray-50 text-gray-600 border-gray-300 hover:border-black hover:border-solid'
+                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-black hover:border-solid'
                       } border`}
                     >
                       {s} <span className="text-xs opacity-70 ml-1">(Custom)</span>
@@ -124,7 +124,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                       className={`px-4 py-3 rounded-lg text-sm font-medium transition-[background-color,color,border-color,transform] duration-150 active:scale-95 ${
                         isSelected 
                           ? 'bg-black text-white border-black' 
-                          : 'bg-white text-gray-800 border-gray-300 hover:border-black'
+                          : 'bg-white text-gray-800 border-gray-200 hover:border-black'
                       } border`}
                     >
                       {p}%
@@ -140,7 +140,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                       className={`px-4 py-3 rounded-lg text-sm font-medium transition-[background-color,color,border-color,transform] duration-150 active:scale-95 border-dashed ${
                         isSelected 
                           ? 'bg-black text-white border-black border-solid' 
-                          : 'bg-gray-50 text-gray-600 border-gray-300 hover:border-black hover:border-solid'
+                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-black hover:border-solid'
                       } border`}
                     >
                       {p}% <span className="text-xs opacity-70 ml-1">(Custom)</span>

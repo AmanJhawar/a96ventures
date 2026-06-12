@@ -41,7 +41,7 @@ export default function About() {
           <h2 className="text-3xl font-semibold text-black mb-8 text-center">Our Values</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
             {values.map((value, index) => (
-              <div key={index} className="text-center p-8 border border-gray-300 rounded-xl">
+              <div key={index} className="text-center p-8 border border-gray-200 rounded-xl">
                 <h3 className="text-xl font-semibold text-black mb-4">{value.title}</h3>
                 <p className="text-gray-500 leading-relaxed">{value.description}</p>
               </div>
@@ -53,7 +53,7 @@ export default function About() {
           <h2 className="text-3xl font-semibold text-black mb-8 text-center">Our Journey</h2>
           <div className="max-w-[600px] mx-auto">
             {milestones.map((milestone, index) => (
-              <div key={index} className={`flex flex-col md:flex-row gap-2 md:gap-8 mb-8 pb-8 ${index !== milestones.length - 1 ? 'border-b border-gray-300' : ''}`}>
+              <div key={index} className={`flex flex-col md:flex-row gap-2 md:gap-8 mb-8 pb-8 ${index !== milestones.length - 1 ? 'border-b border-gray-200' : ''}`}>
                 <div className="text-lg font-semibold text-black min-w-[60px]">{milestone.year}</div>
                 <div className="text-gray-500 leading-relaxed">{milestone.event}</div>
               </div>
@@ -64,19 +64,19 @@ export default function About() {
         <div className="mb-20">
           <h2 className="text-3xl font-semibold text-black mb-8 text-center">Investment Focus</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-            <div className="text-center p-8 border border-gray-300 rounded-xl">
+            <div className="text-center p-8 border border-gray-200 rounded-xl">
               <h3 className="text-xl font-semibold text-black mb-4">Enterprise Software</h3>
               <p className="text-gray-500 leading-relaxed">AI-powered solutions, workflow automation, and productivity tools</p>
             </div>
-            <div className="text-center p-8 border border-gray-300 rounded-xl">
+            <div className="text-center p-8 border border-gray-200 rounded-xl">
               <h3 className="text-xl font-semibold text-black mb-4">Healthcare &amp; Biotech</h3>
               <p className="text-gray-500 leading-relaxed">Personalized medicine, medical devices, and digital health platforms</p>
             </div>
-            <div className="text-center p-8 border border-gray-300 rounded-xl">
+            <div className="text-center p-8 border border-gray-200 rounded-xl">
               <h3 className="text-xl font-semibold text-black mb-4">Climate Tech</h3>
               <p className="text-gray-500 leading-relaxed">Carbon capture, renewable energy, and sustainability solutions</p>
             </div>
-            <div className="text-center p-8 border border-gray-300 rounded-xl">
+            <div className="text-center p-8 border border-gray-200 rounded-xl">
               <h3 className="text-xl font-semibold text-black mb-4">Deep Tech</h3>
               <p className="text-gray-500 leading-relaxed">Quantum computing, cybersecurity, and advanced materials</p>
             </div>

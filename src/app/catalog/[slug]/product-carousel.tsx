@@ -17,7 +17,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
   if (safeImages.length === 0) {
     return (
       <div className="flex flex-col gap-4 w-full">
-        <div className="aspect-square bg-gray-50 rounded-2xl flex items-center justify-center border border-gray-100">
+        <div className="aspect-square bg-gray-50 rounded-xl flex items-center justify-center border border-gray-100">
           <span className="text-gray-400 text-sm">Image not available</span>
         </div>
       </div>
@@ -29,7 +29,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
   return (
     <div className="flex flex-col gap-4 w-full">
       {/* Main Image */}
-      <div className="aspect-square bg-white rounded-2xl border border-gray-200 overflow-hidden relative shadow-sm transition-[border-color,box-shadow] duration-300">
+      <div className="aspect-square bg-white rounded-xl border border-gray-200 overflow-hidden relative shadow-sm transition-[border-color,box-shadow] duration-300">
         <ProtectedImage
           src={activeImage.startsWith('data:') ? activeImage : `/assets/${activeImage}`}
           alt={`${productName} - View ${activeIndex + 1}`}
