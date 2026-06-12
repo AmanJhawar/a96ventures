@@ -93,7 +93,7 @@ export default function CustomSelect({ id, name, value, onChange, options }: Cus
         aria-expanded={isOpen}
         aria-controls={`${id}-listbox`}
         onClick={() => isOpen ? closeSelect() : openSelect()}
-        className={`w-full px-4 py-3 border border-gray-300 rounded-lg text-base bg-white text-left flex justify-between items-center transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10 ${isOpen ? 'border-black ring-4 ring-black/10' : ''}`}
+        className={`w-full px-4 py-3 border border-gray-300 rounded-lg text-base bg-white text-left flex justify-between items-center transition-colors duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10 ${isOpen ? 'border-black ring-4 ring-black/10' : ''}`}
       >
         <span className="text-black">{selectedOption.label}</span>
         <ChevronDown 

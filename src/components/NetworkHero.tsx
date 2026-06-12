@@ -215,13 +215,13 @@ export default function NetworkHero() {
         <div className="opacity-0 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:600ms] flex flex-wrap gap-4 justify-center pointer-events-auto">
           <Link 
             href="/portfolio" 
-            className="inline-block bg-black text-white px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,transform,box-shadow] duration-[160ms] ease-[var(--ease-out)] hover:bg-gray-800 active:scale-[0.97] shadow-lg hover:shadow-xl"
+            className="inline-block bg-black text-white px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,transform,box-shadow] duration-150 ease-[var(--ease-out)] hover:bg-gray-800 active:scale-[0.97] shadow-lg hover:shadow-xl"
           >
             View Portfolio
           </Link>
           <Link 
             href="/catalog" 
-            className="inline-block bg-white text-black border border-gray-300 px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,border-color,transform,box-shadow] duration-[160ms] ease-[var(--ease-out)] hover:bg-gray-50 hover:border-gray-400 active:scale-[0.97] shadow-sm hover:shadow-md"
+            className="inline-block bg-white text-black border border-gray-300 px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,border-color,transform,box-shadow] duration-150 ease-[var(--ease-out)] hover:bg-gray-50 hover:border-gray-400 active:scale-[0.97] shadow-sm hover:shadow-md"
           >
             Explore Catalog
           </Link>

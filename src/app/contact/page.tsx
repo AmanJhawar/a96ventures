@@ -114,7 +114,7 @@ function ContactForm() {
             name="name"
             value={formData.name}
             onChange={handleChange}
-            className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
+            className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
             required
           />
         </div>
@@ -127,7 +127,7 @@ function ContactForm() {
             name="email"
             value={formData.email}
             onChange={handleChange}
-            className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
+            className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
             required
           />
         </div>
@@ -141,7 +141,7 @@ function ContactForm() {
           name="company"
           value={formData.company}
           onChange={handleChange}
-          className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
+          className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10"
         />
       </div>
 
@@ -152,7 +152,7 @@ function ContactForm() {
           name="message"
           value={formData.message}
           onChange={handleChange}
-          className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10 resize-y min-h-[160px]"
+          className="px-4 py-3 border border-gray-300 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10 resize-y min-h-[160px]"
           rows={8}
           required
         ></textarea>
@@ -164,7 +164,7 @@ function ContactForm() {
       <button 
         type="submit" 
         disabled={isSubmitting}
-        className={`bg-black text-white border-none px-8 py-4 rounded-lg text-base font-semibold transition-[background-color,transform] duration-160 ease-[var(--ease-out)] hover:bg-gray-700 active:scale-[0.97] ${isSubmitting ? 'opacity-50' : 'cursor-pointer'}`}
+        className={`bg-black text-white border-none px-8 py-4 rounded-lg text-base font-semibold transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-gray-700 active:scale-[0.97] ${isSubmitting ? 'opacity-50' : 'cursor-pointer'}`}
       >
         {isSubmitting ? 'Sending...' : 'Send Message'}
       </button>

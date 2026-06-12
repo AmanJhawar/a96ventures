@@ -7,8 +7,7 @@
   /* Overriding Tailwind's default easings with our custom curves */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
-  --default-transition-timing-function: var(--ease-out);
+    --default-transition-timing-function: var(--ease-out);
 
   /* New custom animations */
   --animate-clip-reveal: clipReveal 0.8s var(--ease-out) forwards;
@@ -22,17 +21,8 @@
   }
 
   /* Focus Styles for Accessibility */
-  *:focus-visible {
-    outline: 2px solid var(--color-black);
-    outline-offset: 2px;
-  }
-
-  button:focus-visible,
-  input:focus-visible,
-  textarea:focus-visible,
-  select:focus-visible {
-    outline: 2px solid var(--color-black);
-    outline-offset: 2px;
+  a, button, input, textarea, select, [tabindex="0"], [role="button"], [role="combobox"], [role="option"] {
+    @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black;
   }
 
   @media (prefers-reduced-motion: reduce) {

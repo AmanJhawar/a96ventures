@@ -11,7 +11,7 @@ function NavLink({ href, children, isActive, onClick }: { href: string; children
   return (
     <Link
       href={href}
-      className={`relative text-sm font-medium tracking-wide text-black no-underline transition-colors duration-200 ease-[var(--ease)] hover:text-gray-500 active:blur-[0.5px]
+      className={`relative text-sm font-medium tracking-wide text-black no-underline transition-colors duration-200 ease-[var(--ease-out)] hover:text-gray-500 active:opacity-60
         after:absolute after:bottom-[-4px] after:left-0 after:h-[1px] after:bg-black after:transition-[width] after:duration-200 after:ease-[var(--ease-out)]
         ${isActive ? 'after:w-full' : 'after:w-0 hover:after:w-full'}`}
       onClick={onClick}
@@ -93,7 +93,7 @@ export default function Header() {
             >
               <div className="flex flex-col w-6 h-[18px] relative justify-between">
                 <span className={`block h-[2px] w-full bg-black transition-transform duration-200 ease-[var(--ease-out)] ${isMenuOpen ? 'rotate-45 translate-y-[8px]' : ''}`}></span>
-                <span className={`block h-[2px] w-full bg-black transition-opacity duration-200 ease-[var(--ease)] ${isMenuOpen ? 'opacity-0' : ''}`}></span>
+                <span className={`block h-[2px] w-full bg-black transition-opacity duration-200 ease-[var(--ease-out)] ${isMenuOpen ? 'opacity-0' : ''}`}></span>
                 <span className={`block h-[2px] w-full bg-black transition-transform duration-200 ease-[var(--ease-out)] ${isMenuOpen ? '-rotate-45 -translate-y-[8px]' : ''}`}></span>
               </div>
             </button>

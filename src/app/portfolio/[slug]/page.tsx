@@ -50,7 +50,7 @@ export default async function PortfolioDetail({
       <div className="max-w-7xl mx-auto px-6">
         <Link 
           href="/portfolio" 
-          className="inline-block mb-12 text-sm text-gray-500 no-underline transition-colors duration-200 ease-[var(--ease)] hover:text-black"
+          className="inline-block mb-12 text-sm text-gray-500 no-underline transition-colors duration-200 ease-[var(--ease-out)] hover:text-black"
         >
           ← Back to Portfolio
         </Link>

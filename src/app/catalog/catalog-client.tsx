@@ -112,7 +112,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
             <button
               key={cat}
               onClick={() => handleCategoryChange(cat)}
-              className={`px-6 py-2 rounded-full text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-[160ms] ease-[var(--ease-out)] active:scale-[0.97] opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards] ${
+              className={`px-6 py-2 rounded-full text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards] ${
                 activeFilter === cat 
                   ? 'bg-black text-white shadow-md' 
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -129,7 +129,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
           <button
             onClick={() => setIsSortOpen(!isSortOpen)}
             onKeyDown={handleDropdownKeyDown}
-            className="flex items-center gap-2 px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-black bg-white hover:border-black/30 active:scale-[0.97] transition-[border-color,transform] duration-[160ms] ease-[var(--ease-out)]"
+            className="flex items-center gap-2 px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-black bg-white hover:border-black/30 active:scale-[0.97] transition-[border-color,transform] duration-150 ease-[var(--ease-out)]"
             aria-haspopup="listbox"
             aria-expanded={isSortOpen}
             aria-label="Sort products"
@@ -147,7 +147,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 role="option"
                 aria-selected={sortBy === 'default'}
                 onClick={() => { setSortBy('default'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-[160ms] hover:bg-gray-100 ${sortBy === 'default' || focusedIndex === 0 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
+                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'default' || focusedIndex === 0 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
               >
                 Default
               </button>
@@ -155,7 +155,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 role="option"
                 aria-selected={sortBy === 'name-asc'}
                 onClick={() => { setSortBy('name-asc'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-[160ms] hover:bg-gray-100 ${sortBy === 'name-asc' || focusedIndex === 1 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
+                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-asc' || focusedIndex === 1 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
               >
                 Name (A-Z)
               </button>
@@ -163,7 +163,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 role="option"
                 aria-selected={sortBy === 'name-desc'}
                 onClick={() => { setSortBy('name-desc'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-[160ms] hover:bg-gray-100 ${sortBy === 'name-desc' || focusedIndex === 2 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
+                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-desc' || focusedIndex === 2 ? 'bg-gray-100 font-semibold text-black' : 'text-gray-700'}`}
               >
                 Name (Z-A)
               </button>
@@ -192,7 +192,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                     <ProtectedImage 
                       src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
                       alt={item.name}
-                      className="w-full h-full object-cover transition-transform duration-500 ease-[var(--ease-out)] group-hover:scale-105"
+                      className="w-full h-full object-cover transition-transform duration-200 ease-[var(--ease-out)] group-hover:scale-105"
                       containerClassName="w-full h-full"
                     />
                   ) : (
@@ -249,7 +249,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
         <div className="flex justify-center mt-16">
           <button
             onClick={() => setVisibleCount(prev => prev + 6)}
-            className="px-8 py-3 bg-black text-white text-sm font-semibold rounded-full shadow-md hover:bg-gray-800 active:scale-[0.97] transition-[background-color,transform,box-shadow] duration-[160ms] ease-[var(--ease-out)]"
+            className="px-8 py-3 bg-black text-white text-sm font-semibold rounded-full shadow-md hover:bg-gray-800 active:scale-[0.97] transition-[background-color,transform,box-shadow] duration-150 ease-[var(--ease-out)]"
           >
             Load More
           </button>
