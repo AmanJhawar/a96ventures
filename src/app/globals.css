@@ -267,7 +267,6 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: inherit;
   transition: opacity 0.3s ease;
   pointer-events: none; /* Let events pass through to the container/shield if needed, but the shield handles it */
 }
