@@ -1,11 +1,14 @@
 import type { Metadata } from 'next'
-import { Outfit } from 'next/font/google'
+import localFont from 'next/font/local'
 import './globals.css'
 import Header from '@/components/header'
 import Footer from '@/components/footer'
 import DisableDevTools from '@/components/disable-dev-tools'
 
-const outfit = Outfit({ subsets: ['latin'] })
+const outfit = localFont({
+  src: '../../public/fonts/outfit.woff2',
+  display: 'swap',
+})
 
 import { CartProvider } from '@/components/cart-provider'
 import { CartDrawer } from '@/components/cart-drawer'
@@ -14,6 +17,9 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://a96ventures.com'),
   title: 'A96 Ventures',
   description: 'Early-stage venture capital focused on transformative technologies and exceptional founders.',
+  icons: {
+    icon: '/assets/favicon.svg',
+  },
   openGraph: {
     title: 'A96 Ventures',
     description: 'Early-stage venture capital focused on transformative technologies and exceptional founders.',
@@ -32,7 +38,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="scroll-smooth">
+    <html lang="en" data-scroll-behavior="smooth">
       <body className={`${outfit.className} min-h-screen flex flex-col text-black bg-white antialiased`}>
         <CartProvider>
           <DisableDevTools />

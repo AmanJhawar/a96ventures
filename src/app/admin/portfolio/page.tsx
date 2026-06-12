@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { collection, setDoc, deleteDoc, doc, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { PortfolioCompany } from '@/data/portfolio'
+import { PortfolioCompany } from '@/lib/types'
 import { Trash2, Plus, Briefcase, Edit2 } from 'lucide-react'
 
 export default function AdminPortfolio() {
@@ -12,12 +12,11 @@ export default function AdminPortfolio() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   
-  const [formData, setFormData] = useState<Partial<PortfolioCompany>>({
-    name: '', slug: '', description: '', stage: '', sector: ''
+  const [formData, setFormData] = useState<Partial<PortfolioCompany & { id: string }>>({
+    name: '', id: '', description: '', stage: '', sector: ''
   })
 
   const fetchCompanies = async () => {
-    setLoading(true)
     try {
       const querySnapshot = await getDocs(collection(db, 'portfolio'))
       const items: (PortfolioCompany & { id: string })[] = []
@@ -33,6 +32,7 @@ export default function AdminPortfolio() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCompanies()
   }, [])
 
@@ -40,6 +40,11 @@ export default function AdminPortfolio() {
     if (!confirm('Are you sure you want to delete this company?')) return
     try {
       await deleteDoc(doc(db, 'portfolio', id))
+      
+      // Trigger dynamic path revalidation in background
+      fetch(`/api/revalidate?path=${encodeURIComponent('/portfolio')}`).catch(err => console.error(err))
+      fetch(`/api/revalidate?path=${encodeURIComponent(`/portfolio/${id}`)}`).catch(err => console.error(err))
+
       setCompanies(companies.filter(c => c.id !== id))
     } catch (err) {
       console.error("Error deleting", err)
@@ -55,30 +60,31 @@ export default function AdminPortfolio() {
   const handleCancel = () => {
     setIsFormOpen(false)
     setEditingId(null)
-    setFormData({ name: '', slug: '', description: '', stage: '', sector: '' })
+    setFormData({ name: '', id: '', description: '', stage: '', sector: '' })
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      if (!formData.slug) {
-        alert("Slug is required!")
+      if (!formData.id) {
+        alert("ID is required!")
         return
       }
       
-      // If we change the slug, we would technically need to create a new doc and delete the old one.
-      // For simplicity in this edit flow, we use the existing editingId as the document reference if we are editing.
-      // But actually, let's just restrict changing the slug or handle it by making a new one and deleting old.
-      // I'll just restrict changing the slug during edit to keep it simple.
-      const docId = editingId || formData.slug
+      const docId = editingId || formData.id
       const docRef = doc(db, 'portfolio', docId)
       
-      await setDoc(docRef, formData)
+      const { id, ...saveData } = formData
+      await setDoc(docRef, saveData)
       
+      // Trigger dynamic path revalidation in background
+      fetch(`/api/revalidate?path=${encodeURIComponent('/portfolio')}`).catch(err => console.error(err))
+      fetch(`/api/revalidate?path=${encodeURIComponent(`/portfolio/${docId}`)}`).catch(err => console.error(err))
+
       if (editingId) {
-        setCompanies(companies.map(c => c.id === editingId ? { id: docId, ...formData } as (PortfolioCompany & { id: string }) : c))
+        setCompanies(companies.map(c => c.id === editingId ? { id: docId, ...saveData } as (PortfolioCompany & { id: string }) : c))
       } else {
-        setCompanies([...companies, { id: docId, ...formData } as (PortfolioCompany & { id: string })])
+        setCompanies([...companies, { id: docId, ...saveData } as (PortfolioCompany & { id: string })])
       }
       handleCancel()
     } catch (err) {
@@ -119,12 +125,13 @@ export default function AdminPortfolio() {
                 />
               </div>
               <div>
-                <label className="admin-label required">URL Slug</label>
+                <label className="admin-label required">URL Key (ID)</label>
                 <input 
                   type="text" required
                   disabled={!!editingId}
-                  value={formData.slug} onChange={e => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')})}
+                  value={formData.id} onChange={e => setFormData({...formData, id: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')})}
                   className="admin-input disabled:bg-gray-100"
+                  placeholder="e.g. milemax"
                 />
               </div>
               <div>
@@ -173,7 +180,7 @@ export default function AdminPortfolio() {
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="px-6 py-4 text-sm font-semibold text-gray-600">Company Name</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Slug</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">URL Key (ID)</th>
                   <th className="px-6 py-4 text-sm font-semibold text-gray-600">Stage</th>
                   <th className="px-6 py-4 text-sm font-semibold text-gray-600">Sector</th>
                   <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-right">Actions</th>
@@ -183,7 +190,7 @@ export default function AdminPortfolio() {
                 {companies.map((company) => (
                   <tr key={company.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                     <td className="px-6 py-4 font-medium text-black">{company.name}</td>
-                    <td className="px-6 py-4 text-gray-600 text-sm">{company.slug}</td>
+                    <td className="px-6 py-4 text-gray-600 text-sm">{company.id}</td>
                     <td className="px-6 py-4">
                       <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">{company.stage}</span>
                     </td>

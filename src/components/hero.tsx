@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 
-export default function Hero() {
+function FallbackCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -67,13 +68,46 @@ export default function Hero() {
   }, [])
 
   return (
+    <canvas 
+      ref={canvasRef} 
+      className="absolute inset-0 z-0 pointer-events-none"
+      style={{ width: '100%', height: '100%' }}
+    />
+  )
+}
+
+const HeroScene = dynamic(() => import('./hero-scene'), {
+  ssr: false,
+  loading: () => <FallbackCanvas />
+})
+
+export default function Hero() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true)
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    setPrefersReducedMotion(mediaQuery.matches)
+    
+    const listener = (e: MediaQueryListEvent) => {
+      setPrefersReducedMotion(e.matches)
+    }
+    mediaQuery.addEventListener('change', listener)
+    return () => mediaQuery.removeEventListener('change', listener)
+  }, [])
+
+  const show3D = mounted && !prefersReducedMotion
+
+  return (
     <section className="min-h-[80vh] flex flex-col items-center justify-center text-center pb-20 relative pt-[100px] md:pt-0 overflow-hidden">
-      {/* Interactive Motion Canvas */}
-      <canvas 
-        ref={canvasRef} 
-        className="absolute inset-0 z-0 pointer-events-none"
-        style={{ width: '100%', height: '100%' }}
-      />
+      {/* Interactive Motion Canvas or Fallback */}
+      {show3D ? (
+        <HeroScene />
+      ) : (
+        <FallbackCanvas />
+      )}
 
       <div className="max-w-7xl mx-auto px-6 w-full relative z-10">
         <div className="max-w-[900px] mx-auto">
@@ -83,12 +117,18 @@ export default function Hero() {
           <p className="text-xl font-normal text-gray-500 leading-relaxed max-w-[600px] mx-auto opacity-0 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:400ms] mb-12">
             Early-stage venture capital focused on transformative technologies and exceptional founders.
           </p>
-          <div className="opacity-0 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:600ms]">
+          <div className="opacity-0 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:600ms] flex flex-wrap gap-4 justify-center">
             <Link 
               href="/portfolio" 
-              className="inline-block bg-black text-white px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-all duration-[160ms] ease-[var(--ease-out)] hover:bg-gray-800 active:scale-[0.97] shadow-lg hover:shadow-xl"
+              className="inline-block bg-black text-white px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,transform,box-shadow] duration-[160ms] ease-[var(--ease-out)] hover:bg-gray-800 active:scale-[0.97] shadow-lg hover:shadow-xl"
             >
               View Portfolio
+            </Link>
+            <Link 
+              href="/catalog" 
+              className="inline-block bg-white text-black border border-gray-300 px-8 py-4 rounded-full font-medium tracking-wide text-sm transition-[background-color,border-color,transform,box-shadow] duration-[160ms] ease-[var(--ease-out)] hover:bg-gray-50 hover:border-gray-400 active:scale-[0.97] shadow-sm hover:shadow-md"
+            >
+              Explore Catalog
             </Link>
           </div>
         </div>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { collection, addDoc, setDoc, deleteDoc, doc, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { Brand } from '@/data/brands'
+import { Brand } from '@/lib/types'
 import { Trash2, Plus, Bookmark, Edit2 } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 
@@ -17,7 +17,6 @@ export default function AdminBrands() {
   })
 
   const fetchBrands = async () => {
-    setLoading(true)
     try {
       const querySnapshot = await getDocs(collection(db, 'brands'))
       const items: Brand[] = []
@@ -33,6 +32,7 @@ export default function AdminBrands() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBrands()
   }, [])
 
@@ -166,7 +166,7 @@ export default function AdminBrands() {
                     <td className="px-6 py-4">
                       {brand.logoFile ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={brand.logoFile} alt={brand.name} className="h-8 object-contain" />
+                        <img src={brand.logoFile.startsWith('data:') || brand.logoFile.startsWith('http') ? brand.logoFile : `/assets/${brand.logoFile}`} alt={brand.name} className="h-8 object-contain" />
                       ) : (
                         <div className="w-10 h-10 rounded-md bg-gray-100 flex items-center justify-center text-gray-400">
                           <Bookmark size={16} />

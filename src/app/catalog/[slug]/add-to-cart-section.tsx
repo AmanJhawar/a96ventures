@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useCart } from '@/components/cart-provider'
-import type { CatalogItem } from '@/data/catalog'
+import type { CatalogItem } from '@/lib/types'
 
 export function AddToCartSection({ item }: { item: CatalogItem }) {
   const { addToCart } = useCart()
@@ -11,9 +11,12 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
   const [selectedSize, setSelectedSize] = useState<string | undefined>(undefined)
   const [selectedPurity, setSelectedPurity] = useState<string | undefined>(undefined)
   
+  const sizeLabel = item.category?.includes('Marble') ? 'Select Stone' : item.category?.includes('Bullion') ? 'Select Weight' : 'Select Size'
+  
   // Validation: If it's a modern schema product with sizes/purities, enforce selection if they exist
   const hasSizes = (item.standardSizes?.length > 0 || item.customSizes?.length > 0)
   const hasPurities = (item.standardPurities?.length > 0 || item.customPurities?.length > 0)
+  const hasVariants = hasSizes && hasPurities
   
   const canAddToCart = (!hasSizes || selectedSize !== undefined) && (!hasPurities || selectedPurity !== undefined)
 
@@ -21,17 +24,27 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
     if (!canAddToCart) return
 
     let finalSku = item.sku
-    if (item.hasVariants && item.variantSkus) {
-      let combo = ''
-      if (selectedSize && selectedPurity) {
-        combo = `${selectedSize} | ${selectedPurity}`
-      } else if (selectedSize) {
-        combo = selectedSize
-      } else if (selectedPurity) {
-        combo = selectedPurity
+    let finalWeight = item.weight
+    if (hasVariants) {
+      if (!selectedSize || !selectedPurity) {
+        throw new Error(`Variant selection incomplete for product ${item.name}: Size and Purity must be selected.`)
       }
-      if (combo && item.variantSkus[combo]) {
-        finalSku = item.variantSkus[combo]
+      const combo = `${selectedSize} | ${selectedPurity}`
+      const variantSku = item.variantSkus?.[combo]
+      if (!variantSku) {
+        const errorMsg = `Variant SKU lookup failed for combo "${combo}" on product ${item.name} (${item.id}).`
+        console.error(errorMsg, "Available variant SKUs:", item.variantSkus)
+        alert("An error occurred: product variant SKU not found. Please contact administration.")
+        throw new Error(errorMsg)
+      }
+      finalSku = variantSku
+      finalWeight = item.variantWeights?.[combo] || item.weight
+    } else {
+      if (!finalSku || finalSku.trim() === '') {
+        const errorMsg = `Product SKU missing for product ${item.name} (${item.id}).`
+        console.error(errorMsg)
+        alert("An error occurred: product SKU is missing. Please contact administration.")
+        throw new Error(errorMsg)
       }
     }
 
@@ -43,6 +56,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
       imageFile: item.imageFile,
       selectedSize,
       selectedPurity,
+      weight: finalWeight,
       quantity: 1
     })
   }
@@ -50,10 +64,10 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
   return (
     <div className="flex flex-col gap-8 mb-10">
       {/* Modern Schema (Admin Uploads) */}
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-8">
           {hasSizes && (
             <div>
-              <h3 className="text-sm font-semibold text-black uppercase tracking-wider mb-4">Select Size</h3>
+              <h3 className="text-sm font-semibold text-black uppercase tracking-wider mb-4">{sizeLabel}</h3>
               <div className="flex flex-wrap gap-3">
                 {item.standardSizes?.map((s) => {
                   const isSelected = selectedSize === s
@@ -61,7 +75,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                     <button
                       key={`std-size-${s}`}
                       onClick={() => setSelectedSize(s)}
-                      className={`px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 active:scale-95 ${
+                      className={`px-4 py-3 rounded-lg text-sm font-medium transition-[background-color,color,border-color,transform] duration-150 active:scale-95 ${
                         isSelected 
                           ? 'bg-black text-white border-black' 
                           : 'bg-white text-gray-800 border-gray-300 hover:border-black'
@@ -77,7 +91,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                     <button
                       key={`cust-size-${s}`}
                       onClick={() => setSelectedSize(s)}
-                      className={`px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 active:scale-95 border-dashed ${
+                      className={`px-4 py-3 rounded-lg text-sm font-medium transition-[background-color,color,border-color,transform] duration-150 active:scale-95 border-dashed ${
                         isSelected 
                           ? 'bg-black text-white border-black border-solid' 
                           : 'bg-gray-50 text-gray-600 border-gray-300 hover:border-black hover:border-solid'
@@ -101,13 +115,13 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                     <button
                       key={`std-pur-${p}`}
                       onClick={() => setSelectedPurity(p)}
-                      className={`px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 active:scale-95 ${
+                      className={`px-4 py-3 rounded-lg text-sm font-medium transition-[background-color,color,border-color,transform] duration-150 active:scale-95 ${
                         isSelected 
                           ? 'bg-black text-white border-black' 
                           : 'bg-white text-gray-800 border-gray-300 hover:border-black'
                       } border`}
                     >
-                      {p}{p.includes('%') ? '' : '%'}
+                      {p}%
                     </button>
                   )
                 })}
@@ -117,13 +131,13 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                     <button
                       key={`cust-pur-${p}`}
                       onClick={() => setSelectedPurity(p)}
-                      className={`px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 active:scale-95 border-dashed ${
+                      className={`px-4 py-3 rounded-lg text-sm font-medium transition-[background-color,color,border-color,transform] duration-150 active:scale-95 border-dashed ${
                         isSelected 
                           ? 'bg-black text-white border-black border-solid' 
                           : 'bg-gray-50 text-gray-600 border-gray-300 hover:border-black hover:border-solid'
                       } border`}
                     >
-                      {p}{p.includes('%') ? '' : '%'} <span className="text-xs opacity-70 ml-1">(Custom)</span>
+                      {p}% <span className="text-xs opacity-70 ml-1">(Custom)</span>
                     </button>
                   )
                 })}
@@ -133,13 +147,24 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
         </div>
 
 
-      <div className="pt-8 border-t border-gray-200">
+      <div className="pt-8 border-t border-gray-200 flex flex-col gap-4">
+        {hasVariants && selectedSize && selectedPurity && item.variantWeights?.[`${selectedSize} | ${selectedPurity}`] && (
+          <div className="text-sm text-gray-500 animate-[fadeInUp_160ms_var(--ease-out)_forwards]">
+            <span className="font-semibold text-black uppercase tracking-wider text-xs mr-2">Approx Weight:</span>
+            <span className="text-gray-900 font-medium">
+              {(() => {
+                const w = item.variantWeights[`${selectedSize} | ${selectedPurity}`]
+                return w ? (w.toLowerCase().endsWith('g') || w.toLowerCase().endsWith('kg') ? w : `${w}g`) : ''
+              })()}
+            </span>
+          </div>
+        )}
         <button 
           onClick={handleAddToCart}
           disabled={!canAddToCart}
-          className="w-full sm:w-auto px-8 py-4 bg-black text-white rounded-xl font-semibold text-sm hover:bg-gray-800 transition-all duration-150 active:scale-[0.98] disabled:bg-gray-300 disabled:active:scale-100 flex items-center justify-center gap-2"
+          className="w-full sm:w-auto px-8 py-4 bg-black text-white rounded-xl font-semibold text-sm hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.98] disabled:bg-gray-300 disabled:active:scale-100 flex items-center justify-center gap-2"
         >
-          {canAddToCart ? 'Add to Cart' : 'Please select options'}
+          {canAddToCart ? 'Add to Enquiry' : 'Please select options'}
         </button>
       </div>
     </div>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { collection, setDoc, addDoc, deleteDoc, doc, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { TeamMember } from '@/data/team'
+import { TeamMember } from '@/lib/types'
 import { Trash2, Plus, Users, Edit2 } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 
@@ -18,7 +18,6 @@ export default function AdminTeam() {
   })
 
   const fetchTeam = async () => {
-    setLoading(true)
     try {
       const querySnapshot = await getDocs(collection(db, 'team'))
       const fetchedTeam: (TeamMember & { id: string })[] = []
@@ -34,6 +33,7 @@ export default function AdminTeam() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTeam()
   }, [])
 
@@ -187,7 +187,7 @@ export default function AdminTeam() {
                     <td className="px-6 py-4">
                       {member.imageFile ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={member.imageFile} alt={member.name} className="w-10 h-10 object-cover rounded-full bg-gray-100" />
+                        <img src={member.imageFile.startsWith('data:') || member.imageFile.startsWith('http') ? member.imageFile : `/assets/${member.imageFile}`} alt={member.name} className="w-10 h-10 object-cover rounded-full bg-gray-100" />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
                           <Users size={16} />

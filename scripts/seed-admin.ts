@@ -1,5 +1,6 @@
 import { collection, addDoc, doc, setDoc } from 'firebase/firestore';
-import { db } from '../src/lib/firebase/config';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { db, auth } from '../src/lib/firebase/config';
 
 const teamMembers = [
   {
@@ -90,6 +91,23 @@ const insights = [
 ];
 
 async function seed() {
+  console.log('Authenticating...');
+  const email = process.env.NEXT_PUBLIC_SEED_EMAIL;
+  const password = process.env.NEXT_PUBLIC_SEED_PASSWORD;
+
+  if (!email || !password) {
+    console.error('Error: NEXT_PUBLIC_SEED_EMAIL and NEXT_PUBLIC_SEED_PASSWORD must be set in .env.local');
+    process.exit(1);
+  }
+
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+    console.log('Authenticated successfully.');
+  } catch (err) {
+    console.error('Authentication failed:', err);
+    process.exit(1);
+  }
+
   console.log('Seeding Team...');
   for (const t of teamMembers) {
     await addDoc(collection(db, 'team'), t);

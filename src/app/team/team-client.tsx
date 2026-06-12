@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { getTeamMembers } from '@/lib/firebase/db'
-import { TeamMember } from '@/data/team'
+import { TeamMember } from '@/lib/types'
 
 export default function TeamClient() {
   const [teamMembers, setTeamMembers] = useState<(TeamMember & {id: string})[]>([])
@@ -47,7 +47,7 @@ export default function TeamClient() {
             {teamMembers.map((member, index) => (
               <div 
                 key={member.id} 
-                className="bg-white border border-gray-300 rounded-xl p-8 text-center transition-all duration-200 ease-[var(--ease-out)] @media(hover:hover):hover:-translate-y-1 @media(hover:hover):hover:shadow-[0_8px_32px_rgba(0,0,0,0.1)] opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]"
+                className="bg-white border border-gray-300 rounded-xl p-8 text-center transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-[0_8px_32px_rgba(0,0,0,0.1)] opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div>

@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef, useEffect } from 'react'
 import { useCart } from './cart-provider'
 import { X, Plus, Minus, ArrowRight } from 'lucide-react'
 import { ProtectedImage } from './protected-image'
@@ -7,6 +8,69 @@ import Link from 'next/link'
 
 export function CartDrawer() {
   const { cartItems, isCartOpen, setIsCartOpen, updateQuantity, removeFromCart, isInitialized } = useCart()
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const previousActiveElementRef = useRef<HTMLElement | null>(null)
+
+  // Escape handling & Focus Trap & Scroll Lock
+  useEffect(() => {
+    if (isCartOpen) {
+      // 1. Lock scroll
+      const originalStyle = window.getComputedStyle(document.body).overflow
+      document.body.style.overflow = 'hidden'
+
+      // Save previous active element to restore later
+      previousActiveElementRef.current = document.activeElement as HTMLElement
+
+      // Focus first focusable element inside drawer
+      const focusableElements = drawerRef.current?.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
+      ) as NodeListOf<HTMLElement>
+      
+      if (focusableElements && focusableElements.length > 0) {
+        focusableElements[0].focus()
+      }
+
+      // Keydown listener for Escape and Tab
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          setIsCartOpen(false)
+        }
+
+        if (e.key === 'Tab' && drawerRef.current) {
+          const list = drawerRef.current.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
+          ) as NodeListOf<HTMLElement>
+
+          if (list.length === 0) return
+
+          const first = list[0]
+          const last = list[list.length - 1]
+
+          if (e.shiftKey) {
+            if (document.activeElement === first) {
+              last.focus()
+              e.preventDefault()
+            }
+          } else {
+            if (document.activeElement === last) {
+              first.focus()
+              e.preventDefault()
+            }
+          }
+        }
+      }
+
+      window.addEventListener('keydown', handleKeyDown)
+
+      return () => {
+        document.body.style.overflow = originalStyle
+        window.removeEventListener('keydown', handleKeyDown)
+        if (previousActiveElementRef.current) {
+          previousActiveElementRef.current.focus()
+        }
+      }
+    }
+  }, [isCartOpen, setIsCartOpen])
 
   if (!isInitialized) return null
 
@@ -22,12 +86,16 @@ export function CartDrawer() {
 
       {/* Drawer */}
       <div 
+        ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="enquiry-drawer-title"
         className={`fixed top-0 right-0 h-full w-[400px] max-w-[100vw] bg-white z-[70] shadow-2xl transform transition-transform duration-300 ease-[var(--ease-out)] flex flex-col ${
           isCartOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-xl font-bold tracking-tight">Your Cart</h2>
+          <h2 id="enquiry-drawer-title" className="text-xl font-bold tracking-tight">Your Enquiry</h2>
           <button 
             onClick={() => setIsCartOpen(false)}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors active:scale-95"
@@ -39,7 +107,7 @@ export function CartDrawer() {
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
           {cartItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-4">
-              <p>Your cart is empty.</p>
+              <p>Your enquiry is empty.</p>
               <button 
                 onClick={() => setIsCartOpen(false)}
                 className="text-sm font-medium text-black underline underline-offset-4"
@@ -71,8 +139,14 @@ export function CartDrawer() {
                   
                   <div className="flex flex-wrap gap-1 mt-1 text-xs text-gray-500">
                     {item.selectedSize && <span>Size: {item.selectedSize}</span>}
-                    {item.selectedSize && item.selectedPurity && <span>•</span>}
-                    {item.selectedPurity && <span>Purity: {item.selectedPurity}</span>}
+                    {item.selectedSize && (item.selectedPurity || item.weight) && <span>•</span>}
+                    {item.selectedPurity && <span>Purity: {item.selectedPurity}%</span>}
+                    {item.selectedPurity && item.weight && <span>•</span>}
+                    {item.weight && (
+                      <span>
+                        Approx Weight: {item.weight.toLowerCase().endsWith('g') || item.weight.toLowerCase().endsWith('kg') ? item.weight : `${item.weight}g`}
+                      </span>
+                    )}
                   </div>
 
                   <div className="mt-auto flex items-center gap-4">
@@ -106,7 +180,7 @@ export function CartDrawer() {
               onClick={() => setIsCartOpen(false)}
               className="w-full bg-black text-white px-6 py-4 rounded-xl font-semibold flex items-center justify-between hover:bg-gray-800 transition-colors active:scale-[0.98]"
             >
-              <span>Inquire About Cart</span>
+              <span>Inquire About Items</span>
               <ArrowRight size={18} />
             </Link>
           </div>

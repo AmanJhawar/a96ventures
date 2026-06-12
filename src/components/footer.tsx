@@ -12,10 +12,10 @@ export default function Footer() {
             <h3 className="text-sm font-semibold tracking-widest text-black mb-6 uppercase">Company</h3>
             <ul className="space-y-3">
               <li>
-                <Link href="/about" className="text-sm text-gray-500 @media(hover:hover):hover:text-black transition-all duration-200 ease-[var(--ease)] active:blur-[0.5px]">About Us</Link>
+                <Link href="/about" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease)] active:blur-[0.5px]">About Us</Link>
               </li>
               <li>
-                <Link href="/team" className="text-sm text-gray-500 @media(hover:hover):hover:text-black transition-all duration-200 ease-[var(--ease)] active:blur-[0.5px]">Our Team</Link>
+                <Link href="/team" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease)] active:blur-[0.5px]">Our Team</Link>
               </li>
             </ul>
           </div>
@@ -24,28 +24,23 @@ export default function Footer() {
             <h3 className="text-sm font-semibold tracking-widest text-black mb-6 uppercase">Portfolio</h3>
             <ul className="space-y-3">
               <li>
-                <Link href="/portfolio" className="text-sm text-gray-500 @media(hover:hover):hover:text-black transition-all duration-200 ease-[var(--ease)] active:blur-[0.5px]">Companies</Link>
+                <Link href="/portfolio" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease)] active:blur-[0.5px]">Companies</Link>
               </li>
               <li>
-                <Link href="/brands" className="text-sm text-gray-500 @media(hover:hover):hover:text-black transition-all duration-200 ease-[var(--ease)] active:blur-[0.5px]">Our Brands</Link>
+                <Link href="/brands" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease)] active:blur-[0.5px]">Our Brands</Link>
+              </li>
+              <li>
+                <Link href="/catalog" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease)] active:blur-[0.5px]">Catalog</Link>
               </li>
             </ul>
           </div>
 
-          <div>
-            <h3 className="text-sm font-semibold tracking-widest text-black mb-6 uppercase">Resources</h3>
-            <ul className="space-y-3">
-              <li>
-                <Link href="/insights" className="text-sm text-gray-500 @media(hover:hover):hover:text-black transition-all duration-200 ease-[var(--ease)] active:blur-[0.5px]">Market Insights</Link>
-              </li>
-            </ul>
-          </div>
 
           <div>
             <h3 className="text-sm font-semibold tracking-widest text-black mb-6 uppercase">Contact</h3>
             <ul className="space-y-3">
               <li>
-                <Link href="/contact" className="text-sm text-gray-500 @media(hover:hover):hover:text-black transition-all duration-200 ease-[var(--ease)] active:blur-[0.5px]">Get in Touch</Link>
+                <Link href="/contact" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease)] active:blur-[0.5px]">Get in Touch</Link>
               </li>
             </ul>
           </div>
@@ -53,7 +48,7 @@ export default function Footer() {
 
         <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 gap-6 text-center">
           <div className="flex items-center justify-center">
-            <Image src="/assets/logo.png" alt="A96 Ventures" width={100} height={30} className="h-8 w-auto object-contain grayscale opacity-50" />
+            <Image src="/assets/logo.png" alt="A96 Ventures" width={100} height={30} className="h-8 w-auto object-contain grayscale opacity-50" style={{ width: 'auto' }} />
           </div>
           <div className="text-sm text-gray-500">
             © {currentYear} A96 Ventures. All rights reserved.

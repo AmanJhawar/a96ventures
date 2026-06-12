@@ -15,18 +15,24 @@ export default function AdminLogin() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-
-    if (email !== 'aman@a96ventures.com') {
-      setError('Unauthorized email address.')
-      return
-    }
-
     setLoading(true)
 
     try {
-      await signInWithEmailAndPassword(auth, email, password)
-      router.push('/admin')
-    } catch (err: any) {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      
+      // Verify they are in the admins collection
+      const { doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase/config')
+      const adminDoc = await getDoc(doc(db, 'admins', userCredential.user.uid))
+      
+      if (!adminDoc.exists()) {
+        const { signOut } = await import('firebase/auth')
+        await signOut(auth)
+        setError('Unauthorized account. You do not have admin privileges.')
+      } else {
+        router.push('/admin')
+      }
+    } catch (err) {
       console.error(err)
       setError('Invalid email or password.')
     } finally {
@@ -56,7 +62,7 @@ export default function AdminLogin() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all duration-200"
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-[border-color,box-shadow] duration-200"
               placeholder="you@example.com"
             />
           </div>
@@ -68,7 +74,7 @@ export default function AdminLogin() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all duration-200"
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-[border-color,box-shadow] duration-200"
               placeholder="••••••••"
             />
           </div>

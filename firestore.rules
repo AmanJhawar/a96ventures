@@ -4,19 +4,26 @@ service cloud.firestore {
     
     // Function to check if the user is the authorized admin
     function isAdmin() {
-      return request.auth != null && request.auth.token.email == 'aman@a96ventures.com';
+      return request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
     // Function to validate inquiry submissions and block bloated payloads
     function isValidInquiry() {
       let data = request.resource.data;
-      return data.keys().hasAll(['name', 'email', 'message', 'inquiryType', 'createdAt'])
+      return data.keys().hasAll(['name', 'email', 'message', 'inquiryType', 'status', 'createdAt'])
         && data.name is string && data.name.size() > 0 && data.name.size() < 100
         && data.email is string && data.email.size() > 0 && data.email.size() < 100
         && data.message is string && data.message.size() > 0 && data.message.size() < 5000
         && data.inquiryType is string
+        && data.status == 'unread'
         && data.createdAt == request.time
         && (!('company' in data) || (data.company is string && data.company.size() < 200));
+    }
+
+    // Admins Collection
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false; // Only admin SDK or console can write to admins
     }
 
     // Publicly readable collections (Admin write only)

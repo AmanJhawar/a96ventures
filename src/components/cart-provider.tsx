@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import { getCatalogItems } from '@/lib/firebase/db'
 
 export type CartItem = {
   cartId: string;
@@ -10,6 +11,7 @@ export type CartItem = {
   imageFile: string;
   selectedSize?: string;
   selectedPurity?: string;
+  weight?: string;
   quantity: number;
 }
 
@@ -36,6 +38,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     try {
       const stored = localStorage.getItem('a96_cart')
       if (stored) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setCartItems(JSON.parse(stored))
       }
     } catch (e) {
@@ -43,6 +46,81 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
     setIsInitialized(true)
   }, [])
+
+  // Reconcile loaded cart items with live catalog database
+  useEffect(() => {
+    if (!isInitialized || cartItems.length === 0) return
+
+    let active = true
+
+    const reconcileCart = async () => {
+      try {
+        const liveItems = await getCatalogItems()
+        if (!active) return
+
+        const liveItemsMap = new Map(liveItems.map(i => [i.id, i]))
+
+        setCartItems(prev => {
+          const reconciled: CartItem[] = []
+          for (const item of prev) {
+            const liveItem = liveItemsMap.get(item.productId)
+            if (!liveItem) continue // Product was deleted
+
+            const hasSizes = (liveItem.standardSizes?.length > 0 || liveItem.customSizes?.length > 0)
+            const hasPurities = (liveItem.standardPurities?.length > 0 || liveItem.customPurities?.length > 0)
+            const hasVariants = hasSizes && hasPurities
+
+            if (hasVariants) {
+              if (!item.selectedSize || !item.selectedPurity) continue
+
+              const allSizes = [...(liveItem.standardSizes || []), ...(liveItem.customSizes || [])]
+              const allPurities = [...(liveItem.standardPurities || []), ...(liveItem.customPurities || [])]
+
+              if (!allSizes.includes(item.selectedSize) || !allPurities.includes(item.selectedPurity)) {
+                continue // Stale size/purity variant combo
+              }
+
+              const combo = `${item.selectedSize} | ${item.selectedPurity}`
+              const variantSku = liveItem.variantSkus?.[combo]
+              if (!variantSku) continue // Variant SKU missing/removed
+
+              reconciled.push({
+                ...item,
+                productName: liveItem.name,
+                imageFile: liveItem.imageFile,
+                sku: variantSku,
+                weight: liveItem.variantWeights?.[combo] || liveItem.weight || ''
+              })
+            } else {
+              // If variants were disabled/deleted in DB but item in cart has selections, discard
+              if (item.selectedSize || item.selectedPurity) continue
+
+              reconciled.push({
+                ...item,
+                productName: liveItem.name,
+                imageFile: liveItem.imageFile,
+                sku: liveItem.sku,
+                weight: liveItem.weight || ''
+              })
+            }
+          }
+
+          // Prevent state update loop
+          const isDifferent = JSON.stringify(prev) !== JSON.stringify(reconciled)
+          return isDifferent ? reconciled : prev
+        })
+      } catch (err) {
+        console.error('Failed to reconcile cart items with catalog:', err)
+      }
+    }
+
+    reconcileCart()
+
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInitialized])
 
   // Save to LocalStorage
   useEffect(() => {

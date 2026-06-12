@@ -16,7 +16,7 @@ function ContactForm() {
     email: '',
     company: '',
     message: '',
-    inquiryType: fromCart ? 'general' : 'general'
+    inquiryType: fromCart ? 'product' : 'general'
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -25,18 +25,25 @@ function ContactForm() {
   // Pre-fill from Cart
   useEffect(() => {
     if (fromCart && cartItems.length > 0 && !formData.message) {
-      const intro = "I would like to inquire about the following items from my cart:\n\n"
+      const intro = "I would like to inquire about the following items:\n\n"
       const itemsList = cartItems.map(item => {
         let text = `- [${item.sku}] ${item.quantity}x ${item.productName}`
         const opts = []
         if (item.selectedSize) opts.push(`Size: ${item.selectedSize}`)
-        if (item.selectedPurity) opts.push(`Purity: ${item.selectedPurity}`)
+        if (item.selectedPurity) opts.push(`Purity: ${item.selectedPurity}%`)
+        if (item.weight) {
+          const formattedWeight = item.weight.toLowerCase().endsWith('g') || item.weight.toLowerCase().endsWith('kg')
+            ? item.weight
+            : `${item.weight}g`
+          opts.push(`Approx Weight: ${formattedWeight}`)
+        }
         if (opts.length > 0) {
           text += ` (${opts.join(', ')})`
         }
         return text
       }).join('\n')
       
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData(prev => ({
         ...prev,
         message: intro + itemsList + "\n\nAdditional comments:\n"
@@ -89,6 +96,7 @@ function ContactForm() {
           onChange={handleChange}
           options={[
             { value: "general", label: "General Inquiry" },
+            { value: "product", label: "Product & Order Inquiry" },
             { value: "pitch", label: "Startup Pitch" },
             { value: "lp", label: "Limited Partner" },
             { value: "press", label: "Press & Media" },
@@ -156,7 +164,7 @@ function ContactForm() {
       <button 
         type="submit" 
         disabled={isSubmitting}
-        className={`bg-black text-white border-none px-8 py-4 rounded-lg text-base font-semibold transition-all duration-160 ease-[var(--ease-out)] @media(hover:hover):hover:bg-gray-700 active:scale-[0.97] ${isSubmitting ? 'opacity-50' : 'cursor-pointer'}`}
+        className={`bg-black text-white border-none px-8 py-4 rounded-lg text-base font-semibold transition-[background-color,transform] duration-160 ease-[var(--ease-out)] hover:bg-gray-700 active:scale-[0.97] ${isSubmitting ? 'opacity-50' : 'cursor-pointer'}`}
       >
         {isSubmitting ? 'Sending...' : 'Send Message'}
       </button>

@@ -1,16 +1,15 @@
 "use client"
 
-import { Package, Users, Briefcase, Bookmark, MessageSquare, Newspaper } from 'lucide-react'
+import { Package, Users, Briefcase, Bookmark, MessageSquare } from 'lucide-react'
 import Link from 'next/link'
 
 export default function AdminDashboard() {
   const cards = [
-    { name: 'Inventory', href: '/admin/inventory', icon: Package, description: 'Manage your catalog products and variants.' },
+    { name: 'Catalog', href: '/admin/catalog', icon: Package, description: 'Manage your catalog products and variants.' },
     { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare, description: 'View and respond to customer inquiries.' },
     { name: 'Team', href: '/admin/team', icon: Users, description: 'Manage team members and their roles.' },
     { name: 'Brands', href: '/admin/brands', icon: Bookmark, description: 'Manage the brands in your ecosystem.' },
     { name: 'Portfolio', href: '/admin/portfolio', icon: Briefcase, description: 'Update your investment portfolio.' },
-    { name: 'Insights', href: '/admin/insights', icon: Newspaper, description: 'Publish and manage insight articles.' },
   ]
 
   return (
@@ -27,7 +26,7 @@ export default function AdminDashboard() {
             <Link 
               key={card.name} 
               href={card.href}
-              className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-1 group"
+              className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-[transform,box-shadow] duration-200 hover:-translate-y-1 group"
             >
               <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-black group-hover:text-white transition-colors duration-200">
                 <Icon size={24} className="text-gray-700 group-hover:text-white transition-colors duration-200" strokeWidth={1.5} />

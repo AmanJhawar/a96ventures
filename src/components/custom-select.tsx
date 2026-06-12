@@ -27,31 +27,34 @@ export default function CustomSelect({ id, name, value, onChange, options }: Cus
     const handleClickOutside = (event: MouseEvent) => {
       if (selectRef.current && !selectRef.current.contains(event.target as Node)) {
         setIsOpen(false)
+        setFocusedIndex(-1)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  useEffect(() => {
-    if (isOpen) {
-      const idx = options.findIndex(opt => opt.value === value)
-      setFocusedIndex(idx >= 0 ? idx : 0)
-    } else {
-      setFocusedIndex(-1)
-    }
-  }, [isOpen, value, options])
+  const openSelect = () => {
+    setIsOpen(true)
+    const idx = options.findIndex(opt => opt.value === value)
+    setFocusedIndex(idx >= 0 ? idx : 0)
+  }
+
+  const closeSelect = () => {
+    setIsOpen(false)
+    setFocusedIndex(-1)
+  }
 
   const handleSelect = (optionValue: string) => {
     onChange({ target: { name, value: optionValue } })
-    setIsOpen(false)
+    closeSelect()
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()
-        setIsOpen(true)
+        openSelect()
       }
       return
     }
@@ -59,7 +62,7 @@ export default function CustomSelect({ id, name, value, onChange, options }: Cus
     switch (e.key) {
       case 'Escape':
         e.preventDefault()
-        setIsOpen(false)
+        closeSelect()
         break
       case 'ArrowDown':
         e.preventDefault()
@@ -89,7 +92,7 @@ export default function CustomSelect({ id, name, value, onChange, options }: Cus
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={`${id}-listbox`}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => isOpen ? closeSelect() : openSelect()}
         className={`w-full px-4 py-3 border border-gray-300 rounded-lg text-base bg-white text-left flex justify-between items-center transition-colors duration-150 ease-[var(--ease)] focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10 ${isOpen ? 'border-black ring-4 ring-black/10' : ''}`}
       >
         <span className="text-black">{selectedOption.label}</span>
@@ -111,7 +114,7 @@ export default function CustomSelect({ id, name, value, onChange, options }: Cus
                   type="button"
                   tabIndex={-1}
                   onClick={() => handleSelect(option.value)}
-                  className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 ease-[var(--ease-out)] @media(hover:hover):hover:bg-gray-100 ${
+                  className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 ease-[var(--ease-out)] hover:bg-gray-100 ${
                     focusedIndex === idx ? 'bg-gray-100' : ''
                   } ${
                     value === option.value ? 'font-medium text-black' : 'text-gray-600'

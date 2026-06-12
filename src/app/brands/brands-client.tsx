@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { getBrands } from '@/lib/firebase/db'
 import { ProtectedImage } from '@/components/protected-image'
-import { Brand } from '@/data/brands'
+import { Brand } from '@/lib/types'
 
 export default function BrandsClient() {
   const [brands, setBrands] = useState<Brand[]>([])
@@ -36,7 +36,7 @@ export default function BrandsClient() {
           </p>
           <Link 
             href="/catalog" 
-            className="inline-block px-8 py-4 bg-black text-white rounded-full text-base font-semibold transition-all duration-150 ease-[var(--ease-out)] @media(hover:hover):hover:bg-gray-700 active:scale-[0.97] active:blur-[0.5px]"
+            className="inline-block px-8 py-4 bg-black text-white rounded-full text-base font-semibold transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-gray-700 active:scale-[0.97] active:blur-[0.5px]"
           >
             View The Catalog
           </Link>
@@ -55,15 +55,15 @@ export default function BrandsClient() {
             {brands.map((brand, index) => (
               <div 
                 key={brand.id} 
-                className="flex flex-col md:flex-row items-stretch p-0 overflow-hidden border border-gray-300 rounded-xl bg-white transition-all duration-200 ease-[var(--ease-out)] @media(hover:hover):hover:-translate-y-1 @media(hover:hover):hover:shadow-[0_12px_24px_rgba(0,0,0,0.1)] min-h-[200px] group opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]"
+                className="flex flex-col md:flex-row items-stretch p-0 overflow-hidden border border-gray-300 rounded-xl bg-white transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-[0_12px_24px_rgba(0,0,0,0.1)] min-h-[200px] group opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div className="w-full md:w-[35%] bg-gray-100 flex items-center justify-center border-b md:border-b-0 md:border-r border-gray-300 min-h-[200px] p-6">
                   <div className="relative w-full h-full flex items-center justify-center">
                     <ProtectedImage 
-                      src={`/assets/${brand.logoFile}`} 
+                      src={brand.logoFile.startsWith('data:') || brand.logoFile.startsWith('http') ? brand.logoFile : `/assets/${brand.logoFile}`} 
                       alt={`${brand.name} logo`}
-                      className="max-w-[150px] max-h-[150px] object-contain w-auto h-auto transition-transform duration-200 ease-[var(--ease-out)] @media(hover:hover):group-hover:scale-105"
+                      className="max-w-[150px] max-h-[150px] object-contain w-auto h-auto transition-transform duration-200 ease-[var(--ease-out)] group-hover:scale-105"
                       containerClassName="flex items-center justify-center w-full h-full"
                     />
                   </div>

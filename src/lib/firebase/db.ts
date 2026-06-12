@@ -1,14 +1,37 @@
 import { db } from './config';
 import { collection, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
-import { CatalogItem } from '@/data/catalog';
-import { TeamMember } from '@/data/team';
-import { Brand } from '@/data/brands';
-import { PortfolioCompany } from '@/data/portfolio';
-import { Insight } from '@/data/insights';
+import { CatalogItem, TeamMember, Brand, PortfolioCompany, DEFAULT_CATEGORIES } from '@/lib/types';
+
+// Helper to wrap a promise with a timeout (default 8 seconds) to prevent hanging builds
+function withTimeout<T>(promise: Promise<T>, timeoutMs = 8000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Database request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+// Helper to enforce online connection during build/server execution
+function verifyOnline(metadata: { fromCache: boolean }) {
+  if (typeof window === 'undefined' && metadata.fromCache) {
+    throw new Error("Failed to reach Firestore server (resolved from cache during build/server render).");
+  }
+}
 
 // Fetch all catalog items
 export async function getCatalogItems(): Promise<CatalogItem[]> {
-  const querySnapshot = await getDocs(collection(db, 'catalog'));
+  const querySnapshot = await withTimeout(getDocs(collection(db, 'catalog')));
+  verifyOnline(querySnapshot.metadata);
   const items: CatalogItem[] = [];
   querySnapshot.forEach((docSnap) => {
     items.push({ id: docSnap.id, ...docSnap.data() } as CatalogItem);
@@ -19,17 +42,19 @@ export async function getCatalogItems(): Promise<CatalogItem[]> {
 // Fetch store categories
 export async function getStoreCategories(): Promise<string[]> {
   const docRef = doc(db, 'settings', 'categories');
-  const docSnap = await getDoc(docRef);
+  const docSnap = await withTimeout(getDoc(docRef));
+  verifyOnline(docSnap.metadata);
   if (docSnap.exists() && docSnap.data().list) {
     return docSnap.data().list;
   }
-  return ['Silver Idols', 'Silver Animals', 'Marble Photoframes', 'MMTC Bullions'];
+  return DEFAULT_CATEGORIES;
 }
 
 // Fetch a single catalog item by ID
 export async function getCatalogItemById(id: string): Promise<CatalogItem | null> {
   const docRef = doc(db, 'catalog', id);
-  const docSnap = await getDoc(docRef);
+  const docSnap = await withTimeout(getDoc(docRef));
+  verifyOnline(docSnap.metadata);
   
   if (docSnap.exists()) {
     return { id: docSnap.id, ...docSnap.data() } as CatalogItem;
@@ -45,15 +70,17 @@ export async function submitInquiry(data: {
   message: string;
   inquiryType: string;
 }) {
-  return await addDoc(collection(db, 'inquiries'), {
+  return await withTimeout(addDoc(collection(db, 'inquiries'), {
     ...data,
+    status: 'unread',
     createdAt: serverTimestamp()
-  });
+  }));
 }
 
 // Fetch team members
 export async function getTeamMembers(): Promise<(TeamMember & { id: string })[]> {
-  const querySnapshot = await getDocs(collection(db, 'team'));
+  const querySnapshot = await withTimeout(getDocs(collection(db, 'team')));
+  verifyOnline(querySnapshot.metadata);
   const items: (TeamMember & { id: string })[] = [];
   querySnapshot.forEach((docSnap) => {
     items.push({ id: docSnap.id, ...docSnap.data() } as (TeamMember & { id: string }));
@@ -63,7 +90,8 @@ export async function getTeamMembers(): Promise<(TeamMember & { id: string })[]>
 
 // Fetch brands
 export async function getBrands(): Promise<Brand[]> {
-  const querySnapshot = await getDocs(collection(db, 'brands'));
+  const querySnapshot = await withTimeout(getDocs(collection(db, 'brands')));
+  verifyOnline(querySnapshot.metadata);
   const items: Brand[] = [];
   querySnapshot.forEach((docSnap) => {
     items.push({ id: docSnap.id, ...docSnap.data() } as Brand);
@@ -73,7 +101,8 @@ export async function getBrands(): Promise<Brand[]> {
 
 // Fetch portfolio companies
 export async function getPortfolioCompanies(): Promise<(PortfolioCompany & { id: string })[]> {
-  const querySnapshot = await getDocs(collection(db, 'portfolio'));
+  const querySnapshot = await withTimeout(getDocs(collection(db, 'portfolio')));
+  verifyOnline(querySnapshot.metadata);
   const items: (PortfolioCompany & { id: string })[] = [];
   querySnapshot.forEach((docSnap) => {
     items.push({ id: docSnap.id, ...docSnap.data() } as (PortfolioCompany & { id: string }));
@@ -81,30 +110,13 @@ export async function getPortfolioCompanies(): Promise<(PortfolioCompany & { id:
   return items;
 }
 
-export async function getPortfolioCompanyBySlug(slug: string): Promise<(PortfolioCompany & { id: string }) | null> {
-  const docRef = doc(db, 'portfolio', slug);
-  const docSnap = await getDoc(docRef);
+export async function getPortfolioCompanyById(id: string): Promise<(PortfolioCompany & { id: string }) | null> {
+  const docRef = doc(db, 'portfolio', id);
+  const docSnap = await withTimeout(getDoc(docRef));
+  verifyOnline(docSnap.metadata);
   if (docSnap.exists()) {
     return { id: docSnap.id, ...docSnap.data() } as (PortfolioCompany & { id: string });
   }
   return null;
 }
 
-// Fetch insights
-export async function getInsights(): Promise<(Insight & { id: string })[]> {
-  const querySnapshot = await getDocs(collection(db, 'insights'));
-  const items: (Insight & { id: string })[] = [];
-  querySnapshot.forEach((docSnap) => {
-    items.push({ id: docSnap.id, ...docSnap.data() } as (Insight & { id: string }));
-  });
-  return items;
-}
-
-export async function getInsightById(id: string): Promise<(Insight & { id: string }) | null> {
-  const docRef = doc(db, 'insights', id);
-  const docSnap = await getDoc(docRef);
-  if (docSnap.exists()) {
-    return { id: docSnap.id, ...docSnap.data() } as (Insight & { id: string });
-  }
-  return null;
-}

@@ -19,6 +19,7 @@ export default async function Home() {
     portfolioCount = portfolio.length
   } catch (err) {
     console.error("Error fetching stats:", err)
+    throw err
   }
   
   const yearsExp = new Date().getFullYear() - 2017
@@ -44,12 +45,12 @@ export default async function Home() {
       <section className="py-20 md:py-32 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
-            <Link href="/portfolio" className="block text-center p-8 bg-white border border-gray-300 rounded-xl transition-all duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98] @media(hover:hover):hover">
+            <Link href="/portfolio" className="block text-center p-8 bg-white border border-gray-300 rounded-xl transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98]">
               <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{portfolioCount}+</div>
               <div className="text-base text-gray-500">Portfolio Companies</div>
             </Link>
             
-            <Link href="/brands" className="block text-center p-8 bg-white border border-gray-300 rounded-xl transition-all duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98] @media(hover:hover):hover">
+            <Link href="/brands" className="block text-center p-8 bg-white border border-gray-300 rounded-xl transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-xl active:scale-[0.98]">
               <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{brandsCount}+</div>
               <div className="text-base text-gray-500">Brands</div>
             </Link>
