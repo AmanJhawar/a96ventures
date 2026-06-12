@@ -42,3 +42,10 @@ next-env.d.ts
 
 # editor
 .vscode/
+
+# Firebase functions
+firebase-functions/node_modules/
+
+# Agents
+.agents/
+
