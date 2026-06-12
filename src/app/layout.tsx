@@ -5,11 +5,12 @@ import Header from '@/components/header'
 import Footer from '@/components/footer'
 import DisableDevTools from '@/components/disable-dev-tools'
 
-import { Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 
-const inter = Inter({
-  subsets: ['latin'],
+const inter = localFont({
+  src: '../../public/fonts/inter.woff2',
   display: 'swap',
+  variable: '--font-inter',
 })
 
 import { CartProvider } from '@/components/cart-provider'
