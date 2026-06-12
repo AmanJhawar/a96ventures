@@ -182,14 +182,14 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
               className="flex flex-col border border-gray-300 rounded-xl overflow-hidden bg-white group opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
               style={{ animationDelay: `${index * 50}ms` }}
             >
-              <div className="aspect-[4/3] bg-gray-100 flex items-center justify-center p-8 relative overflow-hidden">
+              <div className="aspect-[4/3] bg-gray-100 relative overflow-hidden">
                 <div className="w-full h-full relative flex items-center justify-center text-gray-400 text-sm">
                   {item.imageFile ? (
                     <ProtectedImage 
                       src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
                       alt={item.name}
-                      className="max-w-full max-h-full object-contain transition-transform duration-500 ease-[var(--ease-out)] group-hover:scale-105"
-                      containerClassName="w-full h-full flex items-center justify-center"
+                      className="w-full h-full object-cover transition-transform duration-500 ease-[var(--ease-out)] group-hover:scale-105"
+                      containerClassName="w-full h-full"
                     />
                   ) : (
                     <span>Image Coming Soon</span>
