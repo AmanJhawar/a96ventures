@@ -1,12 +1,14 @@
 import type { Metadata } from 'next'
-import localFont from 'next/font/local'
+
 import './globals.css'
 import Header from '@/components/header'
 import Footer from '@/components/footer'
 import DisableDevTools from '@/components/disable-dev-tools'
 
-const outfit = localFont({
-  src: '../../public/fonts/outfit.woff2',
+import { Inter } from 'next/font/google'
+
+const inter = Inter({
+  subsets: ['latin'],
   display: 'swap',
 })
 
@@ -39,7 +41,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
-      <body className={`${outfit.className} min-h-screen flex flex-col text-black bg-white antialiased`}>
+      <body className={`${inter.className} min-h-screen flex flex-col text-black bg-white antialiased`}>
         <CartProvider>
           <DisableDevTools />
           <Header />
