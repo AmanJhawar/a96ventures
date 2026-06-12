@@ -33,7 +33,7 @@ export async function getCatalogItems(): Promise<CatalogItem[]> {
 
 // Fetch store categories
 export async function getStoreCategories(): Promise<string[]> {
-  const docRef = doc(db, 'settings', 'categories');
+  const docRef = doc(collection(db, 'settings'), 'categories');
   const docSnap = await withTimeout(getDoc(docRef));
   if (docSnap.exists() && docSnap.data().list) {
     return docSnap.data().list;
@@ -43,7 +43,7 @@ export async function getStoreCategories(): Promise<string[]> {
 
 // Fetch a single catalog item by ID
 export async function getCatalogItemById(id: string): Promise<CatalogItem | null> {
-  const docRef = doc(db, 'catalog', id);
+  const docRef = doc(collection(db, 'catalog'), id);
   const docSnap = await withTimeout(getDoc(docRef));
   
   if (docSnap.exists()) {
@@ -98,7 +98,7 @@ export async function getPortfolioCompanies(): Promise<(PortfolioCompany & { id:
 }
 
 export async function getPortfolioCompanyById(id: string): Promise<(PortfolioCompany & { id: string }) | null> {
-  const docRef = doc(db, 'portfolio', id);
+  const docRef = doc(collection(db, 'portfolio'), id);
   const docSnap = await withTimeout(getDoc(docRef));
   if (docSnap.exists()) {
     return { id: docSnap.id, ...docSnap.data() } as (PortfolioCompany & { id: string });

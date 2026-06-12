@@ -105,12 +105,12 @@ export default function AdminInventory() {
   const fetchData = async () => {
     try {
       // Fetch categories
-      const catDoc = await getDoc(doc(db, 'settings', 'categories'))
+      const catDoc = await getDoc(doc(collection(db, 'settings'), 'categories'))
       if (catDoc.exists() && catDoc.data().list) {
         setCategories(catDoc.data().list)
       } else {
         setCategories(DEFAULT_CATEGORIES)
-        await setDoc(doc(db, 'settings', 'categories'), { list: DEFAULT_CATEGORIES })
+        await setDoc(doc(collection(db, 'settings'), 'categories'), { list: DEFAULT_CATEGORIES })
       }
 
       // Fetch inventory items
@@ -134,7 +134,7 @@ export default function AdminInventory() {
     if (!confirm('Delete this product? Note: The static pages on the live site may take a moment to update and will continue to serve until the cache is cleared.')) return
 
     try {
-      await deleteDoc(doc(db, 'catalog', id))
+      await deleteDoc(doc(collection(db, 'catalog'), id))
 
       // Trigger dynamic path revalidation in background
       fetch(`/api/revalidate?path=${encodeURIComponent('/catalog')}`).catch(err => console.error(err))
@@ -184,7 +184,7 @@ export default function AdminInventory() {
     try {
       // Uniqueness check for new products
       if (!editingId) {
-        const existingDoc = await getDoc(doc(db, 'catalog', docId))
+        const existingDoc = await getDoc(doc(collection(db, 'catalog'), docId))
         if (existingDoc.exists()) {
           alert(`A product with the ID "${docId}" already exists. Please choose a unique ID.`)
           return
@@ -253,7 +253,7 @@ export default function AdminInventory() {
         payload.variantWeights = {}
       }
 
-      await setDoc(doc(db, 'catalog', docId), payload)
+      await setDoc(doc(collection(db, 'catalog'), docId), payload)
 
       // Trigger dynamic path revalidation in background
       fetch(`/api/revalidate?path=${encodeURIComponent('/catalog')}`).catch(err => console.error(err))

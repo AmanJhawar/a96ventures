@@ -16,12 +16,12 @@ export default function AdminCategories() {
   useEffect(() => {
     const fetchCategories = async () => {
     try {
-        const catDoc = await getDoc(doc(db, 'settings', 'categories'))
+        const catDoc = await getDoc(doc(collection(db, 'settings'), 'categories'))
         if (catDoc.exists() && catDoc.data().list) {
           setCategories(catDoc.data().list)
         } else {
           setCategories(DEFAULT_CATEGORIES)
-          await setDoc(doc(db, 'settings', 'categories'), { list: DEFAULT_CATEGORIES })
+          await setDoc(doc(collection(db, 'settings'), 'categories'), { list: DEFAULT_CATEGORIES })
         }
       } catch (err) {
         console.error("Error fetching categories", err)
@@ -45,7 +45,7 @@ export default function AdminCategories() {
     setNewCategoryInput('')
 
     try {
-      await setDoc(doc(db, 'settings', 'categories'), { list: newCategories }, { merge: true })
+      await setDoc(doc(collection(db, 'settings'), 'categories'), { list: newCategories }, { merge: true })
     } catch (err) {
       console.error("Failed to add category", err)
       alert("Failed to save category. Please check your permissions.")
@@ -59,7 +59,7 @@ export default function AdminCategories() {
     setCategories(newCategories)
 
     try {
-      await setDoc(doc(db, 'settings', 'categories'), { list: newCategories }, { merge: true })
+      await setDoc(doc(collection(db, 'settings'), 'categories'), { list: newCategories }, { merge: true })
     } catch (err) {
       console.error("Failed to remove category", err)
       alert("Failed to delete category. Please check your permissions.")
@@ -96,7 +96,7 @@ export default function AdminCategories() {
 
     try {
       // 1. Update the categories list in settings
-      await setDoc(doc(db, 'settings', 'categories'), { list: newCategories }, { merge: true })
+      await setDoc(doc(collection(db, 'settings'), 'categories'), { list: newCategories }, { merge: true })
       
       // 2. Batch update any products that have the old category name
       const q = query(collection(db, 'catalog'), where('category', '==', oldName))

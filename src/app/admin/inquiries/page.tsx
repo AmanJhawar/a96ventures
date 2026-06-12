@@ -82,7 +82,7 @@ export default function AdminInquiries() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this inquiry?')) return
     try {
-      await deleteDoc(doc(db, 'inquiries', id))
+      await deleteDoc(doc(collection(db, 'inquiries'), id))
       setInquiries(inquiries.filter(i => i.id !== id))
     } catch (err) {
       console.error("Error deleting", err)
@@ -91,7 +91,7 @@ export default function AdminInquiries() {
 
   const handleStatusChange = async (id: string, newStatus: 'unread' | 'read' | 'handled') => {
     try {
-      await updateDoc(doc(db, 'inquiries', id), { status: newStatus })
+      await updateDoc(doc(collection(db, 'inquiries'), id), { status: newStatus })
       setInquiries(inquiries.map(i => i.id === id ? { ...i, status: newStatus } : i))
     } catch (err) {
       console.error("Error updating status", err)

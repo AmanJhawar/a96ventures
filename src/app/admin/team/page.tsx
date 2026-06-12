@@ -40,7 +40,7 @@ export default function AdminTeam() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this team member?')) return
     try {
-      await deleteDoc(doc(db, 'team', id))
+      await deleteDoc(doc(collection(db, 'team'), id))
       setTeam(team.filter(t => t.id !== id))
     } catch (err) {
       console.error("Error deleting", err)
@@ -63,7 +63,7 @@ export default function AdminTeam() {
     e.preventDefault()
     try {
       if (editingId) {
-        await setDoc(doc(db, 'team', editingId), formData)
+        await setDoc(doc(collection(db, 'team'), editingId), formData)
         setTeam(team.map(t => t.id === editingId ? { id: editingId, ...formData } as (TeamMember & { id: string }) : t))
       } else {
         const docRef = await addDoc(collection(db, 'team'), formData)

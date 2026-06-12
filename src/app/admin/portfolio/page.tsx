@@ -39,7 +39,7 @@ export default function AdminPortfolio() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this company?')) return
     try {
-      await deleteDoc(doc(db, 'portfolio', id))
+      await deleteDoc(doc(collection(db, 'portfolio'), id))
       
       // Trigger dynamic path revalidation in background
       fetch(`/api/revalidate?path=${encodeURIComponent('/portfolio')}`).catch(err => console.error(err))
@@ -72,7 +72,7 @@ export default function AdminPortfolio() {
       }
       
       const docId = editingId || formData.id
-      const docRef = doc(db, 'portfolio', docId)
+      const docRef = doc(collection(db, 'portfolio'), docId)
       
       const { id, ...saveData } = formData
       await setDoc(docRef, saveData)

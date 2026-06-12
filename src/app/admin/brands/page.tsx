@@ -39,7 +39,7 @@ export default function AdminBrands() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this brand?')) return
     try {
-      await deleteDoc(doc(db, 'brands', id))
+      await deleteDoc(doc(collection(db, 'brands'), id))
       setBrands(brands.filter(t => t.id !== id))
     } catch (err) {
       console.error("Error deleting", err)
@@ -62,7 +62,7 @@ export default function AdminBrands() {
     e.preventDefault()
     try {
       if (editingId) {
-        await setDoc(doc(db, 'brands', editingId), formData)
+        await setDoc(doc(collection(db, 'brands'), editingId), formData)
         setBrands(brands.map(b => b.id === editingId ? { id: editingId, ...formData } as Brand : b))
       } else {
         const docRef = await addDoc(collection(db, 'brands'), formData)

@@ -21,9 +21,9 @@ export default function AdminLogin() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
       
       // Verify they are in the admins collection
-      const { doc, getDoc } = await import('firebase/firestore/lite')
+      const { collection, doc, getDoc } = await import('firebase/firestore/lite')
       const { db } = await import('@/lib/firebase/config')
-      const adminDoc = await getDoc(doc(db, 'admins', userCredential.user.uid))
+      const adminDoc = await getDoc(doc(collection(db, 'admins'), userCredential.user.uid))
       
       if (!adminDoc.exists()) {
         const { signOut } = await import('firebase/auth')
