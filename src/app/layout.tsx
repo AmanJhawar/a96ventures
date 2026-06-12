@@ -20,9 +20,7 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://a96ventures.com'),
   title: 'A96 Ventures',
   description: 'Early-stage venture capital focused on transformative technologies and exceptional founders.',
-  icons: {
-    icon: '/assets/favicon.svg',
-  },
+
   openGraph: {
     title: 'A96 Ventures',
     description: 'Early-stage venture capital focused on transformative technologies and exceptional founders.',
