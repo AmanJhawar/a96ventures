@@ -81,6 +81,7 @@ export default function AdminPortfolio() {
       const docId = editingId || formData.id
       const docRef = doc(db, 'portfolio', docId)
       
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, ...saveData } = formData
       await setDoc(docRef, saveData)
       

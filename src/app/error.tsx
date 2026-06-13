@@ -24,16 +24,16 @@ export default function Error({
         Something went wrong
       </h2>
       <p className="text-gray-500 max-w-md mx-auto mb-8 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:200ms] opacity-0">
-        An unexpected error occurred. We've been notified and are looking into it.
+        An unexpected error occurred. We&apos;ve been notified and are looking into it.
       </p>
-      <div className="flex items-center justify-center gap-4 animate-[fadeInUp_700ms_var(--ease-out)_forwards] [animation-delay:300ms] opacity-0">
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-[fadeInUp_700ms_var(--ease-out)_forwards] [animation-delay:300ms] opacity-0">
         <button 
           onClick={() => reset()} 
           className="btn-primary"
         >
           Try Again
         </button>
-        <Link href="/catalog" className="px-8 py-4 text-base font-semibold text-gray-500 hover:text-black transition-colors duration-200">
+        <Link href="/catalog" className="px-6 py-3 text-sm font-semibold text-black bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
           Return to Catalog
         </Link>
       </div>

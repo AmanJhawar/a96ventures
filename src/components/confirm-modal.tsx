@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 
 interface ConfirmModalProps {
@@ -19,18 +20,90 @@ export function ConfirmModal({
   onConfirm,
   onClose
 }: ConfirmModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null)
+  const previousActiveElementRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (isOpen) {
+      // Lock scroll
+      const originalStyle = window.getComputedStyle(document.body).overflow
+      document.body.style.overflow = 'hidden'
+
+      // Save previous active element
+      previousActiveElementRef.current = document.activeElement as HTMLElement
+
+      // Focus first focusable element inside modal
+      const focusableElements = modalRef.current?.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
+      ) as NodeListOf<HTMLElement>
+      
+      if (focusableElements && focusableElements.length > 0) {
+        focusableElements[0].focus()
+      }
+
+      // Keydown listener for Escape and Tab
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          onClose()
+        }
+
+        if (e.key === 'Tab' && modalRef.current) {
+          const list = modalRef.current.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
+          ) as NodeListOf<HTMLElement>
+
+          if (list.length === 0) return
+
+          const first = list[0]
+          const last = list[list.length - 1]
+
+          if (e.shiftKey) {
+            if (document.activeElement === first) {
+              last.focus()
+              e.preventDefault()
+            }
+          } else {
+            if (document.activeElement === last) {
+              first.focus()
+              e.preventDefault()
+            }
+          }
+        }
+      }
+
+      document.addEventListener('keydown', handleKeyDown)
+
+      return () => {
+        document.body.style.overflow = originalStyle
+        document.removeEventListener('keydown', handleKeyDown)
+        // Restore focus
+        if (previousActiveElementRef.current) {
+          previousActiveElementRef.current.focus()
+        }
+      }
+    }
+  }, [isOpen, onClose])
+
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-modal-title"
+    >
       <div 
         className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity animate-[fadeIn_200ms_var(--ease-out)]" 
         onClick={onClose}
       />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-[fadeInUp_200ms_var(--ease-out)_forwards]">
+      <div 
+        ref={modalRef}
+        className="relative bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-[fadeInUp_200ms_var(--ease-out)_forwards]"
+      >
         <div className="p-6 md:p-8">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-black tracking-tight">{title}</h2>
+            <h2 id="confirm-modal-title" className="text-xl font-bold text-black tracking-tight">{title}</h2>
             <button 
               onClick={onClose}
               className="p-2 -mr-2 text-gray-400 hover:text-black transition-colors rounded-full hover:bg-gray-100"

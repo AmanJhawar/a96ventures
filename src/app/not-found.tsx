@@ -10,7 +10,7 @@ export default function NotFound() {
         Page Not Found
       </h2>
       <p className="text-gray-500 max-w-md mx-auto mb-8 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:200ms] opacity-0">
-        We couldn't find the page you're looking for. The link might be broken or the page may have been removed.
+        We couldn&apos;t find the page you&apos;re looking for. It might have been moved or doesn&apos;t exist.
       </p>
       <Link 
         href="/catalog" 

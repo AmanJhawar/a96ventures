@@ -18,8 +18,7 @@ export default async function Home() {
     brandsCount = brands.length
     portfolioCount = portfolio.length
   } catch (err) {
-    console.error("Error fetching stats:", err)
-    throw err
+    console.error("Error fetching stats, falling back to defaults:", err)
   }
   
   const yearsExp = new Date().getFullYear() - 2017

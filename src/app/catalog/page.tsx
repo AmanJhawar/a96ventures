@@ -1,4 +1,5 @@
 import { getCatalogItems, getStoreCategories } from '@/lib/firebase/db'
+import Link from 'next/link'
 import { CatalogClient } from './catalog-client'
 import { EmptyState } from '@/components/empty-state'
 
@@ -47,9 +48,9 @@ export default async function Catalog() {
             title="Failed to Load Products" 
             description="We encountered a problem loading our catalog collection. Please try again later."
             action={
-              <a href="/catalog" className="btn-primary text-sm py-3 px-6">
+              <Link href="/catalog" className="btn-primary text-sm py-3 px-6">
                 Retry
-              </a>
+              </Link>
             }
           />
         </div>

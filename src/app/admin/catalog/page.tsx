@@ -85,7 +85,6 @@ export default function AdminInventory() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCategoryFocusedIndex(idx >= 0 ? idx : 0)
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCategoryFocusedIndex(-1)
     }
   }, [categoryOpen, formData.category, categories])
@@ -199,6 +198,7 @@ export default function AdminInventory() {
         }
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, hasVariants: formHasVariants, ...payload } = formData
 
       let totalSize = payload.imageFile ? payload.imageFile.length * 0.75 : 0

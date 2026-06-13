@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { collection, deleteDoc, setDoc, doc, getDocs, orderBy, query, limit, startAfter, QueryDocumentSnapshot, DocumentData, getFirestore } from 'firebase/firestore/lite'
 import { app } from '@/lib/firebase/config'
-import { Trash2, MessageSquare, CheckCircle, Circle } from 'lucide-react'
+import { Trash2, MessageSquare } from 'lucide-react'
 import { ConfirmModal } from '@/components/confirm-modal'
 
 const db = getFirestore(app)

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { CatalogItem } from '@/lib/types'
 import { ProtectedImage } from '@/components/protected-image'
 import { EmptyState } from '@/components/empty-state'
@@ -191,7 +191,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                     <ProtectedImage 
                       src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
                       alt={item.name}
-                      className="w-full h-full object-cover transition-transform duration-200 ease-[var(--ease-out)] group-hover:scale-105"
+                      className="w-full h-full object-contain transition-transform duration-200 ease-[var(--ease-out)] group-hover:scale-105"
                       containerClassName="w-full h-full"
                     />
                   ) : (
