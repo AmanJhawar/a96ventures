@@ -32,6 +32,7 @@ export default function Header() {
   const closeMenu = () => setIsMenuOpen(false)
 
   const menuRef = useRef<HTMLElement>(null)
+  const mobileControlsRef = useRef<HTMLDivElement>(null)
   const previousActiveElementRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -46,14 +47,16 @@ export default function Header() {
       // Keydown listener for Escape and Tab
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
-          closeMenu()
+          setIsMenuOpen(false)
         }
 
         if (e.key === 'Tab' && menuRef.current) {
-          // Find all focusable elements inside the header when menu is open
-          const focusableElements = document.querySelector('header')?.querySelectorAll(
-            'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
-          ) as NodeListOf<HTMLElement>
+          // Find focusable elements in the mobile controls (hamburger, cart) and the menu
+          const selector = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
+          const menuFocusables = Array.from(menuRef.current.querySelectorAll(selector))
+          const controlsFocusables = mobileControlsRef.current ? Array.from(mobileControlsRef.current.querySelectorAll(selector)) : []
+          
+          const focusableElements = [...controlsFocusables, ...menuFocusables] as HTMLElement[]
 
           if (!focusableElements || focusableElements.length === 0) return
 
@@ -129,7 +132,7 @@ export default function Header() {
           </nav>
  
           {/* Mobile Menu & Cart Container */}
-          <div className="md:hidden absolute right-0 flex items-center gap-2 h-full">
+          <div ref={mobileControlsRef} className="md:hidden absolute right-0 flex items-center gap-2 h-full">
             <div className="w-10 h-10 flex items-center justify-center">
               {(pathname.startsWith('/catalog') || (isInitialized && totalItems > 0)) && (
                 <button 
@@ -150,6 +153,8 @@ export default function Header() {
               className="p-2 bg-transparent border-none cursor-pointer flex items-center justify-center"
               onClick={toggleMenu}
               aria-label="Toggle menu"
+              aria-expanded={isMenuOpen}
+              aria-controls="mobile-nav"
             >
               <div className="flex flex-col w-6 h-[18px] relative justify-between">
                 <span className={`block h-[2px] w-full bg-black transition-transform duration-200 ease-[var(--ease-out)] ${isMenuOpen ? 'rotate-45 translate-y-[8px]' : ''}`}></span>
@@ -171,6 +176,7 @@ export default function Header() {
 
         {/* Mobile Navigation */}
         <nav 
+          id="mobile-nav"
           ref={menuRef}
           className={`md:hidden flex flex-col gap-6 absolute top-full left-0 right-0 bg-white border-b border-gray-200 px-6 py-6 z-50 max-h-[calc(100vh-5rem)] overflow-y-auto motion-safe:transition-[opacity,visibility] motion-reduce:transition-none duration-300 ease-[var(--ease-out)] ${isMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
         >
