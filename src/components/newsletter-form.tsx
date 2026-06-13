@@ -18,12 +18,12 @@ export default function NewsletterForm() {
         placeholder="Enter your email address"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="flex-1 px-6 py-4 border border-gray-200 rounded-full text-base bg-white transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10"
+        className="flex-1 px-6 py-4 border border-gray-200 rounded-lg text-base bg-white transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10"
         required
       />
       <button 
         type="submit" 
-        className="px-8 py-4 bg-black text-white rounded-full text-base font-semibold transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-gray-700 active:scale-[0.97] active:opacity-60 whitespace-nowrap"
+        className="px-8 py-4 bg-black text-white rounded-lg text-base font-semibold transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-gray-700 active:scale-[0.97] active:opacity-60 whitespace-nowrap"
       >
         Subscribe
       </button>

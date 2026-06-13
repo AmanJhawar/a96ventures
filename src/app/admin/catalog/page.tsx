@@ -85,6 +85,7 @@ export default function AdminInventory() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCategoryFocusedIndex(idx >= 0 ? idx : 0)
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCategoryFocusedIndex(-1)
     }
   }, [categoryOpen, formData.category, categories])
@@ -198,7 +199,6 @@ export default function AdminInventory() {
         }
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, hasVariants: formHasVariants, ...payload } = formData
 
       let totalSize = payload.imageFile ? payload.imageFile.length * 0.75 : 0
@@ -218,8 +218,8 @@ export default function AdminInventory() {
         const purities = noPurity ? [] : [...(payload.standardPurities || []), ...(payload.customPurities || [])]
 
         if (sizes.length === 0 || (!noPurity && purities.length === 0)) {
-          alert(noPurity 
-            ? `You must select at least one ${formData.category?.includes('Marble') ? 'Stone' : 'Weight'} to configure variant SKUs.` 
+          alert(noPurity
+            ? `You must select at least one ${formData.category?.includes('Marble') ? 'Stone' : 'Weight'} to configure variant SKUs.`
             : "You must select at least one Size and one Purity to configure variant SKUs."
           )
           return
@@ -450,10 +450,10 @@ export default function AdminInventory() {
                         {formData.category?.includes('Marble') ? 'Available Stones' : formData.category?.includes('Bullion') ? 'Available Weights' : 'Available Sizes'}
                       </p>
                       <div className="flex flex-wrap gap-2 mb-6">
-                        {(formData.category?.includes('Marble') 
-                          ? STANDARD_STONES 
-                          : formData.category?.includes('Bullion') 
-                            ? STANDARD_WEIGHTS 
+                        {(formData.category?.includes('Marble')
+                          ? STANDARD_STONES
+                          : formData.category?.includes('Bullion')
+                            ? STANDARD_WEIGHTS
                             : STANDARD_SIZES
                         ).map(opt => (
                           <button
@@ -563,8 +563,8 @@ export default function AdminInventory() {
                     if (combos.length === 0) return (
                       <div className="mt-8 pt-6 border-t border-gray-200">
                         <p className="text-sm text-gray-500 italic">
-                          {noPurity 
-                            ? `Select at least one ${formData.category?.includes('Marble') ? 'Stone' : 'Weight'} to configure variant SKUs and weights.` 
+                          {noPurity
+                            ? `Select at least one ${formData.category?.includes('Marble') ? 'Stone' : 'Weight'} to configure variant SKUs and weights.`
                             : 'Select at least one Size and one Purity to configure variant SKUs and weights.'}
                         </p>
                       </div>

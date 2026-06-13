@@ -11,9 +11,9 @@ function NavLink({ href, children, isActive, onClick }: { href: string; children
   return (
     <Link
       href={href}
-      className={`relative text-sm font-medium tracking-wide text-black no-underline transition-colors duration-200 ease-[var(--ease-out)] hover:text-gray-500 active:opacity-60
+      className={`relative text-sm font-medium tracking-wide no-underline transition-colors duration-200 ease-[var(--ease-out)] active:opacity-60
         after:absolute after:bottom-[-4px] after:left-0 after:h-[1px] after:bg-black after:transition-[width] after:duration-200 after:ease-[var(--ease-out)]
-        ${isActive ? 'after:w-full' : 'after:w-0 hover:after:w-full'}`}
+        ${isActive ? 'text-black after:w-full' : 'text-gray-500 hover:text-black after:w-0 hover:after:w-full'}`}
       onClick={onClick}
     >
       {children}

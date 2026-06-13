@@ -1,118 +1,49 @@
 "use client"
 
-import { useState, useCallback } from 'react'
-import { UploadCloud, X, Loader2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { UploadCloud, X } from 'lucide-react'
 
 interface ImageDropzoneProps {
   value: string;
   onChange: (url: string) => void;
 }
 
-// Client-side image compression using HTML5 Canvas
-function compressImage(file: File, maxWidth = 1000, maxHeight = 1000, initialQuality = 0.75): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = (event) => {
-      const img = new Image()
-      img.src = event.target?.result as string
-      img.onload = () => {
-        let width = img.width
-        let height = img.height
+// Extract the Google Drive file ID from sharing URLs and format as direct CDN link
+export function parseGoogleDriveLink(url: string): string {
+  if (!url) return ''
+  const trimmed = url.trim()
+  
+  // If it's already a direct Googleusercontent CDN link, use it directly
+  if (trimmed.startsWith('https://lh3.googleusercontent.com/d/')) {
+    return trimmed
+  }
 
-        // Calculate new dimensions if image exceeds maxWidth or maxHeight
-        if (width > height) {
-          if (width > maxWidth) {
-            height = Math.round((height * maxWidth) / width)
-            width = maxWidth
-          }
-        } else {
-          if (height > maxHeight) {
-            width = Math.round((width * maxHeight) / height)
-            height = maxHeight
-          }
-        }
-
-        const canvas = document.createElement('canvas')
-        canvas.width = width
-        canvas.height = height
-
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          reject(new Error('Canvas context not available'))
-          return
-        }
-
-        // Fill with white background to handle PNG transparency gracefully
-        ctx.fillStyle = '#FFFFFF'
-        ctx.fillRect(0, 0, width, height)
-
-        ctx.drawImage(img, 0, 0, width, height)
-
-        // Compress as JPEG
-        let quality = initialQuality
-        let base64String = canvas.toDataURL('image/jpeg', quality)
-        let sizeInBytes = (base64String.length * (3/4)) - (base64String.endsWith('==') ? 2 : base64String.endsWith('=') ? 1 : 0)
-
-        // Target under 400KB to ensure we can store multiple images and text within Firestore's 1MB document limit
-        const targetMaxSize = 400000
-        while (sizeInBytes > targetMaxSize && quality > 0.2) {
-          quality -= 0.1
-          base64String = canvas.toDataURL('image/jpeg', quality)
-          sizeInBytes = (base64String.length * (3/4)) - (base64String.endsWith('==') ? 2 : base64String.endsWith('=') ? 1 : 0)
-        }
-
-        resolve(base64String)
-      }
-      img.onerror = (err) => reject(err)
-    }
-    reader.onerror = (err) => reject(err)
-  })
+  // Matches docs.google.com/file/d/FILE_ID/view... or drive.google.com/open?id=FILE_ID
+  const match = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+  if (match && match[1]) {
+    return `https://lh3.googleusercontent.com/d/${match[1]}`
+  }
+  
+  return trimmed
 }
 
 export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
-  const [isDragging, setIsDragging] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
+  const [inputValue, setInputValue] = useState('')
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }, [])
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-  }, [])
-
-  const processFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file.')
-      return
+  // Sync internal state when value is cleared
+  useEffect(() => {
+    if (!value) {
+      setInputValue('')
     }
+  }, [value])
 
-    setIsUploading(true)
-
-    try {
-      const compressedBase64 = await compressImage(file)
-      onChange(compressedBase64)
-      setIsUploading(false)
-    } catch (err) {
-      console.error("Error processing image", err)
-      alert("Failed to compress and process image")
-      setIsUploading(false)
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setInputValue(val)
+    if (val.trim()) {
+      const resolvedUrl = parseGoogleDriveLink(val)
+      onChange(resolvedUrl)
     }
-  }, [onChange])
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) await processFile(file)
-  }, [processFile])
-
-  const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) await processFile(file)
   }
 
   if (value) {
@@ -120,11 +51,11 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
     return (
       <div className="relative group border border-gray-200 rounded-lg overflow-hidden bg-gray-50 h-48 flex items-center justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={imgSrc} alt="Uploaded" className="max-h-full object-contain" />
+        <img src={imgSrc} alt="Uploaded preview" className="max-h-full object-contain" />
         <button
           type="button"
           onClick={() => onChange('')}
-          className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-gray-700 p-2 rounded-full shadow-sm hover:bg-gray-100 hover:text-black transition-colors opacity-0 group-hover:opacity-100"
+          className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-gray-700 p-2 rounded-full shadow-sm hover:bg-gray-100 hover:text-black transition-colors opacity-0 group-hover:opacity-100 duration-150 active:scale-95"
         >
           <X size={16} />
         </button>
@@ -133,34 +64,30 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
   }
 
   return (
-    <div
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-        isDragging ? 'border-black bg-gray-50' : 'border-gray-300 hover:border-black'
-      }`}
-    >
-      <input
-        type="file"
-        accept="image/*"
-        onChange={handleChange}
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-        disabled={isUploading}
-      />
-      
-      {isUploading ? (
-        <div className="flex flex-col items-center justify-center">
-          <Loader2 className="w-8 h-8 text-black animate-spin mb-3" />
-          <p className="text-sm font-medium text-gray-700">Compressing & Saving...</p>
-        </div>
-      ) : (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+          Paste Google Drive share link or image URL
+        </label>
+        <input
+          type="url"
+          value={inputValue}
+          onChange={handleInputChange}
+          placeholder="e.g., https://drive.google.com/file/d/.../view"
+          className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black bg-white transition-colors duration-150"
+        />
+      </div>
+
+      <div className="relative border-2 border-dashed border-gray-200 rounded-xl p-6 text-center bg-gray-50/50">
         <div className="flex flex-col items-center justify-center pointer-events-none">
-          <UploadCloud className="w-10 h-10 text-gray-400 mb-4" />
-          <p className="text-sm font-medium text-black mb-1">Click to upload or drag and drop</p>
-          <p className="text-xs text-gray-500">Image will be compressed and saved directly to the database</p>
+          <UploadCloud className="w-8 h-8 text-gray-400 mb-3" />
+          <p className="text-sm font-medium text-gray-700 mb-1">Local file upload disabled</p>
+          <p className="text-xs text-gray-400 max-w-xs mx-auto leading-relaxed">
+            Please upload your images to Google Drive, set sharing permissions to <strong>Anyone with the link can view</strong>, and paste the sharing link above.
+          </p>
         </div>
-      )}
+      </div>
     </div>
   )
 }
+

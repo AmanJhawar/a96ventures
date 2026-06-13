@@ -94,7 +94,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
           {/* Image Gallery Area */}
-          <div className="opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]">
+          <div className="opacity-0 animate-fade-in-up-short">
             <ProductCarousel 
               images={[item.imageFile, ...(item.additionalImages || [])]} 
               productName={item.name} 
@@ -102,7 +102,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </div>
 
           {/* Details Area */}
-          <div className="flex flex-col justify-center opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]" style={{ animationDelay: '100ms' }}>
+          <div className="flex flex-col justify-center opacity-0 animate-fade-in-up-short" style={{ animationDelay: '100ms' }}>
             <h1 className="text-4xl md:text-5xl font-bold leading-tight tracking-tight text-black mb-2">
               {item.name}
             </h1>

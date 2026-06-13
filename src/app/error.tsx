@@ -17,16 +17,25 @@ export default function Error({
 
   return (
     <div className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center">
-      <div className="text-8xl font-bold tracking-tighter text-gray-100 mb-6 select-none animate-[fadeInUp_400ms_var(--ease-out)_forwards]">
+      <div className="text-8xl font-bold tracking-tighter text-gray-100 mb-6 select-none animate-fade-in-up-short">
         500
       </div>
-      <h2 className="text-2xl md:text-3xl font-bold text-black mb-4 tracking-tight animate-[fadeInUp_500ms_var(--ease-out)_forwards] [animation-delay:100ms] opacity-0">
+      <h2 
+        className="text-2xl md:text-3xl font-bold text-black mb-4 tracking-tight animate-fade-in-up opacity-0"
+        style={{ animationDelay: '100ms' }}
+      >
         Something went wrong
       </h2>
-      <p className="text-gray-500 max-w-md mx-auto mb-8 animate-[fadeInUp_600ms_var(--ease-out)_forwards] [animation-delay:200ms] opacity-0">
+      <p 
+        className="text-gray-500 max-w-md mx-auto mb-8 animate-fade-in-up opacity-0"
+        style={{ animationDelay: '200ms' }}
+      >
         An unexpected error occurred. We&apos;ve been notified and are looking into it.
       </p>
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-[fadeInUp_700ms_var(--ease-out)_forwards] [animation-delay:300ms] opacity-0">
+      <div 
+        className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in-up opacity-0"
+        style={{ animationDelay: '300ms' }}
+      >
         <button 
           onClick={() => reset()} 
           className="btn-primary"

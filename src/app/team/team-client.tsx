@@ -45,7 +45,7 @@ export default function TeamClient() {
             {teamMembers.map((member, index) => (
               <div 
                 key={member.id} 
-                className="bg-white border border-gray-200 rounded-xl p-8 text-center transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-[0_8px_32px_rgba(0,0,0,0.1)] opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]"
+                className="bg-white border border-gray-200 rounded-xl p-8 text-center transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-[0_8px_32px_rgba(0,0,0,0.1)] opacity-0 animate-fade-in-up-short"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div>

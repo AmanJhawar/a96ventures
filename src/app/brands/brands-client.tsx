@@ -53,7 +53,7 @@ export default function BrandsClient() {
             {brands.map((brand, index) => (
               <div 
                 key={brand.id} 
-                className="flex flex-col md:flex-row items-stretch p-0 overflow-hidden border border-gray-200 rounded-xl bg-white transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-[0_12px_24px_rgba(0,0,0,0.1)] min-h-[200px] group opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards]"
+                className="flex flex-col md:flex-row items-stretch p-0 overflow-hidden border border-gray-200 rounded-xl bg-white transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-[0_12px_24px_rgba(0,0,0,0.1)] min-h-[200px] group opacity-0 animate-fade-in-up-short"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div className="w-full md:w-[35%] bg-gray-100 flex items-center justify-center border-b md:border-b-0 md:border-r border-gray-200 min-h-[200px] p-6">

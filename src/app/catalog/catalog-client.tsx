@@ -113,7 +113,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
             <button
               key={cat}
               onClick={() => handleCategoryChange(cat)}
-              className={`px-6 py-2 rounded-full text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards] ${
+              className={`px-6 py-2 rounded-lg text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] opacity-0 animate-fade-in-up-short ${
                 activeFilter === cat 
                   ? 'bg-black text-white shadow-md' 
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -182,7 +182,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
             <Link 
               href={`/catalog/${item.id}`}
               key={item.id} 
-              className="flex flex-col border border-gray-200 rounded-xl overflow-hidden bg-white group opacity-0 animate-[fadeInUp_400ms_var(--ease-out)_forwards] transition-[border-color,box-shadow] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
+              className="flex flex-col border border-gray-200 rounded-xl overflow-hidden bg-white group opacity-0 animate-fade-in-up-short transition-[border-color,box-shadow] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
               style={{ animationDelay: `${index * 50}ms` }}
             >
               <div className="aspect-[3/2] bg-white relative overflow-hidden">

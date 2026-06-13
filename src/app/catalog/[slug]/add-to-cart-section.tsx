@@ -159,7 +159,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
           const w = item.variantWeights?.[combo]
           if (!w) return null
           return (
-            <div className="text-sm text-gray-500 animate-[fadeInUp_160ms_var(--ease-out)_forwards]">
+            <div className="text-sm text-gray-500 animate-fade-in-up-extra-short">
               <span className="font-semibold text-black uppercase tracking-wider text-xs mr-2">Approx Weight:</span>
               <span className="text-gray-900 font-medium">
                 {w.toLowerCase().endsWith('g') || w.toLowerCase().endsWith('kg') ? w : `${w}g`}
@@ -170,7 +170,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
         <button 
           onClick={handleAddToCart}
           disabled={!canAddToCart}
-          className="w-full sm:w-auto px-8 py-4 bg-black text-white rounded-xl font-semibold text-sm hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.98] disabled:bg-gray-300 disabled:active:scale-100 flex items-center justify-center gap-2"
+          className="w-full sm:w-auto px-8 py-4 bg-black text-white rounded-lg font-semibold text-sm hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.98] disabled:bg-gray-300 disabled:active:scale-100 flex items-center justify-center gap-2"
         >
           {canAddToCart ? 'Add to Enquiry' : 'Please select options'}
         </button>
