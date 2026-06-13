@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -30,6 +30,62 @@ export default function Header() {
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen)
   const closeMenu = () => setIsMenuOpen(false)
+
+  const menuRef = useRef<HTMLElement>(null)
+  const previousActiveElementRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (isMenuOpen) {
+      // Lock scroll
+      const originalStyle = window.getComputedStyle(document.body).overflow
+      document.body.style.overflow = 'hidden'
+
+      // Save previous active element
+      previousActiveElementRef.current = document.activeElement as HTMLElement
+
+      // Keydown listener for Escape and Tab
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          closeMenu()
+        }
+
+        if (e.key === 'Tab' && menuRef.current) {
+          // Find all focusable elements inside the header when menu is open
+          const focusableElements = document.querySelector('header')?.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
+          ) as NodeListOf<HTMLElement>
+
+          if (!focusableElements || focusableElements.length === 0) return
+
+          const first = focusableElements[0]
+          const last = focusableElements[focusableElements.length - 1]
+
+          if (e.shiftKey) {
+            if (document.activeElement === first) {
+              last.focus()
+              e.preventDefault()
+            }
+          } else {
+            if (document.activeElement === last) {
+              first.focus()
+              e.preventDefault()
+            }
+          }
+        }
+      }
+
+      document.addEventListener('keydown', handleKeyDown)
+
+      return () => {
+        document.body.style.overflow = originalStyle
+        document.removeEventListener('keydown', handleKeyDown)
+        // Restore focus
+        if (previousActiveElementRef.current) {
+          previousActiveElementRef.current.focus()
+        }
+      }
+    }
+  }, [isMenuOpen])
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200">
@@ -104,8 +160,20 @@ export default function Header() {
           </div>
         </div>
  
+        {/* Mobile Overlay */}
+        {isMenuOpen && (
+          <div 
+            className="md:hidden fixed inset-0 top-[80px] bg-black/40 backdrop-blur-sm z-40 transition-opacity animate-[fadeIn_200ms_var(--ease-out)]"
+            onClick={closeMenu}
+            aria-hidden="true"
+          />
+        )}
+
         {/* Mobile Navigation */}
-        <nav className={`md:hidden flex flex-col gap-6 absolute top-full left-0 right-0 bg-white border-b border-gray-200 px-6 py-6 transition-[opacity,visibility] duration-300 ease-[var(--ease-out)] ${isMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+        <nav 
+          ref={menuRef}
+          className={`md:hidden flex flex-col gap-6 absolute top-full left-0 right-0 bg-white border-b border-gray-200 px-6 py-6 z-50 max-h-[calc(100vh-5rem)] overflow-y-auto motion-safe:transition-[opacity,visibility] motion-reduce:transition-none duration-300 ease-[var(--ease-out)] ${isMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
+        >
           <NavLink href="/portfolio" isActive={pathname === '/portfolio'} onClick={closeMenu}>PORTFOLIO</NavLink>
           <NavLink href="/brands" isActive={pathname === '/brands'} onClick={closeMenu}>BRANDS</NavLink>
           <NavLink href="/catalog" isActive={pathname.startsWith('/catalog')} onClick={closeMenu}>CATALOG</NavLink>

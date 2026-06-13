@@ -55,6 +55,11 @@
     }
   }
 
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
   @keyframes clipReveal {
     from {
       clip-path: inset(0 0 100% 0);

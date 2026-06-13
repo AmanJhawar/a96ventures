@@ -33,6 +33,7 @@ void main() {
 
 const fragmentShader = `
 uniform vec3 uColor;
+uniform float uFade;
 
 void main() {
   vec2 xy = gl_PointCoord.xy - vec2(0.5);
@@ -40,7 +41,7 @@ void main() {
   if (ll > 0.5) discard;
   
   // Soft edge
-  float alpha = 0.8 * (1.0 - ll * 2.0);
+  float alpha = 0.8 * (1.0 - ll * 2.0) * uFade;
   gl_FragColor = vec4(uColor, alpha);
 }
 `
@@ -70,12 +71,18 @@ function ThreadParticles({ isReducedMotion, inView }: { isReducedMotion: boolean
 
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
-    uColor: { value: new THREE.Color('#d4af37') }
+    uColor: { value: new THREE.Color('#999999') }, // Sleek monochrome grey
+    uFade: { value: 0 }
   }), [])
 
   useFrame(({ clock }) => {
     if (!materialRef.current || !inView) return
     
+    // Smooth fade-in over the first 2 seconds
+    if (materialRef.current.uniforms.uFade.value < 1.0) {
+      materialRef.current.uniforms.uFade.value = Math.min(1.0, clock.getElapsedTime() * 0.5)
+    }
+
     // Only update time if not reduced motion
     if (!isReducedMotion) {
       materialRef.current.uniforms.uTime.value = clock.getElapsedTime()
@@ -136,20 +143,23 @@ function CameraParallax({ isReducedMotion, inView }: { isReducedMotion: boolean,
 }
 
 export default function GoldenThreadScene({ inView }: { inView: boolean }) {
-  const [isReducedMotion, setIsReducedMotion] = useState(false)
+  const [isReducedMotion, setIsReducedMotion] = useState(() => 
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsReducedMotion(mediaQuery.matches)
-    
     const handler = (e: MediaQueryListEvent) => setIsReducedMotion(e.matches)
     mediaQuery.addEventListener('change', handler)
     return () => mediaQuery.removeEventListener('change', handler)
   }, [])
 
   return (
-    <Canvas camera={{ position: [0, 0, 15], fov: 45 }}>
+    <Canvas 
+      camera={{ position: [0, 0, 15], fov: 45 }}
+      dpr={[1, 1.75]}
+      gl={{ antialias: true, powerPreference: 'high-performance' }}
+    >
       <CameraParallax isReducedMotion={isReducedMotion} inView={inView} />
       <ThreadParticles isReducedMotion={isReducedMotion} inView={inView} />
       {/* Fog to fade the ribbon ends softly into the background */}

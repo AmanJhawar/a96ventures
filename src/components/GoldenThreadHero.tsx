@@ -29,9 +29,9 @@ export default function GoldenThreadHero() {
   }, [])
 
   return (
-    <section ref={containerRef} className="relative w-full h-[85vh] min-h-[600px] overflow-hidden bg-white">
+    <section ref={containerRef} className="relative w-full h-[85vh] min-h-[600px] overflow-hidden bg-white -mt-20">
       {/* 3D Canvas Background */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 opacity-0 motion-safe:animate-[fadeIn_1000ms_var(--ease-out)_forwards]">
         <GoldenThreadScene inView={inView} />
       </div>
 
