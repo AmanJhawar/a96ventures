@@ -156,7 +156,7 @@ export default function AdminCategories() {
             {categories.map((cat, idx) => (
               <div key={`${cat}-${idx}`} className="flex items-center justify-between p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors">
                 {editingIndex === idx ? (
-                  <div className="flex items-center gap-3 flex-1 mr-4">
+                  <div className="flex items-center gap-3 flex-1">
                     <input 
                       type="text" 
                       value={editInput}
@@ -165,17 +165,19 @@ export default function AdminCategories() {
                       className="admin-input py-1 text-sm flex-1"
                       autoFocus
                     />
-                    <button onClick={() => saveEdit(idx, cat)} className="text-gray-400 hover:text-black p-1 transition-[color,transform] active:scale-[0.97]" title="Save">
-                      <Check size={18} />
-                    </button>
-                    <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600 p-1 transition-[color,transform] active:scale-[0.97]" title="Cancel">
-                      <X size={18} />
-                    </button>
+                    <div className="flex items-center gap-1 w-16 justify-end shrink-0">
+                      <button onClick={() => saveEdit(idx, cat)} className="text-gray-400 hover:text-black p-2 transition-[color,transform] active:scale-[0.97]" title="Save">
+                        <Check size={18} />
+                      </button>
+                      <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600 p-2 transition-[color,transform] active:scale-[0.97]" title="Cancel">
+                        <X size={18} />
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <>
-                    <span className="font-medium text-gray-800">{cat}</span>
-                    <div className="flex items-center gap-1">
+                  <div className="flex items-center justify-between flex-1 gap-3">
+                    <span className="font-medium text-gray-800 flex-1 truncate">{cat}</span>
+                    <div className="flex items-center gap-1 w-16 justify-end shrink-0">
                       <button
                         onClick={() => startEdit(idx, cat)}
                         className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
@@ -191,7 +193,7 @@ export default function AdminCategories() {
                         <Trash2 size={18} />
                       </button>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
             ))}

@@ -1,12 +1,77 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { collection, deleteDoc, setDoc, doc, getDocs, orderBy, query, limit, startAfter, QueryDocumentSnapshot, DocumentData, getFirestore } from 'firebase/firestore/lite'
 import { app } from '@/lib/firebase/config'
-import { Trash2, MessageSquare } from 'lucide-react'
+import { Trash2, MessageSquare, ChevronDown } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { ConfirmModal } from '@/components/confirm-modal'
 
 const db = getFirestore(app)
+
+const EASE_OUT = [0.16, 1, 0.3, 1] as const;
+
+function StatusDropdown({ status, onChange }: { status: Inquiry['status'], onChange: (newStatus: 'unread' | 'read' | 'handled') => void }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const options = [
+    { value: 'unread', label: 'Unread' },
+    { value: 'read', label: 'Read' },
+    { value: 'handled', label: 'Handled' },
+  ] as const
+
+  const currentOption = options.find(o => o.value === (status || 'unread'))
+
+  return (
+    <div className="relative inline-block text-left" ref={ref}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between gap-2 w-28 text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:border-gray-300 transition-[border-color,transform] active:scale-[0.97]"
+      >
+        <span className="capitalize">{currentOption?.label}</span>
+        <ChevronDown size={14} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.15, ease: EASE_OUT }}
+            className="absolute z-10 mt-1 w-full bg-white border border-gray-100 rounded-lg shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] overflow-hidden origin-top"
+          >
+            {options.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  onChange(opt.value)
+                  setIsOpen(false)
+                }}
+                className={`block w-full text-left px-3 py-2 text-sm transition-colors ${
+                  status === opt.value ? 'bg-gray-50 font-medium text-black' : 'text-gray-600 hover:bg-gray-50 hover:text-black'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
 
 interface Inquiry {
   id: string;
@@ -157,15 +222,10 @@ export default function AdminInquiries() {
                   return (
                     <tr key={inquiry.id} className={`border-b border-gray-100 align-top transition-colors ${isHandled ? 'bg-gray-50 opacity-60' : isUnread ? 'bg-gray-50/50' : 'hover:bg-gray-50/50'}`}>
                       <td className="px-6 py-4">
-                        <select 
-                          value={inquiry.status || 'unread'}
-                          onChange={(e) => handleStatusChange(inquiry.id, e.target.value as Inquiry['status'] ?? 'unread')}
-                          className="text-sm bg-transparent border border-gray-200 rounded px-2 py-1 outline-none focus:border-black"
-                        >
-                          <option value="unread">Unread</option>
-                          <option value="read">Read</option>
-                          <option value="handled">Handled</option>
-                        </select>
+                        <StatusDropdown 
+                          status={inquiry.status || 'unread'} 
+                          onChange={(newStatus) => handleStatusChange(inquiry.id, newStatus)} 
+                        />
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
                         {formatDate(inquiry.createdAt)}

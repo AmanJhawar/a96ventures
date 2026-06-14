@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { motion } from 'framer-motion'
+import { EASE_OUT } from '@/components/motion-transitions'
 
 // Dynamically import the heavy 3D canvas so it doesn't block the critical path
 const NetworkScene = dynamic(() => import('./NetworkScene'), {
@@ -67,24 +69,47 @@ export default function NetworkHero() {
       `}} />
 
       {/* 3D Canvas Background */}
-      <div className="absolute inset-0 z-0 bg-gradient-to-b from-gray-50 to-white animate-fade-in-slow">
+      <motion.div 
+        className="absolute inset-0 z-0 bg-gradient-to-b from-gray-50 to-white"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1.0, ease: EASE_OUT }}
+      >
         <ErrorBoundary fallback={<div className="absolute inset-0 bg-gradient-to-b from-gray-50 to-white" />}>
           <NetworkScene inView={inView} />
         </ErrorBoundary>
-      </div>
+      </motion.div>
 
       {/* Overlay Content */}
       <div className="relative z-10 flex flex-col items-center justify-center pointer-events-none text-center px-6 max-w-5xl mx-auto pt-10">
 
         {/* Main Title */}
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-normal text-black mb-24 animate-clip-reveal">
-          We partner with <span className="relative inline-block after:absolute after:bottom-1 after:left-0 after:right-0 after:h-0.5 after:bg-black after:animate-underline-grow" style={{ animationDelay: '0.8s' }}>visionaries</span> &nbsp;to build tomorrow&apos;s defining companies.
-        </h1>
+        <motion.h1 
+          className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-normal text-black mb-24"
+          initial={{ clipPath: 'inset(0 0 100% 0)' }}
+          animate={{ clipPath: 'inset(0 0 0% 0)' }}
+          transition={{ duration: 0.8, ease: EASE_OUT }}
+        >
+          We partner with{' '}
+          <span className="relative inline-block">
+            visionaries
+            <motion.span 
+              className="absolute bottom-1 left-0 right-0 h-0.5 bg-black"
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              style={{ originX: 0 }}
+              transition={{ duration: 0.6, ease: EASE_OUT, delay: 0.8 }}
+            />
+          </span>
+          &nbsp;to build tomorrow&apos;s defining companies.
+        </motion.h1>
 
         {/* Action Buttons */}
-        <div
-          className="animate-fade-in flex flex-wrap gap-4 justify-center pointer-events-auto"
-          style={{ animationDelay: '600ms' }}
+        <motion.div
+          className="flex flex-wrap gap-4 justify-center pointer-events-auto"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: EASE_OUT, delay: 0.6 }}
         >
           <Link
             href="/portfolio"
@@ -98,7 +123,7 @@ export default function NetworkHero() {
           >
             Explore Catalog
           </Link>
-        </div>
+        </motion.div>
       </div>
     </section>
   )

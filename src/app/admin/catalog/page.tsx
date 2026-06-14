@@ -22,25 +22,31 @@ const STANDARD_STONES = [
   'Blue Agate'
 ]
 const STANDARD_WEIGHTS = ['10g', '20g', '50g', '100g']
+const hasStonesCategory = (category?: string) => {
+  if (!category) return false
+  const c = category.toLowerCase()
+  return c.includes('marble') || c.includes('photoframe')
+}
+
 const isNoPurityCategory = (category?: string) => {
   if (!category) return false
-  return category.includes('Marble') || category.includes('Bullion')
+  return hasStonesCategory(category) || category.includes('Bullion')
 }
 
 const getSizeMatrix = (item: Partial<InventoryItem>) => {
-  if (item.category?.includes('Marble')) return [...(item.standardStones || []), ...(item.customStones || [])]
+  if (hasStonesCategory(item.category)) return [...(item.standardStones || []), ...(item.customStones || [])]
   if (item.category?.includes('Bullion')) return [...(item.standardWeights || []), ...(item.customWeights || [])]
   return [...(item.standardSizes || []), ...(item.customSizes || [])]
 }
 
 const getStandardSizeMatrix = (item: Partial<InventoryItem>) => {
-  if (item.category?.includes('Marble')) return item.standardStones || []
+  if (hasStonesCategory(item.category)) return item.standardStones || []
   if (item.category?.includes('Bullion')) return item.standardWeights || []
   return item.standardSizes || []
 }
 
 const getCustomSizeMatrix = (item: Partial<InventoryItem>) => {
-  if (item.category?.includes('Marble')) return item.customStones || []
+  if (hasStonesCategory(item.category)) return item.customStones || []
   if (item.category?.includes('Bullion')) return item.customWeights || []
   return item.customSizes || []
 }
@@ -244,7 +250,7 @@ export default function AdminInventory() {
   }
 
   const getMatrixFields = () => {
-    if (formData.category?.includes('Marble')) return ['standardStones', 'customStones'] as const
+    if (hasStonesCategory(formData.category)) return ['standardStones', 'customStones'] as const
     if (formData.category?.includes('Bullion')) return ['standardWeights', 'customWeights'] as const
     return ['standardSizes', 'customSizes'] as const
   }
@@ -427,10 +433,10 @@ export default function AdminInventory() {
                   {/* ── Size Column ── */}
                   <div className={isNoPurityCategory(formData.category) ? 'md:col-span-2' : ''}>
                     <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">
-                      {formData.category?.includes('Marble') ? 'Available Stones' : formData.category?.includes('Bullion') ? 'Available Weights' : 'Available Sizes'}
+                      {hasStonesCategory(formData.category) ? 'Available Stones' : formData.category?.includes('Bullion') ? 'Available Weights' : 'Available Sizes'}
                     </p>
                     <div className="flex flex-wrap gap-2 mb-6">
-                      {(formData.category?.includes('Marble')
+                      {(hasStonesCategory(formData.category)
                         ? STANDARD_STONES
                         : formData.category?.includes('Bullion')
                           ? STANDARD_WEIGHTS
@@ -459,17 +465,17 @@ export default function AdminInventory() {
                     )}
 
                     <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">
-                      {formData.category?.includes('Marble') ? 'Custom Stone' : formData.category?.includes('Bullion') ? 'Custom Weight' : 'Custom Size'}
+                      {hasStonesCategory(formData.category) ? 'Custom Stone' : formData.category?.includes('Bullion') ? 'Custom Weight' : 'Custom Size'}
                     </p>
                     <div className="flex items-end gap-3 max-w-sm">
                       <div className="flex-1 relative">
                         <input
                           type="text"
                           value={customSizeInput}
-                          onChange={e => setCustomSizeInput(formData.category?.includes('Marble') ? e.target.value : numericFilter(e.target.value))}
+                          onChange={e => setCustomSizeInput(hasStonesCategory(formData.category) ? e.target.value : numericFilter(e.target.value))}
                           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSize() } }}
                           className="admin-input-underline"
-                          placeholder={formData.category?.includes('Marble') ? "e.g., Rose Quartz" : formData.category?.includes('Bullion') ? "e.g., 100" : "e.g., 20"}
+                          placeholder={hasStonesCategory(formData.category) ? "e.g., Rose Quartz" : formData.category?.includes('Bullion') ? "e.g., 100" : "e.g., 20"}
                         />
                       </div>
                       <button type="button" onClick={addCustomSize} className="admin-btn-outline">

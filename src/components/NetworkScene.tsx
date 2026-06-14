@@ -1,212 +1,22 @@
-/* eslint-disable react-hooks/immutability */
 'use client'
 
-import React, { useRef, useEffect, useState } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import * as THREE from 'three'
-
-const NUM_NODES = 200
-const MAX_DISTANCE = 2.5
-const REPULSION_RADIUS = 3.0
-const REPULSION_FORCE = 0.08
-const BOUNDS = { x: 12, y: 8, z: 4 }
-
-function NetworkParticles({ isReducedMotion, inView }: { isReducedMotion: boolean; inView: boolean }) {
-  const pointsRef = useRef<THREE.Points>(null)
-  const linesRef = useRef<THREE.LineSegments>(null)
-  const mousePosRef = useRef(new THREE.Vector3(0, 0, 1000)) // start far away
-
-  const [buffers] = useState(() => {
-    const maxLines = (NUM_NODES * (NUM_NODES - 1)) / 2
-    const pos = new Float32Array(NUM_NODES * 3)
-    const vel = new Float32Array(NUM_NODES * 3)
-    
-    // Initialize nodes
-    for (let i = 0; i < NUM_NODES; i++) {
-      pos[i * 3] = (Math.random() - 0.5) * BOUNDS.x * 2
-      pos[i * 3 + 1] = (Math.random() - 0.5) * BOUNDS.y * 2
-      pos[i * 3 + 2] = (Math.random() - 0.5) * BOUNDS.z * 2
-
-      vel[i * 3] = (Math.random() - 0.5) * 0.02
-      vel[i * 3 + 1] = (Math.random() - 0.5) * 0.02
-      vel[i * 3 + 2] = (Math.random() - 0.5) * 0.02
-    }
-
-    return {
-      positions: pos,
-      velocities: vel,
-      linePositions: new Float32Array(maxLines * 6),
-      lineColors: new Float32Array(maxLines * 6),
-      maxLines
-    }
-  })
-
-  const { positions, velocities, linePositions, lineColors, maxLines } = buffers
-
-  useFrame((state) => {
-    if (!pointsRef.current || !linesRef.current || !inView) return
-
-    // Calculate 3D mouse position on Z=0 plane
-    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
-    const target3D = new THREE.Vector3()
-    
-    // Only attract to mouse if it's interacting, otherwise keep it far away
-    if (state.pointer.x !== 0 || state.pointer.y !== 0) {
-      state.raycaster.ray.intersectPlane(plane, target3D)
-      mousePosRef.current.lerp(target3D, 0.1)
-    }
-
-    const mx = mousePosRef.current.x
-    const my = mousePosRef.current.y
-    const mz = mousePosRef.current.z
-
-    let lineIndex = 0
-    const posAttr = pointsRef.current.geometry.attributes.position
-
-    for (let i = 0; i < NUM_NODES; i++) {
-      let x = positions[i * 3]
-      let y = positions[i * 3 + 1]
-      let z = positions[i * 3 + 2]
-
-      let vx = velocities[i * 3]
-      let vy = velocities[i * 3 + 1]
-      let vz = velocities[i * 3 + 2]
-
-      if (!isReducedMotion) {
-        // Mouse repulsion
-        const dx = x - mx
-        const dy = y - my
-        const dz = z - mz
-        const distSq = dx * dx + dy * dy + dz * dz
-
-        if (distSq < REPULSION_RADIUS * REPULSION_RADIUS) {
-          const dist = Math.sqrt(distSq)
-          const force = (REPULSION_RADIUS - dist) / REPULSION_RADIUS
-          vx += (dx / dist) * force * REPULSION_FORCE
-          vy += (dy / dist) * force * REPULSION_FORCE
-          vz += (dz / dist) * force * REPULSION_FORCE
-        }
-
-        // Brownian motion to keep it organic
-        vx += (Math.random() - 0.5) * 0.001
-        vy += (Math.random() - 0.5) * 0.001
-        vz += (Math.random() - 0.5) * 0.001
-
-        // Damping
-        vx *= 0.99
-        vy *= 0.99
-        vz *= 0.99
-
-        // Soft bounds
-        if (Math.abs(x) > BOUNDS.x) vx -= Math.sign(x) * 0.002
-        if (Math.abs(y) > BOUNDS.y) vy -= Math.sign(y) * 0.002
-        if (Math.abs(z) > BOUNDS.z) vz -= Math.sign(z) * 0.002
-
-        x += vx
-        y += vy
-        z += vz
-
-        positions[i * 3] = x
-        positions[i * 3 + 1] = y
-        positions[i * 3 + 2] = z
-
-        velocities[i * 3] = vx
-        velocities[i * 3 + 1] = vy
-        velocities[i * 3 + 2] = vz
-      }
-
-      // Connections
-      for (let j = i + 1; j < NUM_NODES; j++) {
-        const jx = positions[j * 3]
-        const jy = positions[j * 3 + 1]
-        const jz = positions[j * 3 + 2]
-
-        const dSq = (x - jx) ** 2 + (y - jy) ** 2 + (z - jz) ** 2
-
-        if (dSq < MAX_DISTANCE * MAX_DISTANCE) {
-          const dist = Math.sqrt(dSq)
-          const alpha = 1.0 - dist / MAX_DISTANCE
-
-          // Line base color: Light grey (#e5e5e5 -> 229, 229, 229)
-          // Background color: #ffffff -> 255, 255, 255
-          // Faking alpha by blending with the background color
-          const rBase = 229 / 255
-          const gBase = 229 / 255
-          const bBase = 229 / 255
-          const bg = 255 / 255
-
-          const r = bg + (rBase - bg) * alpha
-          const g = bg + (gBase - bg) * alpha
-          const b = bg + (bBase - bg) * alpha
-
-          const idx = lineIndex * 6
-          
-          linePositions[idx] = x
-          linePositions[idx + 1] = y
-          linePositions[idx + 2] = z
-          linePositions[idx + 3] = jx
-          linePositions[idx + 4] = jy
-          linePositions[idx + 5] = jz
-
-          lineColors[idx] = r
-          lineColors[idx + 1] = g
-          lineColors[idx + 2] = b
-          lineColors[idx + 3] = r
-          lineColors[idx + 4] = g
-          lineColors[idx + 5] = b
-
-          lineIndex++
-        }
-      }
-    }
-
-    if (!isReducedMotion) {
-      posAttr.needsUpdate = true
-    }
-
-    const lineGeo = linesRef.current.geometry
-    lineGeo.setDrawRange(0, lineIndex * 2)
-    lineGeo.attributes.position.needsUpdate = true
-    lineGeo.attributes.color.needsUpdate = true
-  })
-
-  return (
-    <group>
-      <points ref={pointsRef}>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            args={[positions, 3]}
-            count={NUM_NODES}
-          />
-        </bufferGeometry>
-        {/* Slightly larger than lines, very light grey */}
-        <pointsMaterial size={0.09} color="#e5e5e5" sizeAttenuation transparent opacity={0.8} />
-      </points>
-
-      <lineSegments ref={linesRef}>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            args={[linePositions, 3]}
-            count={maxLines * 2}
-          />
-          <bufferAttribute
-            attach="attributes-color"
-            args={[lineColors, 3]}
-            count={maxLines * 2}
-          />
-        </bufferGeometry>
-        <lineBasicMaterial vertexColors transparent={false} />
-      </lineSegments>
-    </group>
-  )
-}
+import React, { useCallback, useEffect, useState, useMemo } from 'react'
+import Particles from 'react-tsparticles'
+import { loadSlim } from 'tsparticles-slim'
+import type { Engine, ISourceOptions } from 'tsparticles-engine'
 
 export default function NetworkScene({ inView }: { inView: boolean }) {
-  const [isReducedMotion, setIsReducedMotion] = useState(() =>
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  )
+  // Respect reduced motion setting
+  const [isReducedMotion, setIsReducedMotion] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    }
+    return false
+  })
+
+  const particlesInit = useCallback(async (engine: Engine) => {
+    await loadSlim(engine)
+  }, [])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -215,14 +25,78 @@ export default function NetworkScene({ inView }: { inView: boolean }) {
     return () => mediaQuery.removeEventListener('change', handler)
   }, [])
 
+  const options: ISourceOptions = useMemo(() => {
+    return {
+      autoPlay: inView, // pause when not in view
+      background: {
+        color: {
+          value: 'transparent',
+        },
+      },
+      fpsLimit: 60,
+      interactivity: {
+        events: {
+          onHover: {
+            enable: !isReducedMotion,
+            mode: 'repulse',
+          },
+        },
+        modes: {
+          repulse: {
+            distance: 120,
+            duration: 0.4,
+          },
+        },
+      },
+      particles: {
+        color: {
+          value: '#d1d5db', // light gray
+        },
+        links: {
+          color: '#e5e7eb', // lighter gray
+          distance: 150,
+          enable: true,
+          opacity: 0.8,
+          width: 1,
+        },
+        move: {
+          enable: !isReducedMotion,
+          speed: 0.6,
+          direction: 'none' as const,
+          random: true,
+          straight: false,
+          outModes: {
+            default: 'bounce' as const,
+          },
+        },
+        number: {
+          density: {
+            enable: true,
+          },
+          value: 150, // 150 points for a good network feel
+        },
+        opacity: {
+          value: 0.6,
+        },
+        shape: {
+          type: 'circle' as const,
+        },
+        size: {
+          value: { min: 1, max: 2.5 },
+        },
+      },
+      detectRetina: true,
+    }
+  }, [inView, isReducedMotion])
+
   return (
-    <Canvas 
-      camera={{ position: [0, 0, 8], fov: 60 }} 
-      dpr={[1, 1.75]} 
-      gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
-      style={{ background: 'transparent', width: '100%', height: '100%' }}
-    >
-      <NetworkParticles isReducedMotion={isReducedMotion} inView={inView} />
-    </Canvas>
+    <div className="absolute inset-0 w-full h-full z-0 overflow-hidden pointer-events-auto">
+      <Particles
+        id="tsparticles"
+        init={particlesInit}
+        options={options}
+        className="w-full h-full"
+      />
+    </div>
   )
 }

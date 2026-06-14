@@ -13,9 +13,8 @@ interface ProtectedImageProps {
  * Renders an image onto a <canvas> element with a transparent overlay.
  * This makes it significantly harder to save/copy/drag images because:
  *  - No <img> tag exists in the DOM (no "Save Image As" in context menu)
- *  - No image URL visible in page source or network tab (base64 is drawn via JS)
- *  - Transparent overlay intercepts all mouse events
- *  - Context menu, dragging, and selection are all blocked
+ *  - The canvas contextmenu, dragstart, and mousedown events are blocked at the native capture phase.
+ *  - A transparent shield covers the canvas to intercept pointer events.
  */
 export function ProtectedImage({ src, alt, className = '', containerClassName = '' }: ProtectedImageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -45,11 +44,26 @@ export function ProtectedImage({ src, alt, className = '', containerClassName = 
     }
   }, [src])
 
-  const blockEvent = (e: React.MouseEvent | React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    return false
-  }
+  // Use native capture phase listeners to guarantee event interception
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const block = (e: Event) => {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    el.addEventListener('contextmenu', block, { capture: true })
+    el.addEventListener('dragstart', block, { capture: true })
+    el.addEventListener('mousedown', block, { capture: true })
+
+    return () => {
+      el.removeEventListener('contextmenu', block)
+      el.removeEventListener('dragstart', block)
+      el.removeEventListener('mousedown', block)
+    }
+  }, [])
 
   if (!src) return null
 
@@ -57,9 +71,6 @@ export function ProtectedImage({ src, alt, className = '', containerClassName = 
     <div
       ref={containerRef}
       className={`protected-image-container ${containerClassName}`}
-      onContextMenu={blockEvent}
-      onDragStart={blockEvent}
-      onMouseDown={blockEvent}
       aria-label={alt}
       role="img"
     >

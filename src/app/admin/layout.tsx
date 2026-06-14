@@ -159,7 +159,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Main Content */}
       <main className="flex-1 p-6 md:p-12 overflow-y-auto min-h-screen">
-        <div className="max-w-6xl mx-auto">
+        <div className={pathname === '/admin/catalog' ? 'w-full' : 'max-w-6xl mx-auto'}>
           {children}
         </div>
       </main>

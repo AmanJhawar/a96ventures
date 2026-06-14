@@ -5,6 +5,8 @@ import { ChevronDown } from 'lucide-react'
 import { CatalogItem } from '@/lib/types'
 import { EmptyState } from '@/components/empty-state'
 import { ProductCard } from '@/components/product-card'
+import { motion, AnimatePresence } from 'framer-motion'
+import { StaggerContainer, FadeInUp, EASE_OUT } from '@/components/motion-transitions'
 
 interface CatalogClientProps {
   initialItems: CatalogItem[]
@@ -107,68 +109,74 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
       {/* Filters & Sorting Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 pb-2">
         {/* Category Filter Pills */}
-        <div className="flex flex-wrap gap-3">
-          {initialCategories.map((cat, index) => (
-            <button
-              key={cat}
-              onClick={() => handleCategoryChange(cat)}
-              className={`px-6 py-2 rounded-lg text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] opacity-0 animate-fade-in-up-short border ${
-                activeFilter === cat 
-                  ? 'bg-white text-black border-black shadow-[0_0_0_1px_black]' 
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-black/30'
-              }`}
-              style={{ animationDelay: `${300 + (index * 40)}ms` }}
-            >
-              {cat}
-            </button>
+        <StaggerContainer className="flex flex-wrap gap-3" staggerDelay={0.04} initialDelay={0.2}>
+          {initialCategories.map((cat) => (
+            <FadeInUp key={cat} duration={0.3} yOffset={8} className="flex">
+              <button
+                onClick={() => handleCategoryChange(cat)}
+                className={`px-6 py-2 rounded-lg text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border ${
+                  activeFilter === cat 
+                    ? 'bg-white text-black border-black shadow-[0_0_0_1px_black]' 
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-black/30'
+                }`}
+              >
+                {cat}
+              </button>
+            </FadeInUp>
           ))}
-        </div>
+        </StaggerContainer>
 
         {/* Sort Selection Menu */}
         <div className="relative self-end md:self-auto" ref={dropdownRef}>
           <button
             onClick={() => setIsSortOpen(!isSortOpen)}
             onKeyDown={handleDropdownKeyDown}
-            className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-black bg-white hover:border-black/30 active:scale-[0.97] transition-[border-color,transform] duration-150 ease-[var(--ease-out)]"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-widest text-gray-500 hover:text-black hover:bg-gray-50 active:scale-[0.97] transition-[color,background-color,transform] duration-150 ease-[var(--ease-out)]"
             aria-haspopup="listbox"
             aria-expanded={isSortOpen}
             aria-label="Sort products"
           >
             <span>Sort: {sortBy === 'default' ? 'Default' : sortBy === 'name-asc' ? 'Name (A-Z)' : 'Name (Z-A)'}</span>
-            <ChevronDown size={16} className={`transition-transform duration-200 ${isSortOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown size={14} className={`transition-transform duration-200 ${isSortOpen ? 'rotate-180' : ''}`} />
           </button>
 
-          {isSortOpen && (
-            <div 
-              role="listbox"
-              className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-20 origin-top-right animate-dropdown-enter"
-            >
-              <button
-                role="option"
-                aria-selected={sortBy === 'default'}
-                onClick={() => { setSortBy('default'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'default' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 0 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
+          <AnimatePresence>
+            {isSortOpen && (
+              <motion.div 
+                role="listbox"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.15, ease: EASE_OUT }}
+                className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-20 origin-top-right"
               >
-                Default
-              </button>
-              <button
-                role="option"
-                aria-selected={sortBy === 'name-asc'}
-                onClick={() => { setSortBy('name-asc'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-asc' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 1 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
-              >
-                Name (A-Z)
-              </button>
-              <button
-                role="option"
-                aria-selected={sortBy === 'name-desc'}
-                onClick={() => { setSortBy('name-desc'); closeDropdown() }}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-desc' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 2 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
-              >
-                Name (Z-A)
-              </button>
-            </div>
-          )}
+                <button
+                  role="option"
+                  aria-selected={sortBy === 'default'}
+                  onClick={() => { setSortBy('default'); closeDropdown() }}
+                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'default' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 0 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
+                >
+                  Default
+                </button>
+                <button
+                  role="option"
+                  aria-selected={sortBy === 'name-asc'}
+                  onClick={() => { setSortBy('name-asc'); closeDropdown() }}
+                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-asc' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 1 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
+                >
+                  Name (A-Z)
+                </button>
+                <button
+                  role="option"
+                  aria-selected={sortBy === 'name-desc'}
+                  onClick={() => { setSortBy('name-desc'); closeDropdown() }}
+                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-desc' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 2 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
+                >
+                  Name (Z-A)
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -176,11 +184,14 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
       {paginatedItems.length === 0 ? (
         <EmptyState title="No products found in this category." />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StaggerContainer 
+          key={`${activeFilter}-${sortBy}`} 
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+        >
           {paginatedItems.map((item, index) => (
             <ProductCard key={item.id} item={item} index={index} showVariants={true} />
           ))}
-        </div>
+        </StaggerContainer>
       )}
 
       {/* Pagination Load More */}
