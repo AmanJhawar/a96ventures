@@ -9,7 +9,7 @@ import { LogOut, LayoutDashboard, Package, Users, Briefcase, Bookmark, MessageSq
 
 const navItems = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { name: 'Catalog', href: '/admin/catalog', icon: Package },
+  { name: 'Inventory', href: '/admin/inventory', icon: Package },
   { name: 'Categories', href: '/admin/categories', icon: Tags },
   { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare },
   { name: 'Team', href: '/admin/team', icon: Users },
@@ -159,7 +159,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Main Content */}
       <main className="flex-1 p-6 md:p-12 overflow-y-auto min-h-screen">
-        <div className={pathname === '/admin/catalog' ? 'w-full' : 'max-w-6xl mx-auto'}>
+        <div className={pathname === '/admin/inventory' ? 'w-full' : 'max-w-6xl mx-auto'}>
           {children}
         </div>
       </main>

@@ -312,9 +312,9 @@ export default function AdminInventory() {
           <div>
             <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
               <Box size={28} />
-              Catalog Manager
+              Inventory Manager
             </h1>
-            <p className="text-gray-500">Manage catalog products, sizes and purity variants.</p>
+            <p className="text-gray-500">Manage inventory products, sizes and purity variants.</p>
           </div>
           <div className="flex items-center gap-4 w-full sm:w-auto">
             <button
@@ -591,7 +591,7 @@ export default function AdminInventory() {
 
               <div>
                 <label className="admin-label">Product Images (Landscape 3:2)</label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-6">
                   {(formData.additionalImages || []).map((img, idx) => (
                     <ImageDropzone
                       key={idx}
