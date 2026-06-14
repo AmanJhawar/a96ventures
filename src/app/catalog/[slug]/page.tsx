@@ -165,7 +165,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <div className="mt-32 pt-16">
             <h2 className="text-2xl font-bold tracking-tight text-black mb-10 text-center">More from our catalog</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {moreProducts.map((p, index) => (
+              {moreProducts.map((p) => (
                 <ProductCard key={p.id} item={p} showVariants={false} />
               ))}
             </div>

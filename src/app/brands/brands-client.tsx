@@ -51,7 +51,7 @@ export default function BrandsClient() {
           <EmptyState title="No brands found." />
         ) : (
           <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
-            {brands.map((brand, index) => (
+            {brands.map((brand) => (
               <FadeInUp 
                 key={brand.id} 
                 className="flex flex-col md:flex-row items-stretch p-0 overflow-hidden border border-gray-200 rounded-xl bg-white transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:border-black/20 min-h-[200px] group"

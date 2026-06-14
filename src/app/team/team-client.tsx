@@ -43,7 +43,7 @@ export default function TeamClient() {
           <EmptyState title="No team members found." />
         ) : (
           <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 mb-20">
-            {teamMembers.map((member, index) => (
+            {teamMembers.map((member) => (
               <FadeInUp 
                 key={member.id} 
                 className="bg-white border border-gray-200 rounded-xl p-8 text-center transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:border-black/20"

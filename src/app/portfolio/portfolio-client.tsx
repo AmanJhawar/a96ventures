@@ -44,7 +44,7 @@ export default function PortfolioClient() {
           <EmptyState title="No portfolio companies found." />
         ) : (
           <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
-            {portfolio.map((company, index) => (
+            {portfolio.map((company) => (
               <FadeInUp 
                 key={company.id} 
                 className="block group"
