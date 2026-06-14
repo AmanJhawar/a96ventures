@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { UploadCloud, X } from 'lucide-react'
 
 interface ImageDropzoneProps {
@@ -31,11 +31,9 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
   const [inputValue, setInputValue] = useState('')
 
   // Sync internal state when value is cleared
-  useEffect(() => {
-    if (!value) {
-      setInputValue('')
-    }
-  }, [value])
+  if (!value && inputValue !== '') {
+    setInputValue('')
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value

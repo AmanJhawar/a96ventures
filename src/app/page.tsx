@@ -28,7 +28,7 @@ export default async function Home() {
       <NetworkHero />
 
       {/* Newsletter Section */}
-      <section className="py-20 md:py-32 bg-gray-100 border-y border-gray-100">
+      <section className="py-20 md:py-32 bg-[#f5f5f7]">
         <div className="max-w-7xl mx-auto px-6">
           <div className="max-w-[800px] mx-auto text-center">
             <span className="text-xs font-semibold tracking-widest text-gray-500 mb-4 block uppercase">STAY INFORMED</span>

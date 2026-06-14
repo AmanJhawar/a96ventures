@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import Link from 'next/link'
 import { ChevronDown } from 'lucide-react'
 import { CatalogItem } from '@/lib/types'
-import { ProtectedImage } from '@/components/protected-image'
 import { EmptyState } from '@/components/empty-state'
+import { ProductCard } from '@/components/product-card'
 
 interface CatalogClientProps {
   initialItems: CatalogItem[]
@@ -113,10 +112,10 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
             <button
               key={cat}
               onClick={() => handleCategoryChange(cat)}
-              className={`px-6 py-2 rounded-lg text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] opacity-0 animate-fade-in-up-short ${
+              className={`px-6 py-2 rounded-lg text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] opacity-0 animate-fade-in-up-short border ${
                 activeFilter === cat 
-                  ? 'bg-white text-black outline outline-2 outline-offset-[-2px] outline-black shadow-[0_0_0_1px_black]' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-white text-black border-black shadow-[0_0_0_1px_black]' 
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-black/30'
               }`}
               style={{ animationDelay: `${300 + (index * 40)}ms` }}
             >
@@ -179,52 +178,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {paginatedItems.map((item, index) => (
-            <Link 
-              href={`/catalog/${item.id}`}
-              key={item.id} 
-              className="flex flex-col border border-gray-200 rounded-xl overflow-hidden bg-white group opacity-0 animate-fade-in-up-short transition-[border-color,box-shadow] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
-              style={{ animationDelay: `${index * 50}ms` }}
-            >
-              <div className="aspect-[2/3] bg-white relative overflow-hidden">
-                <div className="w-full h-full relative flex items-center justify-center text-gray-400 text-sm">
-                  {item.imageFile ? (
-                    <ProtectedImage 
-                      src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
-                      alt={item.name}
-                      className="w-full h-full object-cover transition-transform duration-700 ease-[var(--ease-out)] group-hover:scale-[1.04]"
-                      containerClassName="w-full h-full"
-                    />
-                  ) : (
-                    <span>Image Coming Soon</span>
-                  )}
-                </div>
-              </div>
-              <div className="p-8 flex flex-col flex-1">
-                <div className="flex flex-col items-start mb-4">
-                  <h3 className="text-xl font-semibold text-black">{item.name}</h3>
-                  <span className="text-xs font-semibold tracking-widest uppercase text-gray-400 mt-1">{item.category}</span>
-                </div>
-                {((item.standardSizes?.length || 0) > 0 || (item.customSizes?.length || 0) > 0 || (item.standardPurities?.length || 0) > 0 || (item.customPurities?.length || 0) > 0) && (
-                  <div className="mt-auto pt-4">
-                    {(() => {
-                      const sizes = (item.standardSizes?.length || 0) + (item.customSizes?.length || 0);
-                      const purities = (item.standardPurities?.length || 0) + (item.customPurities?.length || 0);
-                      const sizeLabel = item.category?.includes('Marble') ? 'stones' : item.category?.includes('Bullion') ? 'weights' : 'sizes';
-                      
-                      const parts = [];
-                      if (sizes > 0) parts.push(`${sizes} ${sizeLabel}`);
-                      if (purities > 0) parts.push(`${purities} purities`);
-                      
-                      return (
-                        <span className="text-sm text-gray-500">
-                          {parts.join(' · ')}
-                        </span>
-                      )
-                    })()}
-                  </div>
-                )}
-              </div>
-            </Link>
+            <ProductCard key={item.id} item={item} index={index} showVariants={true} />
           ))}
         </div>
       )}

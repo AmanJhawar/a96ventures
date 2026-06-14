@@ -53,7 +53,7 @@ export default function BrandsClient() {
             {brands.map((brand, index) => (
               <div 
                 key={brand.id} 
-                className="flex flex-col md:flex-row items-stretch p-0 overflow-hidden border border-gray-200 rounded-xl bg-white transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-[0_12px_24px_rgba(0,0,0,0.1)] min-h-[200px] group opacity-0 animate-fade-in-up-short"
+                className="flex flex-col md:flex-row items-stretch p-0 overflow-hidden border border-gray-200 rounded-xl bg-white transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:border-black/20 min-h-[200px] group opacity-0 animate-fade-in-up-short"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div className="w-full md:w-[35%] bg-gray-100 flex items-center justify-center border-b md:border-b-0 md:border-r border-gray-200 min-h-[200px] p-6">
@@ -68,7 +68,7 @@ export default function BrandsClient() {
                 </div>
                 <div className="flex-1 p-8 flex flex-col justify-center">
                   <h3 className="text-2xl font-semibold text-black mb-2">{brand.name}</h3>
-                  <span className="inline-block bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-xs font-medium tracking-wide w-fit mb-4">
+                  <span className="block w-fit mb-4 text-[11px] uppercase tracking-widest text-gray-400">
                     {brand.sector}
                   </span>
                   <p className="text-gray-500 leading-relaxed m-0">

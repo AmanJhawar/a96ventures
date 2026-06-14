@@ -1,6 +1,7 @@
+/* eslint-disable react-hooks/immutability */
 'use client'
 
-import React, { useRef, useEffect, useMemo, useState } from 'react'
+import React, { useRef, useEffect, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
@@ -15,26 +16,32 @@ function NetworkParticles({ isReducedMotion, inView }: { isReducedMotion: boolea
   const linesRef = useRef<THREE.LineSegments>(null)
   const mousePosRef = useRef(new THREE.Vector3(0, 0, 1000)) // start far away
 
-  // Pre-allocate buffers
-  const positions = useMemo(() => new Float32Array(NUM_NODES * 3), [])
-  const velocities = useMemo(() => new Float32Array(NUM_NODES * 3), [])
-  
-  const maxLines = (NUM_NODES * (NUM_NODES - 1)) / 2
-  const linePositions = useMemo(() => new Float32Array(maxLines * 6), [])
-  const lineColors = useMemo(() => new Float32Array(maxLines * 6), [])
-
-  useEffect(() => {
+  const [buffers] = useState(() => {
+    const maxLines = (NUM_NODES * (NUM_NODES - 1)) / 2
+    const pos = new Float32Array(NUM_NODES * 3)
+    const vel = new Float32Array(NUM_NODES * 3)
+    
     // Initialize nodes
     for (let i = 0; i < NUM_NODES; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * BOUNDS.x * 2
-      positions[i * 3 + 1] = (Math.random() - 0.5) * BOUNDS.y * 2
-      positions[i * 3 + 2] = (Math.random() - 0.5) * BOUNDS.z * 2
+      pos[i * 3] = (Math.random() - 0.5) * BOUNDS.x * 2
+      pos[i * 3 + 1] = (Math.random() - 0.5) * BOUNDS.y * 2
+      pos[i * 3 + 2] = (Math.random() - 0.5) * BOUNDS.z * 2
 
-      velocities[i * 3] = (Math.random() - 0.5) * 0.02
-      velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.02
-      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02
+      vel[i * 3] = (Math.random() - 0.5) * 0.02
+      vel[i * 3 + 1] = (Math.random() - 0.5) * 0.02
+      vel[i * 3 + 2] = (Math.random() - 0.5) * 0.02
     }
-  }, [positions, velocities])
+
+    return {
+      positions: pos,
+      velocities: vel,
+      linePositions: new Float32Array(maxLines * 6),
+      lineColors: new Float32Array(maxLines * 6),
+      maxLines
+    }
+  })
+
+  const { positions, velocities, linePositions, lineColors, maxLines } = buffers
 
   useFrame((state) => {
     if (!pointsRef.current || !linesRef.current || !inView) return
@@ -120,12 +127,12 @@ function NetworkParticles({ isReducedMotion, inView }: { isReducedMotion: boolea
           const dist = Math.sqrt(dSq)
           const alpha = 1.0 - dist / MAX_DISTANCE
 
-          // Line base color: Dark grey (#333333 -> 51, 51, 51)
+          // Line base color: Light grey (#e5e5e5 -> 229, 229, 229)
           // Background color: #ffffff -> 255, 255, 255
           // Faking alpha by blending with the background color
-          const rBase = 51 / 255
-          const gBase = 51 / 255
-          const bBase = 51 / 255
+          const rBase = 229 / 255
+          const gBase = 229 / 255
+          const bBase = 229 / 255
           const bg = 255 / 255
 
           const r = bg + (rBase - bg) * alpha
@@ -173,8 +180,8 @@ function NetworkParticles({ isReducedMotion, inView }: { isReducedMotion: boolea
             count={NUM_NODES}
           />
         </bufferGeometry>
-        {/* Slightly larger than lines, dark grey */}
-        <pointsMaterial size={0.06} color="#333333" sizeAttenuation transparent opacity={0.6} />
+        {/* Slightly larger than lines, very light grey */}
+        <pointsMaterial size={0.09} color="#e5e5e5" sizeAttenuation transparent opacity={0.8} />
       </points>
 
       <lineSegments ref={linesRef}>

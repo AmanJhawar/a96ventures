@@ -9,8 +9,6 @@ export type CartItem = {
   productName: string;
   sku: string;
   imageFile: string;
-  selectedSize?: string;
-  selectedPurity?: string;
   weight?: string;
   quantity: number;
 }
@@ -66,60 +64,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             const liveItem = liveItemsMap.get(item.productId)
             if (!liveItem) continue // Product was deleted
 
-            const isNoPurity = liveItem.category?.includes('Marble') || liveItem.category?.includes('Bullion')
-            const hasSizes = (liveItem.standardSizes?.length > 0 || liveItem.customSizes?.length > 0)
-            const hasPurities = !isNoPurity && (liveItem.standardPurities?.length > 0 || liveItem.customPurities?.length > 0)
-            const hasVariants = isNoPurity ? hasSizes : (hasSizes && hasPurities)
-
-            if (hasVariants) {
-              const allSizes = [...(liveItem.standardSizes || []), ...(liveItem.customSizes || [])]
-              const allPurities = isNoPurity ? [] : [...(liveItem.standardPurities || []), ...(liveItem.customPurities || [])]
-
-              if (isNoPurity) {
-                if (!item.selectedSize || !allSizes.includes(item.selectedSize)) {
-                  continue
-                }
-                const combo = item.selectedSize
-                const variantSku = liveItem.variantSkus?.[combo]
-                if (!variantSku) continue
-                reconciled.push({
-                  ...item,
-                  productName: liveItem.name,
-                  imageFile: liveItem.imageFile,
-                  sku: variantSku,
-                  weight: liveItem.variantWeights?.[combo] || liveItem.weight || ''
-                })
-              } else {
-                if (!item.selectedSize || !item.selectedPurity) continue
-
-                if (!allSizes.includes(item.selectedSize) || !allPurities.includes(item.selectedPurity)) {
-                  continue // Stale size/purity variant combo
-                }
-
-                const combo = `${item.selectedSize} | ${item.selectedPurity}`
-                const variantSku = liveItem.variantSkus?.[combo]
-                if (!variantSku) continue // Variant SKU missing/removed
-
-                reconciled.push({
-                  ...item,
-                  productName: liveItem.name,
-                  imageFile: liveItem.imageFile,
-                  sku: variantSku,
-                  weight: liveItem.variantWeights?.[combo] || liveItem.weight || ''
-                })
-              }
-            } else {
-              // If variants were disabled/deleted in DB but item in cart has selections, discard
-              if (item.selectedSize || item.selectedPurity) continue
-
-              reconciled.push({
-                ...item,
-                productName: liveItem.name,
-                imageFile: liveItem.imageFile,
-                sku: liveItem.sku,
-                weight: liveItem.weight || ''
-              })
-            }
+            reconciled.push({
+              ...item,
+              productName: liveItem.name,
+              imageFile: liveItem.imageFile,
+              sku: liveItem.sku || liveItem.id,
+              weight: liveItem.weight || ''
+            })
           }
 
           // Prevent state update loop

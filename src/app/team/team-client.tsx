@@ -45,7 +45,7 @@ export default function TeamClient() {
             {teamMembers.map((member, index) => (
               <div 
                 key={member.id} 
-                className="bg-white border border-gray-200 rounded-xl p-8 text-center transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:-translate-y-1 hover:shadow-[0_8px_32px_rgba(0,0,0,0.1)] opacity-0 animate-fade-in-up-short"
+                className="bg-white border border-gray-200 rounded-xl p-8 text-center transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:border-black/20 opacity-0 animate-fade-in-up-short"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div>
@@ -58,7 +58,7 @@ export default function TeamClient() {
                       {member.expertise.map((skill, skillIndex) => (
                         <span 
                           key={skillIndex} 
-                          className="bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-xs font-medium tracking-wide"
+                          className="text-[11px] uppercase tracking-widest text-gray-400"
                         >
                           {skill}
                         </span>

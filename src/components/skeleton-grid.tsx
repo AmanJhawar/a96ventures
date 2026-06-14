@@ -7,7 +7,7 @@ export function SkeletonGrid({ count = 6 }: { count?: number }) {
           className="bg-white border border-gray-200 rounded-xl overflow-hidden min-h-[300px] flex flex-col"
         >
           {/* Image placeholder */}
-          <div className="aspect-[3/2] bg-gray-100 animate-pulse relative overflow-hidden" />
+          <div className="aspect-[3/2] bg-[#f5f5f7] animate-pulse relative overflow-hidden" />
           
           {/* Content placeholder */}
           <div className="p-8 flex flex-col flex-1">

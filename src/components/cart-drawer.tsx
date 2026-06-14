@@ -143,10 +143,7 @@ export function CartDrawer() {
                   </div>
                   
                   <div className="flex flex-wrap gap-1 mt-1 text-xs text-gray-500">
-                    {item.selectedSize && <span>Size: {item.selectedSize}</span>}
-                    {item.selectedSize && (item.selectedPurity || item.weight) && <span>•</span>}
-                    {item.selectedPurity && <span>Purity: {item.selectedPurity}%</span>}
-                    {item.selectedPurity && item.weight && <span>•</span>}
+
                     {item.weight && (
                       <span>
                         Approx Weight: {item.weight.toLowerCase().endsWith('g') || item.weight.toLowerCase().endsWith('kg') ? item.weight : `${item.weight}g`}

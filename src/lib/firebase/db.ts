@@ -1,5 +1,5 @@
 import { db } from './config';
-import { collection, getDocs, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore/lite';
+import { collection, getDocs, doc, getDoc, addDoc, serverTimestamp, query, limit } from 'firebase/firestore/lite';
 import { CatalogItem, TeamMember, Brand, PortfolioCompany, DEFAULT_CATEGORIES } from '@/lib/types';
 
 // Helper to wrap a promise with a timeout (default 8 seconds) to prevent hanging builds
@@ -27,6 +27,20 @@ export async function getCatalogItems(): Promise<CatalogItem[]> {
   const items: CatalogItem[] = [];
   querySnapshot.forEach((docSnap) => {
     items.push({ ...docSnap.data(), id: docSnap.id } as CatalogItem);
+  });
+  return items;
+}
+
+// Fetch a limited number of catalog items (useful for "More products" sections without fetching the whole db)
+export async function getMoreCatalogItems(excludeId: string, maxItems: number = 4): Promise<CatalogItem[]> {
+  // Fetch maxItems + 1 so we can safely filter out the excludeId and still have maxItems
+  const q = query(collection(db, 'catalog'), limit(maxItems + 1));
+  const querySnapshot = await withTimeout(getDocs(q));
+  const items: CatalogItem[] = [];
+  querySnapshot.forEach((docSnap) => {
+    if (docSnap.id !== excludeId && items.length < maxItems) {
+      items.push({ ...docSnap.data(), id: docSnap.id } as CatalogItem);
+    }
   });
   return items;
 }

@@ -29,8 +29,6 @@ function ContactForm() {
       const itemsList = cartItems.map(item => {
         let text = `- [${item.sku}] ${item.quantity}x ${item.productName}`
         const opts = []
-        if (item.selectedSize) opts.push(`Size: ${item.selectedSize}`)
-        if (item.selectedPurity) opts.push(`Purity: ${item.selectedPurity}%`)
         if (item.weight) {
           const formattedWeight = item.weight.toLowerCase().endsWith('g') || item.weight.toLowerCase().endsWith('kg')
             ? item.weight
@@ -221,7 +219,7 @@ export default function Contact() {
             </div>
           </div>
 
-          <div className="bg-gray-100 p-6 md:p-10 rounded-xl">
+          <div className="bg-[#f5f5f7] p-6 md:p-10 rounded-xl">
             <Suspense fallback={<div className="h-[500px] flex items-center justify-center">Loading form...</div>}>
               <ContactForm />
             </Suspense>

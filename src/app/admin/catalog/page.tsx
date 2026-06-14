@@ -23,7 +23,26 @@ const STANDARD_STONES = [
 ]
 const STANDARD_WEIGHTS = ['10g', '20g', '50g', '100g']
 const isNoPurityCategory = (category?: string) => {
-  return category?.includes('Marble') || category?.includes('Bullion')
+  if (!category) return false
+  return category.includes('Marble') || category.includes('Bullion')
+}
+
+const getSizeMatrix = (item: Partial<InventoryItem>) => {
+  if (item.category?.includes('Marble')) return [...(item.standardStones || []), ...(item.customStones || [])]
+  if (item.category?.includes('Bullion')) return [...(item.standardWeights || []), ...(item.customWeights || [])]
+  return [...(item.standardSizes || []), ...(item.customSizes || [])]
+}
+
+const getStandardSizeMatrix = (item: Partial<InventoryItem>) => {
+  if (item.category?.includes('Marble')) return item.standardStones || []
+  if (item.category?.includes('Bullion')) return item.standardWeights || []
+  return item.standardSizes || []
+}
+
+const getCustomSizeMatrix = (item: Partial<InventoryItem>) => {
+  if (item.category?.includes('Marble')) return item.customStones || []
+  if (item.category?.includes('Bullion')) return item.customWeights || []
+  return item.customSizes || []
 }
 import { DEFAULT_CATEGORIES } from '@/lib/types'
 
@@ -33,25 +52,26 @@ interface InventoryItem {
   name: string
   category: string
   hasVariants: boolean
-  standardSizes: string[]
-  customSizes: string[]
-  standardPurities: string[]
-  customPurities: string[]
+  standardSizes?: string[]
+  customSizes?: string[]
+  standardPurities?: string[]
+  customPurities?: string[]
+  standardWeights?: string[]
+  customWeights?: string[]
+  standardStones?: string[]
+  customStones?: string[]
   weight: string
   material?: string
   additionalImages?: string[]
   description: string
   imageFile: string
-  variantSkus?: Record<string, string>
-  variantWeights?: Record<string, string>
   orderIndex?: number
 }
 
 const emptyForm: Partial<InventoryItem> = {
   id: '', sku: '', name: '', category: '', hasVariants: false,
   standardSizes: [], customSizes: [], standardPurities: [], customPurities: [],
-  variantSkus: {},
-  variantWeights: {},
+  standardWeights: [], customWeights: [], standardStones: [], customStones: [],
   weight: '', material: '', description: '', imageFile: '',
   orderIndex: 0
 }
@@ -85,7 +105,6 @@ export default function AdminInventory() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCategoryFocusedIndex(idx >= 0 ? idx : 0)
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCategoryFocusedIndex(-1)
     }
   }, [categoryOpen, formData.category, categories])
@@ -156,21 +175,9 @@ export default function AdminInventory() {
   }
 
   const handleEdit = (item: InventoryItem) => {
-    const noPurity = isNoPurityCategory(item.category)
-    const hasSizes = (item.standardSizes?.length > 0 || item.customSizes?.length > 0)
-    const hasPurities = (item.standardPurities?.length > 0 || item.customPurities?.length > 0)
-    const hasVariants = noPurity ? hasSizes : (hasSizes && hasPurities)
-    const sanitizedWeights: Record<string, string> = {}
-    if (item.variantWeights) {
-      Object.entries(item.variantWeights).forEach(([key, val]) => {
-        sanitizedWeights[key] = val.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')
-      })
-    }
     setFormData({
       ...item,
-      hasVariants,
-      variantSkus: item.variantSkus || {},
-      variantWeights: sanitizedWeights
+      orderIndex: item.orderIndex || 0
     })
     setEditingId(item.id)
     setIsFormOpen(true)
@@ -199,7 +206,8 @@ export default function AdminInventory() {
         }
       }
 
-      const { id, hasVariants: formHasVariants, ...payload } = formData
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id: _id, ...payload } = formData
 
       let totalSize = payload.imageFile ? payload.imageFile.length * 0.75 : 0
       if (payload.additionalImages) {
@@ -212,53 +220,9 @@ export default function AdminInventory() {
         return
       }
 
-      if (formHasVariants) {
-        const noPurity = isNoPurityCategory(formData.category)
-        const sizes = [...(payload.standardSizes || []), ...(payload.customSizes || [])]
-        const purities = noPurity ? [] : [...(payload.standardPurities || []), ...(payload.customPurities || [])]
-
-        if (sizes.length === 0 || (!noPurity && purities.length === 0)) {
-          alert(noPurity
-            ? `You must select at least one ${formData.category?.includes('Marble') ? 'Stone' : 'Weight'} to configure variant SKUs.`
-            : "You must select at least one Size and one Purity to configure variant SKUs."
-          )
-          return
-        }
-
-        const combos: string[] = []
-        if (noPurity) {
-          sizes.forEach(s => combos.push(s))
-          payload.standardPurities = []
-          payload.customPurities = []
-        } else {
-          sizes.forEach(s => purities.forEach(p => combos.push(`${s} | ${p}`)))
-        }
-
-        const cleanVariantSkus: Record<string, string> = {}
-        const cleanVariantWeights: Record<string, string> = {}
-
-        for (const combo of combos) {
-          if (!payload.variantSkus?.[combo] || payload.variantSkus[combo].trim() === '') {
-            alert(`Variant SKU for "${combo}" is required.`)
-            return
-          }
-          if (!payload.variantWeights?.[combo] || payload.variantWeights[combo].trim() === '') {
-            alert(`Variant Weight for "${combo}" is required.`)
-            return
-          }
-          cleanVariantSkus[combo] = payload.variantSkus[combo].trim()
-          cleanVariantWeights[combo] = payload.variantWeights[combo].trim()
-        }
-
-        payload.variantSkus = cleanVariantSkus
-        payload.variantWeights = cleanVariantWeights
-        // Clear global weight when variants are configured
-        payload.weight = ''
-      } else {
-        payload.standardSizes = []; payload.customSizes = []
+      if (!formData.hasVariants) {
+        payload.standardSizes = []; payload.customSizes = []; payload.standardWeights = []; payload.customWeights = []; payload.standardStones = []; payload.customStones = []
         payload.standardPurities = []; payload.customPurities = []
-        payload.variantSkus = {}
-        payload.variantWeights = {}
       }
 
       await setDoc(doc(db, 'catalog', docId), payload)
@@ -279,9 +243,16 @@ export default function AdminInventory() {
     }
   }
 
+  const getMatrixFields = () => {
+    if (formData.category?.includes('Marble')) return ['standardStones', 'customStones'] as const
+    if (formData.category?.includes('Bullion')) return ['standardWeights', 'customWeights'] as const
+    return ['standardSizes', 'customSizes'] as const
+  }
+
   const toggleSize = (size: string) => {
-    const current = formData.standardSizes || []
-    setFormData({ ...formData, standardSizes: current.includes(size) ? current.filter(s => s !== size) : [...current, size] })
+    const [stdKey] = getMatrixFields()
+    const current = (formData[stdKey] as string[]) || []
+    setFormData({ ...formData, [stdKey]: current.includes(size) ? current.filter(s => s !== size) : [...current, size] })
   }
 
   const togglePurity = (p: string) => {
@@ -292,20 +263,30 @@ export default function AdminInventory() {
   const addCustomSize = () => {
     const v = customSizeInput.trim()
     if (!v) return
-    const current = formData.customSizes || []
+    if (!/^\d+(\.\d+)?$/.test(v)) {
+      alert('Only numeric values are allowed for custom sizes/weights.')
+      return
+    }
+    const [, cstKey] = getMatrixFields()
+    const current = (formData[cstKey] as string[]) || []
     if (!current.includes(v)) {
-      setFormData({ ...formData, customSizes: [...current, v] })
+      setFormData({ ...formData, [cstKey]: [...current, v] })
     }
     setCustomSizeInput('')
   }
 
   const removeCustomSize = (s: string) => {
-    setFormData({ ...formData, customSizes: (formData.customSizes || []).filter(x => x !== s) })
+    const [, cstKey] = getMatrixFields()
+    setFormData({ ...formData, [cstKey]: ((formData[cstKey] as string[]) || []).filter(x => x !== s) })
   }
 
   const addCustomPurity = () => {
     const val = customPurityInput.trim()
     if (!val) return
+    if (!/^\d+(\.\d)?$/.test(val)) {
+      alert('Only numeric values with up to one decimal point are allowed for purity.')
+      return
+    }
     const newCustoms = [...(formData.customPurities || []), val]
     setFormData({ ...formData, customPurities: Array.from(new Set(newCustoms)) })
     setCustomPurityInput('')
@@ -366,10 +347,10 @@ export default function AdminInventory() {
               <div>
                 <label className="admin-label required">SKU (Internal Code)</label>
                 <input
-                  type="text" required={!formData.hasVariants} disabled={formData.hasVariants}
-                  value={formData.hasVariants ? 'Variant SKUs Configured Below' : (formData.sku || '')}
+                  type="text" required
+                  value={formData.sku || ''}
                   onChange={e => setFormData({ ...formData, sku: e.target.value })}
-                  className="admin-input disabled:bg-gray-100 disabled:text-gray-500"
+                  className="admin-input"
                   placeholder="e.g., A96-001"
                 />
               </div>
@@ -442,178 +423,108 @@ export default function AdminInventory() {
               </label>
 
               {formData.hasVariants && (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
-                    {/* ── Size Column ── */}
-                    <div className={isNoPurityCategory(formData.category) ? 'md:col-span-2' : ''}>
-                      <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">
-                        {formData.category?.includes('Marble') ? 'Available Stones' : formData.category?.includes('Bullion') ? 'Available Weights' : 'Available Sizes'}
-                      </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                  {/* ── Size Column ── */}
+                  <div className={isNoPurityCategory(formData.category) ? 'md:col-span-2' : ''}>
+                    <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">
+                      {formData.category?.includes('Marble') ? 'Available Stones' : formData.category?.includes('Bullion') ? 'Available Weights' : 'Available Sizes'}
+                    </p>
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      {(formData.category?.includes('Marble')
+                        ? STANDARD_STONES
+                        : formData.category?.includes('Bullion')
+                          ? STANDARD_WEIGHTS
+                          : STANDARD_SIZES
+                      ).map(opt => (
+                        <button
+                          key={opt} type="button"
+                          onClick={() => toggleSize(opt)}
+                          className={`admin-pill ${getStandardSizeMatrix(formData).includes(opt) ? 'admin-pill-active' : ''}`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Custom sizes already added */}
+                    {getCustomSizeMatrix(formData).length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {getCustomSizeMatrix(formData).map(s => (
+                          <span key={s} className="admin-pill admin-pill-active flex items-center gap-1.5">
+                            {s}
+                            <button type="button" onClick={() => removeCustomSize(s)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-[0.97]"><X size={12} /></button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">
+                      {formData.category?.includes('Marble') ? 'Custom Stone' : formData.category?.includes('Bullion') ? 'Custom Weight' : 'Custom Size'}
+                    </p>
+                    <div className="flex items-end gap-3 max-w-sm">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={customSizeInput}
+                          onChange={e => setCustomSizeInput(formData.category?.includes('Marble') ? e.target.value : numericFilter(e.target.value))}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSize() } }}
+                          className="admin-input-underline"
+                          placeholder={formData.category?.includes('Marble') ? "e.g., Rose Quartz" : formData.category?.includes('Bullion') ? "e.g., 100" : "e.g., 20"}
+                        />
+                      </div>
+                      <button type="button" onClick={addCustomSize} className="admin-btn-outline">
+                        ADD
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ── Purity Column ── */}
+                  {!isNoPurityCategory(formData.category) && (
+                    <div>
+                      <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">Available Purities</p>
                       <div className="flex flex-wrap gap-2 mb-6">
-                        {(formData.category?.includes('Marble')
-                          ? STANDARD_STONES
-                          : formData.category?.includes('Bullion')
-                            ? STANDARD_WEIGHTS
-                            : STANDARD_SIZES
-                        ).map(opt => (
+                        {STANDARD_PURITIES.map(p => (
                           <button
-                            key={opt} type="button"
-                            onClick={() => toggleSize(opt)}
-                            className={`admin-pill ${(formData.standardSizes || []).includes(opt) ? 'admin-pill-active' : ''}`}
+                            key={p} type="button"
+                            onClick={() => togglePurity(p)}
+                            className={`admin-pill ${(formData.standardPurities || []).includes(p) ? 'admin-pill-active' : ''}`}
                           >
-                            {opt}
+                            {p}
                           </button>
                         ))}
                       </div>
 
-                      {/* Custom sizes already added */}
-                      {(formData.customSizes || []).length > 0 && (
+                      {/* Custom purities already added */}
+                      {(formData.customPurities || []).length > 0 && (
                         <div className="flex flex-wrap gap-2 mb-4">
-                          {(formData.customSizes || []).map(s => (
-                            <span key={s} className="admin-pill admin-pill-active flex items-center gap-1.5">
-                              {s}
-                              <button type="button" onClick={() => removeCustomSize(s)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-[0.97]"><X size={12} /></button>
+                          {(formData.customPurities || []).map(p => (
+                            <span key={p} className="admin-pill admin-pill-active flex items-center gap-1.5">
+                              {p}
+                              <button type="button" onClick={() => removeCustomPurity(p)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-[0.97]"><X size={12} /></button>
                             </span>
                           ))}
                         </div>
                       )}
 
-                      <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">
-                        {formData.category?.includes('Marble') ? 'Custom Stone' : formData.category?.includes('Bullion') ? 'Custom Weight' : 'Custom Size'}
-                      </p>
-                      <div className="flex items-end gap-3 max-w-sm">
+                      <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">Custom Purity</p>
+                      <div className="flex items-end gap-3">
                         <div className="flex-1 relative">
                           <input
                             type="text"
-                            value={customSizeInput}
-                            onChange={e => setCustomSizeInput(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSize() } }}
+                            value={customPurityInput}
+                            onChange={e => setCustomPurityInput(numericFilter(e.target.value))}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomPurity() } }}
                             className="admin-input-underline"
-                            placeholder={formData.category?.includes('Marble') ? "e.g., Rose Quartz" : formData.category?.includes('Bullion') ? "e.g., 100" : "e.g., 20"}
+                            placeholder="e.g., 99.9"
                           />
                         </div>
-                        <button type="button" onClick={addCustomSize} className="admin-btn-outline">
+                        <button type="button" onClick={addCustomPurity} className="admin-btn-outline">
                           ADD
                         </button>
                       </div>
                     </div>
-
-                    {/* ── Purity Column ── */}
-                    {!isNoPurityCategory(formData.category) && (
-                      <div>
-                        <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">Available Purities</p>
-                        <div className="flex flex-wrap gap-2 mb-6">
-                          {STANDARD_PURITIES.map(p => (
-                            <button
-                              key={p} type="button"
-                              onClick={() => togglePurity(p)}
-                              className={`admin-pill ${(formData.standardPurities || []).includes(p) ? 'admin-pill-active' : ''}`}
-                            >
-                              {p}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Custom purities already added */}
-                        {(formData.customPurities || []).length > 0 && (
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {(formData.customPurities || []).map(p => (
-                              <span key={p} className="admin-pill admin-pill-active flex items-center gap-1.5">
-                                {p}
-                                <button type="button" onClick={() => removeCustomPurity(p)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-[0.97]"><X size={12} /></button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">Custom Purity</p>
-                        <div className="flex items-end gap-3">
-                          <div className="flex-1 relative">
-                            <input
-                              type="text"
-                              value={customPurityInput}
-                              onChange={e => setCustomPurityInput(numericFilter(e.target.value))}
-                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomPurity() } }}
-                              className="admin-input-underline"
-                              placeholder="e.g., 99.9"
-                            />
-                          </div>
-                          <button type="button" onClick={addCustomPurity} className="admin-btn-outline">
-                            ADD
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Variant SKUs Matrix */}
-                  {(() => {
-                    const noPurity = isNoPurityCategory(formData.category)
-                    const sizes = [...(formData.standardSizes || []), ...(formData.customSizes || [])]
-                    const purities = noPurity ? [] : [...(formData.standardPurities || []), ...(formData.customPurities || [])]
-                    const combos: string[] = []
-                    if (sizes.length > 0 && (noPurity || purities.length > 0)) {
-                      if (noPurity) {
-                        sizes.forEach(s => combos.push(s))
-                      } else {
-                        sizes.forEach(s => purities.forEach(p => combos.push(`${s} | ${p}`)))
-                      }
-                    }
-
-                    if (combos.length === 0) return (
-                      <div className="mt-8 pt-6 border-t border-gray-200">
-                        <p className="text-sm text-gray-500 italic">
-                          {noPurity
-                            ? `Select at least one ${formData.category?.includes('Marble') ? 'Stone' : 'Weight'} to configure variant SKUs and weights.`
-                            : 'Select at least one Size and one Purity to configure variant SKUs and weights.'}
-                        </p>
-                      </div>
-                    )
-
-                    return (
-                      <div className="mt-8 pt-6 border-t border-gray-200">
-                        <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">Variant SKUs & Approx Weights</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {combos.map(combo => (
-                            <div key={combo} className="p-4 bg-white rounded-xl border border-gray-200 space-y-3">
-                              <span className="text-xs font-semibold text-black uppercase tracking-wider block">{combo}</span>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">SKU</label>
-                                  <input
-                                    type="text"
-                                    value={formData.variantSkus?.[combo] || ''}
-                                    onChange={(e) => setFormData({
-                                      ...formData,
-                                      variantSkus: { ...(formData.variantSkus || {}), [combo]: e.target.value }
-                                    })}
-                                    className="admin-input text-sm py-2"
-                                    placeholder="SKU"
-                                    required
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Approx Weight</label>
-                                  <input
-                                    type="text"
-                                    value={formData.variantWeights?.[combo] || ''}
-                                    onChange={(e) => setFormData({
-                                      ...formData,
-                                      variantWeights: { ...(formData.variantWeights || {}), [combo]: numericFilter(e.target.value) }
-                                    })}
-                                    className="admin-input text-sm py-2"
-                                    placeholder="e.g., 50"
-                                    required
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })()}
-                </>
+                  )}
+                </div>
               )}
             </div>
 
@@ -736,7 +647,7 @@ export default function AdminInventory() {
                     i.category.toLowerCase().includes(searchQuery.toLowerCase())
                   )
                   .map((item) => {
-                    const allSizes = [...(item.standardSizes || []), ...(item.customSizes || [])]
+                    const allSizes = getSizeMatrix(item)
                     const allPurities = [...(item.standardPurities || []), ...(item.customPurities || [])]
                     return (
                       <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50/50">

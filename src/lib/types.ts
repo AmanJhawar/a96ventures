@@ -4,16 +4,18 @@ export interface CatalogItem {
   name: string;
   category: string;
   description: string;
-  standardSizes: string[];
-  customSizes: string[];
-  standardPurities: string[];
-  customPurities: string[];
+  standardSizes?: string[];
+  customSizes?: string[];
+  standardPurities?: string[];
+  customPurities?: string[];
+  standardWeights?: string[];
+  customWeights?: string[];
+  standardStones?: string[];
+  customStones?: string[];
   weight: string;
   material?: string;
   imageFile: string;
   additionalImages?: string[];
-  variantSkus?: Record<string, string>;
-  variantWeights?: Record<string, string>;
   orderIndex?: number;
 }
 

@@ -11,7 +11,7 @@ const NetworkScene = dynamic(() => import('./NetworkScene'), {
 })
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
-  constructor(props: any) {
+  constructor(props: { children: React.ReactNode; fallback: React.ReactNode }) {
     super(props)
     this.state = { hasError: false }
   }
@@ -20,7 +20,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode; fallbac
     return { hasError: true }
   }
 
-  componentDidCatch(error: any, errorInfo: any) {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("ErrorBoundary caught WebGL/Canvas error inside NetworkHero:", error, errorInfo)
   }
 
@@ -77,7 +77,7 @@ export default function NetworkHero() {
       <div className="relative z-10 flex flex-col items-center justify-center pointer-events-none text-center px-6 max-w-5xl mx-auto pt-10">
 
         {/* Main Title */}
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-normal text-black mb-24 animate-clip-reveal drop-shadow-sm">
+        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-normal text-black mb-24 animate-clip-reveal">
           We partner with <span className="relative inline-block after:absolute after:bottom-1 after:left-0 after:right-0 after:h-0.5 after:bg-black after:animate-underline-grow" style={{ animationDelay: '0.8s' }}>visionaries</span> &nbsp;to build tomorrow&apos;s defining companies.
         </h1>
 
