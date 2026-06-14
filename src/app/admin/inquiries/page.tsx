@@ -267,7 +267,7 @@ export default function AdminInquiries() {
           </div>
           
           {hasMore && inquiries.length > 0 && (
-            <div className="p-4 border-t border-gray-100 flex justify-center bg-gray-50/50">
+            <div className="p-4 flex justify-center bg-gray-50/50">
               <button 
                 onClick={loadMore}
                 disabled={loadingMore}

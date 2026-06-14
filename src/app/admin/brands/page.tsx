@@ -84,22 +84,24 @@ export default function AdminBrands() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
-            <Bookmark size={28} />
-            Brands Manager
-          </h1>
-          <p className="text-gray-500">Add or remove portfolio brands.</p>
+      {!isFormOpen && (
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
+              <Bookmark size={28} />
+              Brands Manager
+            </h1>
+            <p className="text-gray-500">Add or remove portfolio brands.</p>
+          </div>
+          <button 
+            onClick={() => setIsFormOpen(true)}
+            className="admin-btn-primary flex items-center gap-2"
+          >
+            <Plus size={18} className="transition-transform" />
+            Add Brand
+          </button>
         </div>
-        <button 
-          onClick={() => isFormOpen ? handleCancel() : setIsFormOpen(true)}
-          className="admin-btn-primary flex items-center gap-2"
-        >
-          <Plus size={18} className={isFormOpen ? "rotate-45 transition-transform" : "transition-transform"} />
-          {isFormOpen ? 'Cancel' : 'Add Brand'}
-        </button>
-      </div>
+      )}
 
       {isFormOpen && (
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
@@ -112,6 +114,7 @@ export default function AdminBrands() {
                   type="text" required
                   value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
                   className="admin-input"
+                  placeholder="e.g., Acme Corp"
                 />
               </div>
               <div>
@@ -120,6 +123,7 @@ export default function AdminBrands() {
                   type="text" required
                   value={formData.sector} onChange={e => setFormData({...formData, sector: e.target.value})}
                   className="admin-input"
+                  placeholder="e.g., Technology"
                 />
               </div>
             </div>
@@ -138,22 +142,29 @@ export default function AdminBrands() {
                 required rows={3}
                 value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})}
                 className="admin-input resize-none"
+                placeholder="Enter brand background and portfolio details..."
               />
             </div>
 
-            <button type="submit" className="admin-btn-primary">
-              {editingId ? 'Update Brand' : 'Save Brand'}
-            </button>
+            <div className="flex justify-end gap-4 mt-12">
+              <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
+                Cancel
+              </button>
+              <button type="submit" className="admin-btn-primary px-8">
+                {editingId ? 'Update Brand' : 'Save Brand'}
+              </button>
+            </div>
           </form>
         </div>
       )}
 
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+      {!isFormOpen && (
+        loading ? (
+          <div className="flex justify-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[600px]">
               <thead>
@@ -210,6 +221,7 @@ export default function AdminBrands() {
             </table>
           </div>
         </div>
+        )
       )}
       
       <ConfirmModal

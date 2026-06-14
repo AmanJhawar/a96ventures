@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 export default function About() {
   return (
     <div className="pt-10 pb-20 min-h-[calc(100vh-160px)]">
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="max-w-8xl mx-auto px-6">
         <div className="text-center mb-20">
           <h1 className="text-4xl md:text-5xl font-bold leading-tight tracking-tight text-black mb-6">
             About

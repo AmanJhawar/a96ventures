@@ -133,7 +133,7 @@ export default function AdminCategories() {
         </div>
       </div>
 
-      <div className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200 shadow-sm max-w-2xl">
+      <div className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200 shadow-sm w-full">
         <form onSubmit={handleAddCategory} className="flex gap-4 mb-8">
           <input
             type="text"
@@ -142,7 +142,7 @@ export default function AdminCategories() {
             placeholder="New Category Name..."
             className="admin-input flex-1"
           />
-          <button type="submit" className="admin-btn-primary whitespace-nowrap px-8">
+          <button type="submit" disabled={!newCategoryInput.trim()} className="admin-btn-primary whitespace-nowrap px-8 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100">
             Add Category
           </button>
         </form>

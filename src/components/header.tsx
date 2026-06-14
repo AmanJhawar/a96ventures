@@ -92,7 +92,7 @@ export default function Header() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="max-w-8xl mx-auto px-6">
         <div className="flex justify-center items-center h-20 relative">
           
           {/* Desktop Navigation - Left */}
@@ -118,7 +118,7 @@ export default function Header() {
                 <button 
                   onClick={() => setIsCartOpen(true)}
                   className="relative p-2 hover:bg-gray-100 rounded-full transition-colors active:scale-[0.97]"
-                  aria-label="Open enquiry"
+                  aria-label="Open inquiry"
                 >
                   <ShoppingBag size={20} strokeWidth={1.5} />
                   {isInitialized && totalItems > 0 && (
@@ -138,7 +138,7 @@ export default function Header() {
                 <button 
                   className="p-2 relative flex items-center justify-center transition-transform active:scale-[0.97]"
                   onClick={() => setIsCartOpen(true)}
-                  aria-label="Open enquiry"
+                  aria-label="Open inquiry"
                 >
                   <ShoppingBag size={20} strokeWidth={1.5} />
                   {isInitialized && totalItems > 0 && (

@@ -200,7 +200,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
           disabled={!canAddToCart}
           className="w-full sm:w-auto px-8 py-4 bg-black text-white rounded-lg font-semibold text-sm hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2"
         >
-          {canAddToCart ? 'Add to Enquiry' : 'Please select options'}
+          {canAddToCart ? 'Add to Inquiry' : 'Please select options'}
         </button>
       </div>
     </div>

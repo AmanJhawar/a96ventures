@@ -96,7 +96,7 @@ export function CartDrawer() {
             ref={drawerRef}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="enquiry-drawer-title"
+            aria-labelledby="inquiry-drawer-title"
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
@@ -104,7 +104,7 @@ export function CartDrawer() {
             className="fixed top-0 right-0 h-full w-[400px] max-w-[100vw] bg-white z-[70] shadow-2xl flex flex-col"
           >
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h2 id="enquiry-drawer-title" className="text-xl font-bold tracking-tight">Your Enquiry</h2>
+              <h2 id="inquiry-drawer-title" className="text-xl font-bold tracking-tight">Your Inquiry</h2>
               <button 
                 onClick={() => setIsCartOpen(false)}
                 className="p-2 hover:bg-gray-100 rounded-full transition-[background-color,transform] active:scale-[0.97]"
@@ -116,7 +116,7 @@ export function CartDrawer() {
             <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
               {cartItems.length === 0 ? (
                 <EmptyState 
-                  title="Your enquiry is empty."
+                  title="Your inquiry is empty."
                   icon={<ShoppingBag size={32} strokeWidth={1} />}
                   action={
                     <button 
@@ -190,7 +190,7 @@ export function CartDrawer() {
             </div>
 
             {cartItems.length > 0 && (
-              <div className="p-6 border-t border-gray-100 bg-white">
+              <div className="p-6 bg-white">
                 <Link 
                   href="/contact?fromCart=true"
                   onClick={() => setIsCartOpen(false)}

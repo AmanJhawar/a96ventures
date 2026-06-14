@@ -85,22 +85,24 @@ export default function AdminTeam() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
-            <Users size={28} />
-            Team Manager
-          </h1>
-          <p className="text-gray-500">Add, edit or remove team members from the public site.</p>
+      {!isFormOpen && (
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
+              <Users size={28} />
+              Team Manager
+            </h1>
+            <p className="text-gray-500">Add, edit or remove team members from the public site.</p>
+          </div>
+          <button 
+            onClick={() => setIsFormOpen(true)}
+            className="admin-btn-primary flex items-center gap-2"
+          >
+            <Plus size={18} className="transition-transform" />
+            Add Member
+          </button>
         </div>
-        <button 
-          onClick={() => isFormOpen ? handleCancel() : setIsFormOpen(true)}
-          className="admin-btn-primary flex items-center gap-2"
-        >
-          <Plus size={18} className={isFormOpen ? "rotate-45 transition-transform" : "transition-transform"} />
-          {isFormOpen ? 'Cancel' : 'Add Member'}
-        </button>
-      </div>
+      )}
 
       {isFormOpen && (
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
@@ -113,6 +115,7 @@ export default function AdminTeam() {
                   type="text" required
                   value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
                   className="admin-input"
+                  placeholder="e.g., Jane Doe"
                 />
               </div>
               <div>
@@ -121,6 +124,7 @@ export default function AdminTeam() {
                   type="text" required
                   value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})}
                   className="admin-input"
+                  placeholder="e.g., Chief Executive Officer"
                 />
               </div>
             </div>
@@ -139,6 +143,7 @@ export default function AdminTeam() {
                   type="url" 
                   value={formData.linkedin || ''} onChange={e => setFormData({...formData, linkedin: e.target.value})}
                   className="admin-input"
+                  placeholder="https://linkedin.com/in/username"
                 />
               </div>
             </div>
@@ -159,22 +164,29 @@ export default function AdminTeam() {
                 required rows={3}
                 value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})}
                 className="admin-input resize-none"
+                placeholder="Short biography highlighting achievements and experience..."
               />
             </div>
 
-            <button type="submit" className="admin-btn-primary">
-              {editingId ? 'Update Member' : 'Save Member'}
-            </button>
+            <div className="flex justify-end gap-4 mt-12">
+              <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
+                Cancel
+              </button>
+              <button type="submit" className="admin-btn-primary px-8">
+                {editingId ? 'Update Member' : 'Save Member'}
+              </button>
+            </div>
           </form>
         </div>
       )}
 
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+      {!isFormOpen && (
+        loading ? (
+          <div className="flex justify-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[600px]">
               <thead>
@@ -231,6 +243,7 @@ export default function AdminTeam() {
             </table>
           </div>
         </div>
+        )
       )}
 
       <ConfirmModal

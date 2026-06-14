@@ -47,7 +47,7 @@ export default async function PortfolioDetail({
 
   return (
     <div className="pt-10 pb-20 min-h-[calc(100vh-160px)]">
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="max-w-8xl mx-auto px-6">
         <Link 
           href="/portfolio" 
           className="inline-block mb-12 text-sm text-gray-500 no-underline transition-colors duration-200 ease-[var(--ease-out)] hover:text-black"

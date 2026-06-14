@@ -4,6 +4,8 @@ import { getCatalogItems, getCatalogItemById, getMoreCatalogItems } from '@/lib/
 import { AddToCartSection } from './add-to-cart-section'
 import { ProductCarousel } from './product-carousel'
 import { ProductCard } from '@/components/product-card'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 
 export async function generateStaticParams() {
   try {
@@ -79,8 +81,16 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="max-w-8xl mx-auto px-6">
         
+        <Link 
+          href="/catalog" 
+          className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-black mb-8 transition-colors duration-200 group opacity-0 animate-fade-in-up-short"
+        >
+          <ArrowLeft size={16} className="transition-transform duration-200 group-hover:-translate-x-1" />
+          Back to Catalog
+        </Link>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-start relative">
           {/* Image Gallery Area (Left, wider) */}
           <div className="lg:col-span-7 xl:col-span-8 opacity-0 animate-fade-in-up-short lg:sticky lg:top-28 lg:h-fit z-10 pb-10">
@@ -147,7 +157,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
         {/* More Products Section */}
         {moreProducts.length > 0 && (
-          <div className="mt-32 pt-16 border-t border-gray-100">
+          <div className="mt-32 pt-16">
             <h2 className="text-2xl font-bold tracking-tight text-black mb-10 text-center">More from our catalog</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {moreProducts.map((p, index) => (

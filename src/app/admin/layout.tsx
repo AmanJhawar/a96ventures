@@ -52,7 +52,7 @@ function SidebarContent({ setIsMobileMenuOpen }: { setIsMobileMenuOpen: (v: bool
         })}
       </nav>
 
-      <div className="p-4 border-t border-gray-100 mt-auto">
+      <div className="p-4 mt-auto">
         <button
           onClick={() => {
             signOut(auth)

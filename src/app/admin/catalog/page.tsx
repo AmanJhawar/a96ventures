@@ -92,7 +92,6 @@ export default function AdminInventory() {
   const [formData, setFormData] = useState<Partial<InventoryItem>>({ ...emptyForm })
   const [customSizeInput, setCustomSizeInput] = useState('')
   const [customPurityInput, setCustomPurityInput] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [categoryFocusedIndex, setCategoryFocusedIndex] = useState(-1)
   const categoryRef = useRef<HTMLDivElement>(null)
@@ -308,31 +307,26 @@ export default function AdminInventory() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
-            <Box size={28} />
-            Catalog Manager
-          </h1>
-          <p className="text-gray-500">Manage catalog products, sizes and purity variants.</p>
+      {!isFormOpen && (
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
+              <Box size={28} />
+              Catalog Manager
+            </h1>
+            <p className="text-gray-500">Manage catalog products, sizes and purity variants.</p>
+          </div>
+          <div className="flex items-center gap-4 w-full sm:w-auto">
+            <button
+              onClick={() => setIsFormOpen(true)}
+              className="admin-btn-primary flex items-center gap-2 whitespace-nowrap"
+            >
+              <Plus size={18} className="transition-transform" />
+              Add Product
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-4 w-full sm:w-auto">
-          <input
-            type="text"
-            placeholder="Search products..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="admin-input flex-1 sm:w-64"
-          />
-          <button
-            onClick={() => isFormOpen ? handleCancel() : setIsFormOpen(true)}
-            className="admin-btn-primary flex items-center gap-2 whitespace-nowrap"
-          >
-            <Plus size={18} className={isFormOpen ? "rotate-45 transition-transform" : "transition-transform"} />
-            {isFormOpen ? 'Cancel' : 'Add Product'}
-          </button>
-        </div>
-      </div>
+      )}
 
       {isFormOpen && (
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
@@ -371,6 +365,7 @@ export default function AdminInventory() {
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   className="admin-input"
+                  placeholder="e.g., Elegance Marble Vase"
                 />
               </div>
               <div>
@@ -415,21 +410,25 @@ export default function AdminInventory() {
             </div>
 
             {/* ─── Variant Configuration ─── */}
-            <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
-              <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-5">Inventory Configuration</p>
-
-              <label className="admin-checkbox mb-6">
-                <input
-                  type="checkbox"
-                  checked={formData.hasVariants || false}
-                  onChange={e => setFormData({ ...formData, hasVariants: e.target.checked })}
-                />
-                <span className="admin-checkbox-box" />
-                <span className="text-sm font-medium text-gray-900 tracking-wide uppercase">Product Has Variants</span>
-              </label>
+            <div className="border border-gray-200 rounded-xl overflow-hidden transition-all duration-300">
+              <div className={`p-5 flex items-center justify-between transition-colors duration-200 ${formData.hasVariants ? 'border-b border-gray-100 bg-gray-50/50' : ''}`}>
+                <div>
+                  <h3 className="text-sm font-semibold text-black">Inventory Variants</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Configure sizes, purities, or specific stones/weights.</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={formData.hasVariants}
+                  onClick={() => setFormData({ ...formData, hasVariants: !formData.hasVariants })}
+                  className={`relative inline-flex h-[22px] w-[42px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out ${formData.hasVariants ? 'bg-black' : 'bg-gray-200'}`}
+                >
+                  <span className={`pointer-events-none inline-block h-[18px] w-[18px] transform rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ease-in-out ${formData.hasVariants ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
+                </button>
+              </div>
 
               {formData.hasVariants && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8 bg-white">
                   {/* ── Size Column ── */}
                   <div className={isNoPurityCategory(formData.category) ? 'md:col-span-2' : ''}>
                     <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">
@@ -576,83 +575,86 @@ export default function AdminInventory() {
                 value={formData.description}
                 onChange={e => setFormData({ ...formData, description: e.target.value })}
                 className="admin-input resize-none"
+                placeholder="Enter detailed product description, materials used, and care instructions..."
               />
             </div>
 
             {/* Images */}
-            <div>
-              <label className="admin-label required">Thumbnail Image (Portrait 2:3)</label>
-              <ImageDropzone
-                value={formData.imageFile || ''}
-                onChange={(url) => setFormData({ ...formData, imageFile: url })}
-              />
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="admin-label required">Thumbnail Image (Portrait 2:3)</label>
+                <ImageDropzone
+                  value={formData.imageFile || ''}
+                  onChange={(url) => setFormData({ ...formData, imageFile: url })}
+                />
+              </div>
 
-            <div>
-              <label className="admin-label">Product Images (Landscape 3:2)</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {(formData.additionalImages || []).map((img, idx) => (
-                  <ImageDropzone
-                    key={idx}
-                    value={img}
-                    onChange={(url) => {
-                      const newImages = [...(formData.additionalImages || [])]
-                      if (url) {
-                        newImages[idx] = url
-                      } else {
-                        newImages.splice(idx, 1)
-                      }
-                      setFormData({ ...formData, additionalImages: newImages })
-                    }}
-                  />
-                ))}
-                {(formData.additionalImages || []).length < 4 && (
-                  <ImageDropzone
-                    value=""
-                    onChange={(url) => {
-                      if (url) {
-                        setFormData({ ...formData, additionalImages: [...(formData.additionalImages || []), url] })
-                      }
-                    }}
-                  />
-                )}
+              <div>
+                <label className="admin-label">Product Images (Landscape 3:2)</label>
+                <div className="grid grid-cols-2 gap-4">
+                  {(formData.additionalImages || []).map((img, idx) => (
+                    <ImageDropzone
+                      key={idx}
+                      value={img}
+                      onChange={(url) => {
+                        const newImages = [...(formData.additionalImages || [])]
+                        if (url) {
+                          newImages[idx] = url
+                        } else {
+                          newImages.splice(idx, 1)
+                        }
+                        setFormData({ ...formData, additionalImages: newImages })
+                      }}
+                    />
+                  ))}
+                  {(formData.additionalImages || []).length < 4 && (
+                    <ImageDropzone
+                      value=""
+                      onChange={(url) => {
+                        if (url) {
+                          setFormData({ ...formData, additionalImages: [...(formData.additionalImages || []), url] })
+                        }
+                      }}
+                    />
+                  )}
+                </div>
               </div>
             </div>
 
-            <button type="submit" className="admin-btn-primary">
-              {editingId ? 'Update Product' : 'Save Product'}
-            </button>
+            <div className="flex justify-end gap-4 mt-12">
+              <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
+                Cancel
+              </button>
+              <button type="submit" className="admin-btn-primary px-8">
+                {editingId ? 'Update Product' : 'Save Product'}
+              </button>
+            </div>
           </form>
         </div>
       )}
 
       {/* ─── Table ─── */}
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[900px]">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Image</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Product / SKU</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600 whitespace-nowrap">Category</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Sizes</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Purities</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items
-                  .filter(i =>
-                    i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    i.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    i.category.toLowerCase().includes(searchQuery.toLowerCase())
-                  )
-                  .map((item) => {
+      {!isFormOpen && (
+        loading ? (
+          <div className="flex justify-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[900px]">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Image</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Product / SKU</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600 whitespace-nowrap">Category</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Sizes</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Purities</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => {
                     const allSizes = getSizeMatrix(item)
                     const allPurities = [...(item.standardPurities || []), ...(item.customPurities || [])]
                     return (
@@ -701,15 +703,16 @@ export default function AdminInventory() {
                       </tr>
                     )
                   })}
-                {items.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No products found.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  {items.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No products found.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )
       )}
 
       <ConfirmModal

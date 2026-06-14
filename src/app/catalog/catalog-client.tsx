@@ -105,7 +105,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6">
+    <div className="max-w-8xl mx-auto px-6">
       {/* Filters & Sorting Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 pb-2">
         {/* Category Filter Pills */}
