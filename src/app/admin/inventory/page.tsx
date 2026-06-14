@@ -214,14 +214,14 @@ export default function AdminInventory() {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id: _id, ...payload } = formData
 
-      let totalSize = payload.imageFile ? payload.imageFile.length * 0.75 : 0
+      let totalSize = payload.imageFile ? payload.imageFile.length : 0
       if (payload.additionalImages) {
         payload.additionalImages.forEach(img => {
-          totalSize += img.length * 0.75
+          totalSize += img.length
         })
       }
-      if (totalSize > 1000000) {
-        alert("Total image size exceeds the 1MB Firestore limit. Please remove or compress images before saving.")
+      if (totalSize > 900000) {
+        alert("Total image size exceeds the Firestore limit. Please remove or compress images before saving.")
         return
       }
 
@@ -662,9 +662,9 @@ export default function AdminInventory() {
                         <td className="px-6 py-4">
                           {item.imageFile ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={item.imageFile.startsWith('data:') || item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`} alt="Product" className="w-12 h-12 object-cover rounded-md bg-gray-100" />
+                            <img src={item.imageFile.startsWith('data:') || item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`} alt="Product" className="w-12 h-12 object-cover rounded-md bg-[#f5f5f7]" />
                           ) : (
-                            <div className="w-12 h-12 bg-gray-100 rounded-md flex items-center justify-center">
+                            <div className="w-12 h-12 bg-[#f5f5f7] rounded-md flex items-center justify-center">
                               <Box size={20} className="text-gray-400" />
                             </div>
                           )}

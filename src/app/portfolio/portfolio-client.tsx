@@ -6,6 +6,7 @@ import { getPortfolioCompanies } from '@/lib/firebase/db'
 import { PortfolioCompany } from '@/lib/types'
 import { SkeletonGrid } from '@/components/skeleton-grid'
 import { EmptyState } from '@/components/empty-state'
+import { StaggerContainer, FadeInUp } from '@/components/motion-transitions'
 
 export default function PortfolioClient() {
   const [portfolio, setPortfolio] = useState<(PortfolioCompany & {id: string})[]>([])
@@ -42,31 +43,31 @@ export default function PortfolioClient() {
         ) : portfolio.length === 0 ? (
           <EmptyState title="No portfolio companies found." />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
+          <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
             {portfolio.map((company, index) => (
-              <Link 
+              <FadeInUp 
                 key={company.id} 
-                href={`/portfolio/${company.id}`} 
-                className="block group opacity-0 animate-fade-in-up-short"
-                style={{ animationDelay: `${index * 50}ms` }}
+                className="block group"
               >
-                <div className="h-full bg-white border border-gray-200 rounded-xl p-8 transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] group-hover:-translate-y-0.5 group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] group-hover:border-black/20 active:scale-[0.97]">
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-2xl font-semibold text-black">{company.name}</h3>
-                    <span className="text-[11px] uppercase tracking-widest text-gray-400">
-                      {company.stage}
-                    </span>
+                <Link href={`/portfolio/${company.id}`}>
+                  <div className="h-full bg-white border border-gray-200 rounded-xl p-8 transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] group-hover:-translate-y-0.5 group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] group-hover:border-black/20 active:scale-[0.97]">
+                    <div className="flex justify-between items-start mb-4">
+                      <h3 className="text-2xl font-semibold text-black">{company.name}</h3>
+                      <span className="text-[11px] uppercase tracking-widest text-gray-400">
+                        {company.stage}
+                      </span>
+                    </div>
+                    <div className="text-sm font-medium text-black mb-4 tracking-wide">
+                      {company.sector}
+                    </div>
+                    <p className="text-gray-500 leading-relaxed m-0">
+                      {company.description}
+                    </p>
                   </div>
-                  <div className="text-sm font-medium text-black mb-4 tracking-wide">
-                    {company.sector}
-                  </div>
-                  <p className="text-gray-500 leading-relaxed m-0">
-                    {company.description}
-                  </p>
-                </div>
-              </Link>
+                </Link>
+              </FadeInUp>
             ))}
-          </div>
+          </StaggerContainer>
         )}
       </div>
     </div>

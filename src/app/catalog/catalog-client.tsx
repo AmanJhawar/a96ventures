@@ -189,7 +189,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
         >
           {paginatedItems.map((item, index) => (
-            <ProductCard key={item.id} item={item} index={index} showVariants={true} />
+            <ProductCard key={item.id} item={item} showVariants={true} />
           ))}
         </StaggerContainer>
       )}

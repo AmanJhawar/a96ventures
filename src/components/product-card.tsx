@@ -5,11 +5,10 @@ import type { CatalogItem } from '@/lib/types'
 
 interface ProductCardProps {
   item: CatalogItem
-  index?: number
   showVariants?: boolean
 }
 
-export function ProductCard({ item, index = 0, showVariants = false }: ProductCardProps) {
+export function ProductCard({ item, showVariants = false }: ProductCardProps) {
   return (
     <FadeInUp className="h-full flex">
       <Link 
@@ -17,19 +16,19 @@ export function ProductCard({ item, index = 0, showVariants = false }: ProductCa
         className="flex flex-col w-full border border-gray-200 rounded-xl overflow-hidden bg-white group transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 active:scale-[0.97]"
       >
         <div className="aspect-[2/3] bg-[#f5f5f7] relative overflow-hidden">
-        <div className="w-full h-full relative flex items-center justify-center text-gray-400 text-sm">
-          {item.imageFile ? (
-            <ProtectedImage 
-              src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
-              alt={item.name}
-              className="w-full h-full object-cover"
-              containerClassName="w-full h-full transition-transform duration-700 ease-[var(--ease-out)] group-hover:scale-[1.04]"
-            />
-          ) : (
-            <span>No image</span>
-          )}
+          <div className="w-full h-full relative flex items-center justify-center text-gray-400 text-sm">
+            {item.imageFile ? (
+              <ProtectedImage 
+                src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
+                alt={item.name}
+                className="w-full h-full object-cover"
+                containerClassName="w-full h-full transition-transform duration-700 ease-[var(--ease-out)] group-hover:scale-[1.04]"
+              />
+            ) : (
+              <span>No image</span>
+            )}
+          </div>
         </div>
-      </div>
       <div className="p-6 flex flex-col flex-1">
         <div className="flex flex-col items-start mb-2">
           <h2 className="text-sm font-semibold text-black tracking-wide uppercase line-clamp-2">{item.name}</h2>

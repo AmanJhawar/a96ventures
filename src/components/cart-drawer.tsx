@@ -130,12 +130,12 @@ export function CartDrawer() {
               ) : (
                 cartItems.map((item) => (
                   <div key={item.cartId} className="flex gap-4">
-                    <div className="w-24 h-24 bg-gray-50 rounded-xl relative overflow-hidden flex-shrink-0 border border-gray-100">
+                    <div className="w-16 h-24 bg-[#f5f5f7] rounded-xl relative overflow-hidden flex-shrink-0 border border-gray-100">
                       <ProtectedImage 
                         src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
                         alt={item.productName}
                         className="w-full h-full object-cover"
-                        containerClassName="absolute inset-0 flex items-center justify-center"
+                        containerClassName="absolute inset-0"
                       />
                     </div>
                     <div className="flex-1 flex flex-col">
@@ -166,7 +166,7 @@ export function CartDrawer() {
                       </div>
 
                       <div className="mt-auto flex items-center gap-4">
-                        <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-1 border border-gray-200">
+                        <div className="flex items-center gap-3 bg-[#f5f5f7] rounded-lg px-3 py-1 border border-gray-200">
                           <button 
                             onClick={() => updateQuantity(item.cartId, -1)}
                             className="text-gray-500 hover:text-black transition-colors disabled:opacity-50 active:scale-[0.97]"

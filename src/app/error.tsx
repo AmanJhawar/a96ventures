@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
+import { StaggerContainer, FadeInUp } from '@/components/motion-transitions'
 
 export default function Error({
   error,
@@ -16,25 +17,22 @@ export default function Error({
   }, [error])
 
   return (
-    <div className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center">
-      <div className="text-8xl font-bold tracking-tighter text-gray-100 mb-6 select-none animate-fade-in-up-short">
+    <StaggerContainer className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center">
+      <FadeInUp className="text-8xl font-bold tracking-tighter text-gray-100 mb-6 select-none">
         500
-      </div>
-      <h2 
-        className="text-2xl md:text-3xl font-bold text-black mb-4 tracking-tight animate-fade-in-up opacity-0"
-        style={{ animationDelay: '100ms' }}
+      </FadeInUp>
+      <FadeInUp 
+        className="text-2xl md:text-3xl font-bold text-black mb-4 tracking-tight"
       >
         Something went wrong
-      </h2>
-      <p 
-        className="text-gray-500 max-w-md mx-auto mb-8 animate-fade-in-up opacity-0"
-        style={{ animationDelay: '200ms' }}
+      </FadeInUp>
+      <FadeInUp 
+        className="text-gray-500 max-w-md mx-auto mb-8"
       >
         An unexpected error occurred. We&apos;ve been notified and are looking into it.
-      </p>
-      <div 
-        className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in-up opacity-0"
-        style={{ animationDelay: '300ms' }}
+      </FadeInUp>
+      <FadeInUp 
+        className="flex flex-col sm:flex-row items-center justify-center gap-4"
       >
         <button 
           onClick={() => reset()} 
@@ -45,7 +43,7 @@ export default function Error({
         <Link href="/catalog" className="px-6 py-3 text-sm font-semibold text-black bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
           Return to Catalog
         </Link>
-      </div>
-    </div>
+      </FadeInUp>
+    </StaggerContainer>
   )
 }

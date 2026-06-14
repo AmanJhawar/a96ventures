@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useCallback, useEffect, useState, useMemo } from 'react'
-import Particles from 'react-tsparticles'
-import { loadSlim } from 'tsparticles-slim'
-import type { Engine, ISourceOptions } from 'tsparticles-engine'
+import Particles, { ParticlesProvider } from '@tsparticles/react'
+import { loadSlim } from '@tsparticles/slim'
+import type { Engine, ISourceOptions } from '@tsparticles/engine'
 
 export default function NetworkScene({ inView }: { inView: boolean }) {
   // Respect reduced motion setting
@@ -66,7 +66,7 @@ export default function NetworkScene({ inView }: { inView: boolean }) {
       },
       particles: {
         color: {
-          value: '#d1d5db', // light gray
+          value: '#9ca3af', // solid grey
         },
         links: {
           color: '#e5e7eb', // lighter gray
@@ -107,12 +107,13 @@ export default function NetworkScene({ inView }: { inView: boolean }) {
 
   return (
     <div className="absolute inset-0 w-full h-full z-0 overflow-hidden pointer-events-auto">
-      <Particles
-        id="tsparticles"
-        init={particlesInit}
-        options={options}
-        className="w-full h-full"
-      />
+      <ParticlesProvider init={particlesInit}>
+        <Particles
+          id="tsparticles"
+          options={options}
+          className="w-full h-full"
+        />
+      </ParticlesProvider>
     </div>
   )
 }

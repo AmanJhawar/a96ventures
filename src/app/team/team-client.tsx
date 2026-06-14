@@ -5,6 +5,7 @@ import { getTeamMembers } from '@/lib/firebase/db'
 import { TeamMember } from '@/lib/types'
 import { SkeletonGrid } from '@/components/skeleton-grid'
 import { EmptyState } from '@/components/empty-state'
+import { StaggerContainer, FadeInUp } from '@/components/motion-transitions'
 
 export default function TeamClient() {
   const [teamMembers, setTeamMembers] = useState<(TeamMember & {id: string})[]>([])
@@ -41,12 +42,11 @@ export default function TeamClient() {
         ) : teamMembers.length === 0 ? (
           <EmptyState title="No team members found." />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 mb-20">
+          <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 mb-20">
             {teamMembers.map((member, index) => (
-              <div 
+              <FadeInUp 
                 key={member.id} 
-                className="bg-white border border-gray-200 rounded-xl p-8 text-center transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:border-black/20 opacity-0 animate-fade-in-up-short"
-                style={{ animationDelay: `${index * 50}ms` }}
+                className="bg-white border border-gray-200 rounded-xl p-8 text-center transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:border-black/20"
               >
                 <div>
                   <h3 className="text-2xl font-semibold text-black mb-2">{member.name}</h3>
@@ -66,9 +66,9 @@ export default function TeamClient() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </FadeInUp>
             ))}
-          </div>
+          </StaggerContainer>
         )}
 
         <div className="text-center max-w-[800px] mx-auto">
