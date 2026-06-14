@@ -29,7 +29,12 @@ function ContactForm() {
       const itemsList = cartItems.map(item => {
         let text = `- [${item.sku}] ${item.quantity}x ${item.productName}`
         const opts = []
-        if (item.weight) {
+        if (item.selectedSize) opts.push(`Size: ${item.selectedSize}`)
+        if (item.selectedPurity) opts.push(`Purity: ${item.selectedPurity}%`)
+        if (item.selectedStone) opts.push(`Stone: ${item.selectedStone}`)
+        if (item.selectedWeight) {
+          opts.push(`Weight: ${item.selectedWeight}`)
+        } else if (item.weight) {
           const formattedWeight = item.weight.toLowerCase().endsWith('g') || item.weight.toLowerCase().endsWith('kg')
             ? item.weight
             : `${item.weight}g`

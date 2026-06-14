@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { ProtectedImage } from '@/components/protected-image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -11,9 +11,12 @@ interface ProductCarouselProps {
 
 export function ProductCarousel({ images, productName }: ProductCarouselProps) {
   const [activeIndex, setActiveIndex] = useState(0)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const [touchStart, setTouchStart] = useState<number | null>(null)
+  const [touchEnd, setTouchEnd] = useState<number | null>(null)
 
-  // Fallback to a safe empty array if nothing is provided
+  // Minimum distance to trigger swipe
+  const minSwipeDistance = 50
+
   const safeImages = images.filter(Boolean)
 
   if (safeImages.length === 0) {
@@ -26,36 +29,44 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
     )
   }
 
-  const handleScroll = () => {
-    if (scrollRef.current) {
-      const scrollPosition = scrollRef.current.scrollLeft
-      const width = scrollRef.current.offsetWidth
-      const index = Math.round(scrollPosition / width)
-      setActiveIndex(index)
-    }
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null)
+    setTouchStart(e.targetTouches[0].clientX)
   }
 
-  const scrollTo = (index: number) => {
-    if (scrollRef.current) {
-      const width = scrollRef.current.offsetWidth
-      scrollRef.current.scrollTo({
-        left: width * index,
-        behavior: 'smooth'
-      })
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX)
+  }
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return
+    const distance = touchStart - touchEnd
+    const isLeftSwipe = distance > minSwipeDistance
+    const isRightSwipe = distance < -minSwipeDistance
+
+    if (isLeftSwipe && activeIndex < safeImages.length - 1) {
+      setActiveIndex(prev => prev + 1)
+    }
+    if (isRightSwipe && activeIndex > 0) {
+      setActiveIndex(prev => prev - 1)
     }
   }
 
   return (
     <div className="flex flex-col gap-6 w-full relative group">
-      {/* Main Image Carousel */}
-      <div className="relative rounded-xl overflow-hidden bg-[#f5f5f7] touch-pan-x">
+      {/* Main Image Carousel Wrapper */}
+      <div 
+        className="relative aspect-[3/2] rounded-xl overflow-hidden bg-[#f5f5f7] touch-pan-y"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         <div 
-          ref={scrollRef}
-          onScroll={handleScroll}
-          className="flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide w-full h-full"
+          className="flex h-full w-full transition-transform duration-200 ease-[var(--ease-out)]"
+          style={{ transform: `translateX(-${activeIndex * 100}%)` }}
         >
           {safeImages.map((img, idx) => (
-            <div key={idx} className="w-full h-full flex-shrink-0 aspect-[3/2] relative snap-center overflow-hidden">
+            <div key={idx} className="w-full h-full flex-shrink-0 relative overflow-hidden">
               <ProtectedImage
                 src={img.startsWith('data:') ? img : `/assets/${img}`}
                 alt={`${productName} - View ${idx + 1}`}
@@ -70,30 +81,41 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
         {safeImages.length > 1 && (
           <>
             <button 
-              onClick={() => scrollTo(Math.max(0, activeIndex - 1))}
+              onClick={() => setActiveIndex(Math.max(0, activeIndex - 1))}
               disabled={activeIndex === 0}
-              className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 disabled:opacity-0 hover:bg-white z-20"
+              className={`absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-sm transition-[opacity,background-color,transform] duration-200 ease-[var(--ease-out)] hover:bg-white active:scale-[0.95] z-20 ${
+                activeIndex === 0 
+                  ? 'opacity-0 pointer-events-none' 
+                  : 'opacity-100 md:opacity-0 md:group-hover:opacity-100'
+              }`}
             >
               <ChevronLeft className="w-5 h-5 text-gray-800" />
             </button>
             <button 
-              onClick={() => scrollTo(Math.min(safeImages.length - 1, activeIndex + 1))}
+              onClick={() => setActiveIndex(Math.min(safeImages.length - 1, activeIndex + 1))}
               disabled={activeIndex === safeImages.length - 1}
-              className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 disabled:opacity-0 hover:bg-white z-20"
+              className={`absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-sm transition-[opacity,background-color,transform] duration-200 ease-[var(--ease-out)] hover:bg-white active:scale-[0.95] z-20 ${
+                activeIndex === safeImages.length - 1 
+                  ? 'opacity-0 pointer-events-none' 
+                  : 'opacity-100 md:opacity-0 md:group-hover:opacity-100'
+              }`}
             >
               <ChevronRight className="w-5 h-5 text-gray-800" />
             </button>
           </>
         )}
+
         {/* Dots Indicator */}
         {safeImages.length > 1 && (
           <div className="absolute bottom-6 left-0 right-0 z-20 flex justify-center gap-2">
             {safeImages.map((_, idx) => (
-              <div
+              <button
                 key={idx}
-                className={`h-1.5 rounded-full transition-[width,background-color] duration-300 ease-[var(--ease-out)] ${
+                onClick={() => setActiveIndex(idx)}
+                className={`h-1.5 rounded-full transition-[width,background-color,transform] duration-300 ease-[var(--ease-out)] active:scale-[0.97] ${
                   activeIndex === idx ? 'bg-black w-5' : 'bg-black/20 w-1.5'
                 }`}
+                aria-label={`Go to slide ${idx + 1}`}
               />
             ))}
           </div>

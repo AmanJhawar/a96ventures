@@ -9,6 +9,10 @@ export type CartItem = {
   productName: string;
   sku: string;
   imageFile: string;
+  selectedSize?: string;
+  selectedPurity?: string;
+  selectedWeight?: string;
+  selectedStone?: string;
   weight?: string;
   quantity: number;
 }
