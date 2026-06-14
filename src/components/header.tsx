@@ -105,7 +105,7 @@ export default function Header() {
  
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center h-full">
             <Link href="/">
-              <Image src="/assets/logo.png" alt="A96 Ventures" width={120} height={40} className="w-auto h-10 object-contain" priority />
+              <Image src="/assets/logo.png" alt="A96 Ventures" width={120} height={40} className="w-auto h-6 object-contain" priority />
             </Link>
           </div>
  

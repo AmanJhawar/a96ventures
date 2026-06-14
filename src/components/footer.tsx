@@ -6,7 +6,7 @@ export default function Footer() {
 
   return (
     <footer className="mt-auto">
-      <div className="max-w-8xl mx-auto px-6 py-16">
+      <div className="max-w-8xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-12 mb-16 text-center">
           <div>
             <h3 className="text-sm font-semibold tracking-widest text-black mb-6 uppercase">Company</h3>
@@ -48,7 +48,7 @@ export default function Footer() {
 
         <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200 gap-6 text-center">
           <div className="flex items-center justify-center">
-            <Image src="/assets/logo.png" alt="A96 Ventures" width={100} height={30} className="w-auto h-8 object-contain grayscale opacity-50" />
+            <Image src="/assets/logo.png" alt="A96 Ventures" width={100} height={30} className="w-auto h-4 object-contain grayscale opacity-50" />
           </div>
           <div className="text-sm text-gray-500">
             © {currentYear} A96 Ventures. All rights reserved.
