@@ -27,6 +27,7 @@ export default function NetworkScene({ inView }: { inView: boolean }) {
 
   const options: ISourceOptions = useMemo(() => {
     return {
+      fullScreen: { enable: false },
       autoPlay: inView, // pause when not in view
       background: {
         color: {
@@ -36,15 +37,30 @@ export default function NetworkScene({ inView }: { inView: boolean }) {
       fpsLimit: 60,
       interactivity: {
         events: {
+          onClick: {
+            enable: !isReducedMotion,
+            mode: 'push',
+          },
           onHover: {
             enable: !isReducedMotion,
-            mode: 'repulse',
+            mode: ['grab', 'bubble'],
           },
         },
         modes: {
-          repulse: {
-            distance: 120,
-            duration: 0.4,
+          grab: {
+            distance: 180,
+            links: {
+              opacity: 0.6,
+            },
+          },
+          bubble: {
+            distance: 180,
+            size: 3.5,
+            duration: 2,
+            opacity: 0.9,
+          },
+          push: {
+            quantity: 3,
           },
         },
       },
@@ -54,14 +70,14 @@ export default function NetworkScene({ inView }: { inView: boolean }) {
         },
         links: {
           color: '#e5e7eb', // lighter gray
-          distance: 150,
+          distance: 180,
           enable: true,
           opacity: 0.8,
           width: 1,
         },
         move: {
           enable: !isReducedMotion,
-          speed: 0.6,
+          speed: 0.8,
           direction: 'none' as const,
           random: true,
           straight: false,

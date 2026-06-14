@@ -131,7 +131,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
           <button
             onClick={() => setIsSortOpen(!isSortOpen)}
             onKeyDown={handleDropdownKeyDown}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-widest text-gray-500 hover:text-black hover:bg-gray-50 active:scale-[0.97] transition-[color,background-color,transform] duration-150 ease-[var(--ease-out)]"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-black hover:bg-gray-50 active:scale-[0.97] transition-[color,background-color,transform] duration-150 ease-[var(--ease-out)]"
             aria-haspopup="listbox"
             aria-expanded={isSortOpen}
             aria-label="Sort products"

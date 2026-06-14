@@ -86,7 +86,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
               className={`absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-sm transition-[opacity,background-color,transform] duration-200 ease-[var(--ease-out)] hover:bg-white active:scale-[0.95] z-20 ${
                 activeIndex === 0 
                   ? 'opacity-0 pointer-events-none' 
-                  : 'opacity-100 md:opacity-0 md:group-hover:opacity-100'
+                  : 'opacity-100'
               }`}
             >
               <ChevronLeft className="w-5 h-5 text-gray-800" />
@@ -97,7 +97,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
               className={`absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-sm transition-[opacity,background-color,transform] duration-200 ease-[var(--ease-out)] hover:bg-white active:scale-[0.95] z-20 ${
                 activeIndex === safeImages.length - 1 
                   ? 'opacity-0 pointer-events-none' 
-                  : 'opacity-100 md:opacity-0 md:group-hover:opacity-100'
+                  : 'opacity-100'
               }`}
             >
               <ChevronRight className="w-5 h-5 text-gray-800" />
