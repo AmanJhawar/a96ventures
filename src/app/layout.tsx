@@ -3,7 +3,6 @@ import type { Metadata } from 'next'
 import './globals.css'
 import Header from '@/components/header'
 import Footer from '@/components/footer'
-import DisableDevTools from '@/components/disable-dev-tools'
 
 import localFont from 'next/font/local'
 
@@ -43,7 +42,6 @@ export default function RootLayout({
     <html lang="en" data-scroll-behavior="smooth">
       <body className={`${inter.className} min-h-screen flex flex-col text-black bg-white antialiased`}>
         <CartProvider>
-          <DisableDevTools />
           <Header />
           <CartDrawer />
           <main className="flex-1 pt-20">

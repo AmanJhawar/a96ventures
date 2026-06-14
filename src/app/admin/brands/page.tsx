@@ -184,14 +184,14 @@ export default function AdminBrands() {
                     <td className="px-6 py-4 text-right space-x-2">
                       <button 
                         onClick={() => handleEdit(brand)}
-                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
                         title="Edit"
                       >
                         <Edit2 size={18} />
                       </button>
                       <button 
                         onClick={() => confirmDelete(brand.id)}
-                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
                         title="Delete"
                       >
                         <Trash2 size={18} />

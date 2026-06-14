@@ -2,7 +2,7 @@
 
 import { useRef, useEffect } from 'react'
 import { useCart } from './cart-provider'
-import { ShoppingBag, X, Plus, Minus, ArrowRight } from 'lucide-react'
+import { ShoppingBag, X, Plus, Minus, ArrowRight, Trash2 } from 'lucide-react'
 import { ProtectedImage } from './protected-image'
 import { EmptyState } from '@/components/empty-state'
 import Link from 'next/link'
@@ -80,7 +80,7 @@ export function CartDrawer() {
       {/* Backdrop */}
       {isCartOpen && (
         <div 
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[60] transition-opacity duration-300"
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[60] transition-opacity duration-200"
           onClick={() => setIsCartOpen(false)}
         />
       )}
@@ -91,7 +91,7 @@ export function CartDrawer() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="enquiry-drawer-title"
-        className={`fixed top-0 right-0 h-full w-[400px] max-w-[100vw] bg-white z-[70] shadow-2xl transform transition-transform duration-300 ease-[var(--ease-out)] flex flex-col ${
+        className={`fixed top-0 right-0 h-full w-[400px] max-w-[100vw] bg-white z-[70] shadow-2xl transform transition-transform duration-200 ease-[var(--ease-out)] flex flex-col ${
           isCartOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -99,7 +99,7 @@ export function CartDrawer() {
           <h2 id="enquiry-drawer-title" className="text-xl font-bold tracking-tight">Your Enquiry</h2>
           <button 
             onClick={() => setIsCartOpen(false)}
-            className="p-2 hover:bg-gray-100 rounded-full transition-[background-color,transform] active:scale-95"
+            className="p-2 hover:bg-gray-100 rounded-full transition-[background-color,transform] active:scale-[0.97]"
           >
             <X size={20} />
           </button>
@@ -113,7 +113,7 @@ export function CartDrawer() {
               action={
                 <button 
                   onClick={() => setIsCartOpen(false)}
-                  className="text-sm font-medium text-black underline underline-offset-4 transition-transform active:scale-95"
+                  className="text-sm font-medium text-black underline underline-offset-4 transition-transform active:scale-[0.97]"
                 >
                   Continue Browsing
                 </button>
@@ -126,7 +126,7 @@ export function CartDrawer() {
                   <ProtectedImage 
                     src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
                     alt={item.productName}
-                    className="w-full h-full object-contain p-2"
+                    className="w-full h-full object-cover"
                     containerClassName="absolute inset-0 flex items-center justify-center"
                   />
                 </div>
@@ -135,9 +135,10 @@ export function CartDrawer() {
                     <h3 className="font-semibold text-sm line-clamp-2 pr-4">{item.productName}</h3>
                     <button 
                       onClick={() => removeFromCart(item.cartId)}
-                      className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-1 -mr-1"
+                      className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-1 -mr-1"
+                      aria-label="Remove item"
                     >
-                      <X size={16} />
+                      <Trash2 size={16} />
                     </button>
                   </div>
                   
@@ -154,10 +155,10 @@ export function CartDrawer() {
                   </div>
 
                   <div className="mt-auto flex items-center gap-4">
-                    <div className="flex items-center gap-3 bg-gray-50 rounded-full px-3 py-1 border border-gray-200">
+                    <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-1 border border-gray-200">
                       <button 
                         onClick={() => updateQuantity(item.cartId, -1)}
-                        className="text-gray-500 hover:text-black transition-colors disabled:opacity-50"
+                        className="text-gray-500 hover:text-black transition-colors disabled:opacity-50 active:scale-[0.97]"
                         disabled={item.quantity <= 1}
                       >
                         <Minus size={14} />
@@ -165,7 +166,7 @@ export function CartDrawer() {
                       <span className="text-sm font-medium w-4 text-center">{item.quantity}</span>
                       <button 
                         onClick={() => updateQuantity(item.cartId, 1)}
-                        className="text-gray-500 hover:text-black transition-colors"
+                        className="text-gray-500 hover:text-black transition-colors active:scale-[0.97]"
                       >
                         <Plus size={14} />
                       </button>
@@ -178,11 +179,11 @@ export function CartDrawer() {
         </div>
 
         {cartItems.length > 0 && (
-          <div className="p-6 border-t border-gray-100 bg-gray-50">
+          <div className="p-6 border-t border-gray-100 bg-white">
             <Link 
               href="/contact?fromCart=true"
               onClick={() => setIsCartOpen(false)}
-              className="w-full bg-black text-white px-6 py-4 rounded-lg font-semibold flex items-center justify-between hover:bg-gray-800 transition-colors active:scale-[0.98]"
+              className="w-full bg-black text-white px-6 py-4 rounded-lg font-semibold flex items-center justify-between hover:bg-gray-800 transition-[background-color,transform] active:scale-[0.97]"
             >
               <span>Inquire About Items</span>
               <ArrowRight size={18} />

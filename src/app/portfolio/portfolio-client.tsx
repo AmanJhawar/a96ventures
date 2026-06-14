@@ -50,7 +50,7 @@ export default function PortfolioClient() {
                 className="block group opacity-0 animate-fade-in-up-short"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="h-full bg-white border border-gray-200 rounded-xl p-8 transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] group-hover:-translate-y-1 group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.1)] active:scale-[0.98]">
+                <div className="h-full bg-white border border-gray-200 rounded-xl p-8 transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] group-hover:-translate-y-1 group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.1)] active:scale-[0.97]">
                   <div className="flex justify-between items-start mb-4">
                     <h3 className="text-2xl font-semibold text-black">{company.name}</h3>
                     <span className="bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-xs font-medium tracking-wide">

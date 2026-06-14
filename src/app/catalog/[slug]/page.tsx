@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { getCatalogItems, getCatalogItemById } from '@/lib/firebase/db'
 import { AddToCartSection } from './add-to-cart-section'
 import { ProductCarousel } from './product-carousel'
+import { ProtectedImage } from '@/components/protected-image'
 
 export async function generateStaticParams() {
   try {
@@ -54,6 +55,8 @@ export async function generateMetadata(
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const item = await getCatalogItemById(slug)
+  const allItems = await getCatalogItems()
+  const moreProducts = allItems.filter(i => i.id !== item?.id).slice(0, 4)
   
   if (!item) {
     notFound()
@@ -85,24 +88,21 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       />
       <div className="max-w-7xl mx-auto px-6">
         
-        {/* Breadcrumb */}
-        <div className="mb-10 text-sm font-medium text-gray-500">
-          <Link href="/catalog" className="hover:text-black transition-colors duration-150">Catalog</Link>
-          <span className="mx-2">/</span>
-          <span className="text-black">{item.name}</span>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-          {/* Image Gallery Area */}
-          <div className="opacity-0 animate-fade-in-up-short">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-start relative">
+          {/* Image Gallery Area (Left, wider) */}
+          <div className="lg:col-span-7 xl:col-span-8 opacity-0 animate-fade-in-up-short lg:sticky lg:top-28 lg:h-fit z-10 pb-10">
             <ProductCarousel 
-              images={[item.imageFile, ...(item.additionalImages || [])]} 
+              images={
+                item.additionalImages?.length 
+                  ? item.additionalImages 
+                  : [item.imageFile, item.imageFile, item.imageFile]
+              } 
               productName={item.name} 
             />
           </div>
 
-          {/* Details Area */}
-          <div className="flex flex-col justify-center opacity-0 animate-fade-in-up-short" style={{ animationDelay: '100ms' }}>
+          {/* Details Area (Right, narrower) */}
+          <div className="lg:col-span-5 xl:col-span-4 flex flex-col opacity-0 animate-fade-in-up-short" style={{ animationDelay: '100ms' }}>
             <h1 className="text-4xl md:text-5xl font-bold leading-tight tracking-tight text-black mb-2">
               {item.name}
             </h1>
@@ -110,47 +110,72 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               Price on request
             </p>
             
-            <p className="text-xl font-normal text-gray-600 leading-relaxed mb-10">
+            <p className="text-lg font-normal text-gray-500 leading-relaxed mb-10">
               {item.description}
             </p>
 
             {/* Add to Cart Section (Client Component) */}
             <AddToCartSection item={item} />
 
-            <div className="mt-12 space-y-4 text-sm text-gray-500">
-              <div className="flex justify-between py-3 border-b border-gray-100">
+            <div className="mt-12 space-y-1 text-sm text-gray-500">
+              <div className="flex justify-between py-2">
                 <span className="font-medium">Category</span>
                 <span className="text-black text-right">{item.category}</span>
               </div>
-              <div className="flex justify-between py-3 border-b border-gray-100">
+              <div className="flex justify-between py-2">
                 <span className="font-medium">Material</span>
                 <span className="text-black text-right">{item.material || 'Unspecified'}</span>
               </div>
               {!((item.standardSizes?.length > 0 || item.customSizes?.length > 0) && (item.standardPurities?.length > 0 || item.customPurities?.length > 0)) && item.weight && (
-                <div className="flex justify-between py-3 border-b border-gray-100">
+                <div className="flex justify-between py-2">
                   <span className="font-medium">Approx Weight</span>
                   <span className="text-black text-right">
                     {item.weight.toLowerCase().endsWith('g') || item.weight.toLowerCase().endsWith('kg') ? item.weight : `${item.weight}g`}
                   </span>
                 </div>
               )}
-              {(item.standardSizes?.length > 0 || item.customSizes?.length > 0) && (
-                <div className="flex justify-between py-3 border-b border-gray-100">
-                  <span className="font-medium">Available Sizes</span>
-                  <span className="text-black text-right">{[...(item.standardSizes || []), ...(item.customSizes || [])].join(', ')}</span>
-                </div>
-              )}
-              {(item.standardPurities?.length > 0 || item.customPurities?.length > 0) && (
-                <div className="flex justify-between py-3 border-b border-gray-100">
-                  <span className="font-medium">Available Purities</span>
-                  <span className="text-black text-right">{[...(item.standardPurities || []), ...(item.customPurities || [])].map(p => `${p}%`).join(', ')}</span>
-                </div>
-              )}
-
             </div>
 
           </div>
         </div>
+
+        {/* More Products Section */}
+        {moreProducts.length > 0 && (
+          <div className="mt-32 pt-16 border-t border-gray-100">
+            <h2 className="text-2xl font-bold tracking-tight text-black mb-10 text-center">More from our catalog</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {moreProducts.map((p, index) => (
+                <Link 
+                  href={`/catalog/${p.id}`}
+                  key={p.id} 
+                  className="flex flex-col border border-gray-200 rounded-xl overflow-hidden bg-white group opacity-0 animate-fade-in-up-short transition-[border-color,box-shadow] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <div className="aspect-[2/3] bg-white relative overflow-hidden">
+                    <div className="w-full h-full relative flex items-center justify-center text-gray-400 text-sm">
+                      {p.imageFile ? (
+                        <ProtectedImage 
+                          src={p.imageFile.startsWith('data:') ? p.imageFile : `/assets/${p.imageFile}`} 
+                          alt={p.name}
+                          className="w-full h-full object-cover transition-transform duration-700 ease-[var(--ease-out)] group-hover:scale-[1.04]"
+                          containerClassName="w-full h-full"
+                        />
+                      ) : (
+                        <span>No image</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="p-5 flex flex-col flex-1">
+                    <h2 className="text-sm font-semibold text-black tracking-wide uppercase line-clamp-2">{p.name}</h2>
+                    {p.category && (
+                      <p className="mt-2 text-xs font-medium tracking-wider text-gray-400 uppercase">{p.category}</p>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

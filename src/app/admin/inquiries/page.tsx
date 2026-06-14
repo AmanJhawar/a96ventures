@@ -186,7 +186,7 @@ export default function AdminInquiries() {
                       <td className="px-6 py-4 text-right">
                         <button 
                           onClick={() => confirmDelete(inquiry.id)}
-                          className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
+                          className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
                           title="Delete Inquiry"
                         >
                           <Trash2 size={18} />

@@ -49,7 +49,7 @@ export default function DisableDevTools() {
     <div className="fixed bottom-4 right-4 z-[9999] opacity-20 hover:opacity-100 transition-opacity">
       <button 
         onClick={() => setDisabled(!disabled)}
-        className={`p-3 rounded-full shadow-lg flex items-center justify-center border transition-colors ${disabled ? 'bg-red-500 border-red-600 text-white' : 'bg-black border-gray-800 text-white'}`}
+        className={`p-3 rounded-full shadow-lg flex items-center justify-center border transition-colors ${disabled ? 'bg-white border-black shadow-[0_0_0_1px_black] text-black' : 'bg-black border-gray-800 text-white'}`}
         title={disabled ? "Lock DevTools" : "Unlock DevTools"}
       >
         {disabled ? <Unlock size={18} /> : <Lock size={18} />}

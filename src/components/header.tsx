@@ -117,7 +117,7 @@ export default function Header() {
               {(pathname.startsWith('/catalog') || (isInitialized && totalItems > 0)) && (
                 <button 
                   onClick={() => setIsCartOpen(true)}
-                  className="relative p-2 hover:bg-gray-100 rounded-full transition-colors active:scale-95"
+                  className="relative p-2 hover:bg-gray-100 rounded-full transition-colors active:scale-[0.97]"
                   aria-label="Open enquiry"
                 >
                   <ShoppingBag size={20} strokeWidth={1.5} />
@@ -136,7 +136,7 @@ export default function Header() {
             <div className="w-10 h-10 flex items-center justify-center">
               {(pathname.startsWith('/catalog') || (isInitialized && totalItems > 0)) && (
                 <button 
-                  className="p-2 relative flex items-center justify-center transition-transform active:scale-95"
+                  className="p-2 relative flex items-center justify-center transition-transform active:scale-[0.97]"
                   onClick={() => setIsCartOpen(true)}
                   aria-label="Open enquiry"
                 >
@@ -178,7 +178,7 @@ export default function Header() {
         <nav 
           id="mobile-nav"
           ref={menuRef}
-          className={`md:hidden flex flex-col gap-6 absolute top-full left-0 right-0 bg-white border-b border-gray-200 px-6 py-6 z-50 max-h-[calc(100vh-5rem)] overflow-y-auto motion-safe:transition-[opacity,visibility] motion-reduce:transition-none duration-300 ease-[var(--ease-out)] ${isMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
+          className={`md:hidden flex flex-col gap-6 absolute top-full left-0 right-0 bg-white border-b border-gray-200 px-6 py-6 z-50 max-h-[calc(100vh-5rem)] overflow-y-auto motion-safe:transition-[opacity,visibility] motion-reduce:transition-none duration-200 ease-[var(--ease-out)] ${isMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
         >
           <NavLink href="/portfolio" isActive={pathname === '/portfolio'} onClick={closeMenu}>PORTFOLIO</NavLink>
           <NavLink href="/brands" isActive={pathname === '/brands'} onClick={closeMenu}>BRANDS</NavLink>

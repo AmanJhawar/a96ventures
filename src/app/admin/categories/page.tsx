@@ -165,10 +165,10 @@ export default function AdminCategories() {
                       className="admin-input py-1 text-sm flex-1"
                       autoFocus
                     />
-                    <button onClick={() => saveEdit(idx, cat)} className="text-gray-400 hover:text-black p-1 transition-[color,transform] active:scale-95" title="Save">
+                    <button onClick={() => saveEdit(idx, cat)} className="text-gray-400 hover:text-black p-1 transition-[color,transform] active:scale-[0.97]" title="Save">
                       <Check size={18} />
                     </button>
-                    <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600 p-1 transition-[color,transform] active:scale-95" title="Cancel">
+                    <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600 p-1 transition-[color,transform] active:scale-[0.97]" title="Cancel">
                       <X size={18} />
                     </button>
                   </div>
@@ -178,14 +178,14 @@ export default function AdminCategories() {
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => startEdit(idx, cat)}
-                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
                         title="Edit Category"
                       >
                         <Edit2 size={18} />
                       </button>
                       <button
                         onClick={() => confirmRemove(cat)}
-                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2"
+                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
                         title="Remove Category"
                       >
                         <Trash2 size={18} />

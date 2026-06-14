@@ -55,7 +55,7 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
         <button
           type="button"
           onClick={() => onChange('')}
-          className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-gray-700 p-2 rounded-full shadow-sm hover:bg-gray-100 hover:text-black transition-colors opacity-0 group-hover:opacity-100 duration-150 active:scale-95"
+          className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-gray-700 p-2 rounded-full shadow-sm hover:bg-gray-100 hover:text-black transition-colors opacity-0 group-hover:opacity-100 duration-150 active:scale-[0.97]"
         >
           <X size={16} />
         </button>

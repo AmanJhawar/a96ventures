@@ -29,7 +29,7 @@ export default async function Catalog() {
   return (
     <div className="pt-10 pb-20 min-h-[calc(100vh-160px)]">
       {/* Catalog Hero */}
-      <div className="relative py-12 mb-12 border-b border-gray-100">
+      <div className="relative py-12 mb-12">
         <div className="max-w-7xl mx-auto px-6 relative z-10">
           <div className="text-center">
             <h1 className="text-4xl md:text-5xl font-bold leading-tight tracking-tight text-black mb-6 animate-clip-reveal-fast">

@@ -413,7 +413,7 @@ export default function AdminInventory() {
                               tabIndex={-1}
                               onClick={() => { setFormData({ ...formData, category: cat }); setCategoryOpen(false) }}
                               className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${categoryFocusedIndex === idx ? 'bg-gray-100' : ''
-                                } ${formData.category === cat ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-50'
+                                } ${formData.category === cat ? 'bg-gray-100 text-black font-semibold' : 'text-gray-700 hover:bg-gray-50'
                                 }`}
                             >
                               {cat}
@@ -472,7 +472,7 @@ export default function AdminInventory() {
                           {(formData.customSizes || []).map(s => (
                             <span key={s} className="admin-pill admin-pill-active flex items-center gap-1.5">
                               {s}
-                              <button type="button" onClick={() => removeCustomSize(s)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-95"><X size={12} /></button>
+                              <button type="button" onClick={() => removeCustomSize(s)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-[0.97]"><X size={12} /></button>
                             </span>
                           ))}
                         </div>
@@ -489,7 +489,7 @@ export default function AdminInventory() {
                             onChange={e => setCustomSizeInput(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSize() } }}
                             className="admin-input-underline"
-                            placeholder={formData.category?.includes('Marble') ? "e.g., Rose Quartz" : formData.category?.includes('Bullion') ? "e.g., 100g" : "e.g., 20cm"}
+                            placeholder={formData.category?.includes('Marble') ? "e.g., Rose Quartz" : formData.category?.includes('Bullion') ? "e.g., 100" : "e.g., 20"}
                           />
                         </div>
                         <button type="button" onClick={addCustomSize} className="admin-btn-outline">
@@ -520,7 +520,7 @@ export default function AdminInventory() {
                             {(formData.customPurities || []).map(p => (
                               <span key={p} className="admin-pill admin-pill-active flex items-center gap-1.5">
                                 {p}
-                                <button type="button" onClick={() => removeCustomPurity(p)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-95"><X size={12} /></button>
+                                <button type="button" onClick={() => removeCustomPurity(p)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-[0.97]"><X size={12} /></button>
                               </span>
                             ))}
                           </div>
@@ -664,7 +664,7 @@ export default function AdminInventory() {
 
             {/* Images */}
             <div>
-              <label className="admin-label required">Primary Image</label>
+              <label className="admin-label required">Thumbnail Image (Portrait 2:3)</label>
               <ImageDropzone
                 value={formData.imageFile || ''}
                 onChange={(url) => setFormData({ ...formData, imageFile: url })}
@@ -672,7 +672,7 @@ export default function AdminInventory() {
             </div>
 
             <div>
-              <label className="admin-label">Additional Images (Optional)</label>
+              <label className="admin-label">Product Images (Landscape 3:2)</label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {(formData.additionalImages || []).map((img, idx) => (
                   <ImageDropzone
@@ -722,7 +722,7 @@ export default function AdminInventory() {
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="px-6 py-4 text-sm font-semibold text-gray-600">Image</th>
                   <th className="px-6 py-4 text-sm font-semibold text-gray-600">Product / SKU</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Category</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-600 whitespace-nowrap">Category</th>
                   <th className="px-6 py-4 text-sm font-semibold text-gray-600">Sizes</th>
                   <th className="px-6 py-4 text-sm font-semibold text-gray-600">Purities</th>
                   <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-right">Actions</th>
@@ -755,7 +755,7 @@ export default function AdminInventory() {
                           <div className="text-xs text-gray-500 mt-1">{item.sku} · /{item.id}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">{item.category}</span>
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md whitespace-nowrap">{item.category}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1">
@@ -771,13 +771,15 @@ export default function AdminInventory() {
                             )) : <span className="text-xs text-gray-400">—</span>}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-right space-x-2">
-                          <button onClick={() => handleEdit(item)} className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2" title="Edit">
-                            <Edit2 size={18} />
-                          </button>
-                          <button onClick={() => confirmDelete(item.id)} className="text-gray-400 hover:text-black transition-[color,transform] active:scale-95 p-2" title="Delete">
-                            <Trash2 size={18} />
-                          </button>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <button onClick={() => handleEdit(item)} className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2 flex items-center justify-center" title="Edit">
+                              <Edit2 size={18} />
+                            </button>
+                            <button onClick={() => confirmDelete(item.id)} className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2 flex items-center justify-center" title="Delete">
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )

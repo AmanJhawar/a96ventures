@@ -106,7 +106,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
   return (
     <div className="max-w-7xl mx-auto px-6">
       {/* Filters & Sorting Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 border-b border-gray-100 pb-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 pb-2">
         {/* Category Filter Pills */}
         <div className="flex flex-wrap gap-3">
           {initialCategories.map((cat, index) => (
@@ -115,7 +115,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
               onClick={() => handleCategoryChange(cat)}
               className={`px-6 py-2 rounded-lg text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] opacity-0 animate-fade-in-up-short ${
                 activeFilter === cat 
-                  ? 'bg-black text-white shadow-md' 
+                  ? 'bg-white text-black outline outline-2 outline-offset-[-2px] outline-black shadow-[0_0_0_1px_black]' 
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
               style={{ animationDelay: `${300 + (index * 40)}ms` }}
@@ -177,7 +177,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
       {paginatedItems.length === 0 ? (
         <EmptyState title="No products found in this category." />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {paginatedItems.map((item, index) => (
             <Link 
               href={`/catalog/${item.id}`}
@@ -185,13 +185,13 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
               className="flex flex-col border border-gray-200 rounded-xl overflow-hidden bg-white group opacity-0 animate-fade-in-up-short transition-[border-color,box-shadow] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
               style={{ animationDelay: `${index * 50}ms` }}
             >
-              <div className="aspect-[3/2] bg-white relative overflow-hidden">
+              <div className="aspect-[2/3] bg-white relative overflow-hidden">
                 <div className="w-full h-full relative flex items-center justify-center text-gray-400 text-sm">
                   {item.imageFile ? (
                     <ProtectedImage 
                       src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
                       alt={item.name}
-                      className="w-full h-full object-contain transition-transform duration-200 ease-[var(--ease-out)] group-hover:scale-105"
+                      className="w-full h-full object-cover transition-transform duration-700 ease-[var(--ease-out)] group-hover:scale-[1.04]"
                       containerClassName="w-full h-full"
                     />
                   ) : (

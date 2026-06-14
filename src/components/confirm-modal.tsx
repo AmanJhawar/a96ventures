@@ -127,7 +127,7 @@ export function ConfirmModal({
             </button>
             <button
               onClick={() => onConfirm()}
-              className="w-full sm:w-auto px-6 py-3 text-sm font-semibold text-white bg-black rounded-lg hover:bg-gray-800 transition-[background-color,transform] active:scale-[0.98]"
+              className="w-full sm:w-auto px-6 py-3 text-sm font-semibold text-white bg-black rounded-lg hover:bg-gray-800 transition-[background-color,transform] active:scale-[0.97]"
             >
               {confirmText}
             </button>
