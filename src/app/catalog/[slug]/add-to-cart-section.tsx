@@ -65,7 +65,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedSize === s 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {s}
@@ -78,7 +78,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedSize === s 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {s} <span className="text-xs opacity-70">(Custom)</span>
@@ -100,7 +100,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedPurity === p 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {p}%
@@ -113,7 +113,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedPurity === p 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {p}% <span className="text-xs opacity-70">(Custom)</span>
@@ -135,7 +135,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedWeight === w 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {w}
@@ -148,7 +148,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedWeight === w 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {w} <span className="text-xs opacity-70">(Custom)</span>
@@ -170,7 +170,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedStone === st 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {st}
@@ -183,7 +183,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedStone === st 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {st} <span className="text-xs opacity-70">(Custom)</span>
@@ -198,7 +198,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
         <button 
           onClick={handleAddToCart}
           disabled={!canAddToCart}
-          className="w-full sm:w-auto px-8 py-4 bg-black text-white rounded-lg font-semibold text-sm hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2"
+          className="btn-primary w-full sm:w-auto disabled:opacity-50 disabled:active:scale-100 gap-2"
         >
           {canAddToCart ? 'Add to Inquiry' : 'Please select options'}
         </button>

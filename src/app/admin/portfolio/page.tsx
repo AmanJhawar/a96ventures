@@ -7,6 +7,19 @@ const db = getFirestore(app)
 import { PortfolioCompany } from '@/lib/types'
 import { Trash2, Plus, Briefcase, Edit2 } from 'lucide-react'
 import { ConfirmModal } from '@/components/confirm-modal'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+
+const portfolioSchema = z.object({
+  id: z.string().min(1, 'URL Key (ID) is required').regex(/^[a-z0-9-]+$/, 'Only lowercase letters, numbers, and hyphens'),
+  name: z.string().min(1, 'Company name is required'),
+  stage: z.string().min(1, 'Stage is required'),
+  sector: z.string().min(1, 'Sector is required'),
+  description: z.string().min(1, 'Description is required')
+})
+
+type PortfolioValues = z.infer<typeof portfolioSchema>
 
 export default function AdminPortfolio() {
   const [companies, setCompanies] = useState<(PortfolioCompany & { id: string })[]>([])
@@ -14,9 +27,16 @@ export default function AdminPortfolio() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  
-  const [formData, setFormData] = useState<Partial<PortfolioCompany & { id: string }>>({
-    name: '', id: '', description: '', stage: '', sector: ''
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors, isSubmitting }
+  } = useForm<PortfolioValues>({
+    resolver: zodResolver(portfolioSchema),
+    defaultValues: { id: '', name: '', stage: '', sector: '', description: '' }
   })
 
   const fetchCompanies = async () => {
@@ -35,7 +55,6 @@ export default function AdminPortfolio() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCompanies()
   }, [])
 
@@ -59,30 +78,35 @@ export default function AdminPortfolio() {
   }
 
   const handleEdit = (company: PortfolioCompany & { id: string }) => {
-    setFormData(company)
     setEditingId(company.id)
+    reset({
+      id: company.id,
+      name: company.name,
+      stage: company.stage,
+      sector: company.sector,
+      description: company.description
+    })
     setIsFormOpen(true)
   }
 
   const handleCancel = () => {
     setIsFormOpen(false)
     setEditingId(null)
-    setFormData({ name: '', id: '', description: '', stage: '', sector: '' })
+    reset({ id: '', name: '', stage: '', sector: '', description: '' })
   }
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleAddNew = () => {
+    reset({ id: '', name: '', stage: '', sector: '', description: '' })
+    setEditingId(null)
+    setIsFormOpen(true)
+  }
+
+  const onSubmit = async (data: PortfolioValues) => {
     try {
-      if (!formData.id) {
-        alert("ID is required!")
-        return
-      }
-      
-      const docId = editingId || formData.id
+      const docId = editingId || data.id
       const docRef = doc(db, 'portfolio', docId)
       
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id, ...saveData } = formData
+      const { id, ...saveData } = data
       await setDoc(docRef, saveData)
       
       // Trigger dynamic path revalidation in background
@@ -112,8 +136,8 @@ export default function AdminPortfolio() {
             <p className="text-gray-500">Manage your portfolio companies and case studies.</p>
           </div>
           <button 
-            onClick={() => setIsFormOpen(true)}
-            className="admin-btn-primary flex items-center gap-2"
+            onClick={handleAddNew}
+            className="btn-primary flex items-center gap-2"
           >
             <Plus size={18} className="transition-transform" />
             Add Company
@@ -122,65 +146,75 @@ export default function AdminPortfolio() {
       )}
 
       {isFormOpen && (
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
           <h2 className="text-xl font-semibold mb-6">{editingId ? 'Edit Company' : 'Add New Company'}</h2>
-          <form onSubmit={handleSave} className="space-y-6">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="admin-label required">Company Name</label>
                 <input 
-                  type="text" required
-                  value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="admin-input"
+                  type="text"
+                  {...register('name')}
+                  className={`admin-input ${errors.name ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                   placeholder="e.g., Milemax"
                 />
+                {errors.name && <p className="text-gray-500 font-medium text-sm mt-1">{errors.name.message}</p>}
               </div>
               <div>
                 <label className="admin-label required">URL Key (ID)</label>
                 <input 
-                  type="text" required
+                  type="text"
+                  {...register('id', {
+                    onChange: (e) => {
+                      e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+                      setValue('id', e.target.value)
+                    }
+                  })}
                   disabled={!!editingId}
-                  value={formData.id} onChange={e => setFormData({...formData, id: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')})}
-                  className="admin-input disabled:bg-gray-100"
+                  className={`admin-input disabled:bg-gray-100 ${errors.id ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                   placeholder="e.g. milemax"
                 />
+                {errors.id && <p className="text-gray-500 font-medium text-sm mt-1">{errors.id.message}</p>}
               </div>
               <div>
                 <label className="admin-label required">Stage</label>
                 <input 
-                  type="text" required
-                  value={formData.stage} onChange={e => setFormData({...formData, stage: e.target.value})}
-                  className="admin-input"
+                  type="text"
+                  {...register('stage')}
+                  className={`admin-input ${errors.stage ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                   placeholder="e.g., Seed, Series A"
                 />
+                {errors.stage && <p className="text-gray-500 font-medium text-sm mt-1">{errors.stage.message}</p>}
               </div>
               <div>
                 <label className="admin-label required">Sector</label>
                 <input 
-                  type="text" required
-                  value={formData.sector} onChange={e => setFormData({...formData, sector: e.target.value})}
-                  className="admin-input"
+                  type="text"
+                  {...register('sector')}
+                  className={`admin-input ${errors.sector ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                   placeholder="e.g., Logistics, Fintech"
                 />
+                {errors.sector && <p className="text-gray-500 font-medium text-sm mt-1">{errors.sector.message}</p>}
               </div>
             </div>
             
             <div>
               <label className="admin-label required">Description</label>
               <textarea 
-                required rows={3}
-                value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})}
-                className="admin-input resize-none"
+                rows={3}
+                {...register('description')}
+                className={`admin-input resize-none ${errors.description ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                 placeholder="Overview of the company, challenge, and solution..."
               />
+              {errors.description && <p className="text-gray-500 font-medium text-sm mt-1">{errors.description.message}</p>}
             </div>
 
             <div className="flex justify-end gap-4 mt-12">
               <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
                 Cancel
               </button>
-              <button type="submit" className="admin-btn-primary px-8">
-                {editingId ? 'Update Company' : 'Save Company'}
+              <button type="submit" disabled={isSubmitting} className="btn-primary px-8 disabled:opacity-50">
+                {isSubmitting ? 'Saving...' : (editingId ? 'Update Company' : 'Save Company')}
               </button>
             </div>
           </form>
@@ -193,27 +227,27 @@ export default function AdminPortfolio() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Company Name</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">URL Key (ID)</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Stage</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Sector</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-right">Actions</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-500">Company Name</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-500">URL Key (ID)</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-500">Stage</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-500">Sector</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-500 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {companies.map((company) => (
                   <tr key={company.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                     <td className="px-6 py-4 font-medium text-black">{company.name}</td>
-                    <td className="px-6 py-4 text-gray-600 text-sm">{company.id}</td>
+                    <td className="px-6 py-4 text-gray-500 text-sm">{company.id}</td>
                     <td className="px-6 py-4">
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">{company.stage}</span>
+                      <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg">{company.stage}</span>
                     </td>
-                    <td className="px-6 py-4 text-gray-600 text-sm">{company.sector}</td>
+                    <td className="px-6 py-4 text-gray-500 text-sm">{company.sector}</td>
                     <td className="px-6 py-4 text-right space-x-2">
                       <button 
                         onClick={() => handleEdit(company)}

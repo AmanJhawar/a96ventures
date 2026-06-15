@@ -26,10 +26,10 @@ export default function AdminDashboard() {
             <Link 
               key={card.name} 
               href={card.href}
-              className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-[transform,box-shadow] duration-200 hover:-translate-y-1 group"
+              className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 group"
             >
               <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-black group-hover:text-white transition-colors duration-200">
-                <Icon size={24} className="text-gray-700 group-hover:text-white transition-colors duration-200" strokeWidth={1.5} />
+                <Icon size={24} className="text-gray-500 group-hover:text-white transition-colors duration-200" strokeWidth={1.5} />
               </div>
               <h2 className="text-xl font-semibold text-black mb-2">{card.name}</h2>
               <p className="text-gray-500 text-sm leading-relaxed">

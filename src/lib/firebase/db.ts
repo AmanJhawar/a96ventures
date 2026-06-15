@@ -68,9 +68,14 @@ export async function getCatalogItemById(id: string): Promise<CatalogItem | null
 
 // Submit a new inquiry
 export async function submitInquiry(data: {
-  name: string;
-  email: string;
-  company: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  countryCode: string;
+  mobile: string;
+  email?: string;
+  company?: string;
+  gstinPan?: string;
   message: string;
   inquiryType: string;
 }) {

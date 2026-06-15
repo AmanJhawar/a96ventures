@@ -89,7 +89,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
                   : 'opacity-100'
               }`}
             >
-              <ChevronLeft className="w-5 h-5 text-gray-800" />
+              <ChevronLeft className="w-5 h-5 text-black" />
             </button>
             <button 
               onClick={() => setActiveIndex(Math.min(safeImages.length - 1, activeIndex + 1))}
@@ -100,7 +100,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
                   : 'opacity-100'
               }`}
             >
-              <ChevronRight className="w-5 h-5 text-gray-800" />
+              <ChevronRight className="w-5 h-5 text-black" />
             </button>
           </>
         )}

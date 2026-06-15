@@ -6,16 +6,34 @@ import { app } from '@/lib/firebase/config'
 import { Tags, Trash2, Edit2, X, Check } from 'lucide-react'
 import { DEFAULT_CATEGORIES } from '@/lib/types'
 import { ConfirmModal } from '@/components/confirm-modal'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 
 const db = getFirestore(app)
+
+const addCategorySchema = z.object({
+  name: z.string().min(1, 'Category name is required').trim()
+})
+type AddCategoryValues = z.infer<typeof addCategorySchema>
 
 export default function AdminCategories() {
   const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
-  const [newCategoryInput, setNewCategoryInput] = useState('')
+  
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editInput, setEditInput] = useState('')
   const [deleteCategory, setDeleteCategory] = useState<string | null>(null)
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting }
+  } = useForm<AddCategoryValues>({
+    resolver: zodResolver(addCategorySchema),
+    defaultValues: { name: '' }
+  })
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -36,17 +54,16 @@ export default function AdminCategories() {
     fetchCategories()
   }, [])
 
-  const handleAddCategory = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const val = newCategoryInput.trim()
-    if (!val || categories.some(c => c.toLowerCase() === val.toLowerCase())) {
-      if (val) alert("Category already exists (case-insensitive).")
+  const onAddCategory = async (data: AddCategoryValues) => {
+    const val = data.name
+    if (categories.some(c => c.toLowerCase() === val.toLowerCase())) {
+      alert("Category already exists (case-insensitive).")
       return
     }
 
     const newCategories = [...categories, val]
     setCategories(newCategories)
-    setNewCategoryInput('')
+    reset()
 
     try {
       await setDoc(doc(db, 'settings', 'categories'), { list: newCategories }, { merge: true })
@@ -133,19 +150,23 @@ export default function AdminCategories() {
         </div>
       </div>
 
-      <div className="bg-white p-6 md:p-8 rounded-2xl border border-gray-200 shadow-sm w-full">
-        <form onSubmit={handleAddCategory} className="flex gap-4 mb-8">
-          <input
-            type="text"
-            value={newCategoryInput}
-            onChange={e => setNewCategoryInput(e.target.value)}
-            placeholder="New Category Name..."
-            className="admin-input flex-1"
-          />
-          <button type="submit" disabled={!newCategoryInput.trim()} className="admin-btn-primary whitespace-nowrap px-8 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100">
-            Add Category
-          </button>
-        </form>
+      <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200 shadow-sm w-full">
+        <div className="mb-8">
+          <form onSubmit={handleSubmit(onAddCategory)} className="flex gap-4 items-start">
+            <div className="flex-1">
+              <input
+                type="text"
+                {...register('name')}
+                placeholder="New Category Name..."
+                className={`admin-input w-full ${errors.name ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+              />
+              {errors.name && <p className="text-gray-500 font-medium text-sm mt-1">{errors.name.message}</p>}
+            </div>
+            <button type="submit" disabled={isSubmitting} className="btn-primary whitespace-nowrap px-8 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100">
+              {isSubmitting ? 'Adding...' : 'Add Category'}
+            </button>
+          </form>
+        </div>
 
         {loading ? (
           <div className="flex justify-center py-10">
@@ -169,14 +190,14 @@ export default function AdminCategories() {
                       <button onClick={() => saveEdit(idx, cat)} className="text-gray-400 hover:text-black p-2 transition-[color,transform] active:scale-[0.97]" title="Save">
                         <Check size={18} />
                       </button>
-                      <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600 p-2 transition-[color,transform] active:scale-[0.97]" title="Cancel">
+                      <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-500 p-2 transition-[color,transform] active:scale-[0.97]" title="Cancel">
                         <X size={18} />
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-center justify-between flex-1 gap-3">
-                    <span className="font-medium text-gray-800 flex-1 truncate">{cat}</span>
+                    <span className="font-medium text-black flex-1 truncate">{cat}</span>
                     <div className="flex items-center gap-1 w-16 justify-end shrink-0">
                       <button
                         onClick={() => startEdit(idx, cat)}
@@ -215,4 +236,3 @@ export default function AdminCategories() {
     </div>
   )
 }
-

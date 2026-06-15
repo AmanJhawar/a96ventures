@@ -3,11 +3,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { collection, setDoc, deleteDoc, doc, getDocs, getDoc, getFirestore } from 'firebase/firestore/lite'
 import { app } from '@/lib/firebase/config'
-
 const db = getFirestore(app)
 import { Trash2, Plus, Box, Edit2, X, ChevronDown } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 import { ConfirmModal } from '@/components/confirm-modal'
+import { useForm, Controller } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 
 const STANDARD_SIZES = ['4cm', '7cm', '10cm', '12.5cm']
 const STANDARD_PURITIES = ['92.5', '80.0']
@@ -22,6 +24,7 @@ const STANDARD_STONES = [
   'Blue Agate'
 ]
 const STANDARD_WEIGHTS = ['10g', '20g', '50g', '100g']
+
 const hasStonesCategory = (category?: string) => {
   if (!category) return false
   const c = category.toLowerCase()
@@ -33,23 +36,6 @@ const isNoPurityCategory = (category?: string) => {
   return hasStonesCategory(category) || category.includes('Bullion')
 }
 
-const getSizeMatrix = (item: Partial<InventoryItem>) => {
-  if (hasStonesCategory(item.category)) return [...(item.standardStones || []), ...(item.customStones || [])]
-  if (item.category?.includes('Bullion')) return [...(item.standardWeights || []), ...(item.customWeights || [])]
-  return [...(item.standardSizes || []), ...(item.customSizes || [])]
-}
-
-const getStandardSizeMatrix = (item: Partial<InventoryItem>) => {
-  if (hasStonesCategory(item.category)) return item.standardStones || []
-  if (item.category?.includes('Bullion')) return item.standardWeights || []
-  return item.standardSizes || []
-}
-
-const getCustomSizeMatrix = (item: Partial<InventoryItem>) => {
-  if (hasStonesCategory(item.category)) return item.customStones || []
-  if (item.category?.includes('Bullion')) return item.customWeights || []
-  return item.customSizes || []
-}
 import { DEFAULT_CATEGORIES } from '@/lib/types'
 
 interface InventoryItem {
@@ -74,12 +60,54 @@ interface InventoryItem {
   orderIndex?: number
 }
 
-const emptyForm: Partial<InventoryItem> = {
+const inventorySchema = z.object({
+  id: z.string().min(1, 'URL Key is required').regex(/^[a-z0-9-]+$/, 'Only lowercase letters, numbers, and hyphens'),
+  sku: z.string().min(1, 'SKU is required'),
+  name: z.string().min(1, 'Product Name is required'),
+  category: z.string().min(1, 'Category is required'),
+  hasVariants: z.boolean(),
+  weight: z.string().regex(/^\d+(\.\d+)?$/, 'Only numbers allowed').optional().or(z.literal('')),
+  material: z.string().optional().or(z.literal('')),
+  description: z.string().min(1, 'Description is required'),
+  imageFile: z.string().min(1, 'Thumbnail image is required'),
+  orderIndex: z.number().optional(),
+  
+  standardSizes: z.array(z.string()).optional(),
+  customSizes: z.array(z.string()).optional(),
+  standardPurities: z.array(z.string()).optional(),
+  customPurities: z.array(z.string()).optional(),
+  standardWeights: z.array(z.string()).optional(),
+  customWeights: z.array(z.string()).optional(),
+  standardStones: z.array(z.string()).optional(),
+  customStones: z.array(z.string()).optional(),
+  additionalImages: z.array(z.string()).optional()
+})
+
+type InventoryValues = z.infer<typeof inventorySchema>
+
+const emptyForm: InventoryValues = {
   id: '', sku: '', name: '', category: '', hasVariants: false,
   standardSizes: [], customSizes: [], standardPurities: [], customPurities: [],
   standardWeights: [], customWeights: [], standardStones: [], customStones: [],
-  weight: '', material: '', description: '', imageFile: '',
-  orderIndex: 0
+  weight: '', material: '', description: '', imageFile: '', additionalImages: []
+}
+
+const getSizeMatrix = (item: Partial<InventoryItem>) => {
+  if (hasStonesCategory(item.category)) return [...(item.standardStones || []), ...(item.customStones || [])]
+  if (item.category?.includes('Bullion')) return [...(item.standardWeights || []), ...(item.customWeights || [])]
+  return [...(item.standardSizes || []), ...(item.customSizes || [])]
+}
+
+const getStandardSizeMatrix = (item: Partial<InventoryItem>) => {
+  if (hasStonesCategory(item.category)) return item.standardStones || []
+  if (item.category?.includes('Bullion')) return item.standardWeights || []
+  return item.standardSizes || []
+}
+
+const getCustomSizeMatrix = (item: Partial<InventoryItem>) => {
+  if (hasStonesCategory(item.category)) return item.customStones || []
+  if (item.category?.includes('Bullion')) return item.customWeights || []
+  return item.customSizes || []
 }
 
 export default function AdminInventory() {
@@ -89,12 +117,29 @@ export default function AdminInventory() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [formData, setFormData] = useState<Partial<InventoryItem>>({ ...emptyForm })
+  
   const [customSizeInput, setCustomSizeInput] = useState('')
   const [customPurityInput, setCustomPurityInput] = useState('')
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [categoryFocusedIndex, setCategoryFocusedIndex] = useState(-1)
   const categoryRef = useRef<HTMLDivElement>(null)
+
+  const {
+    register,
+    handleSubmit,
+    control,
+    reset,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting }
+  } = useForm<InventoryValues>({
+    resolver: zodResolver(inventorySchema),
+    defaultValues: emptyForm
+  })
+
+  const formValues = watch()
+  const formCategory = watch('category')
+  const formHasVariants = watch('hasVariants')
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -106,13 +151,12 @@ export default function AdminInventory() {
 
   useEffect(() => {
     if (categoryOpen) {
-      const idx = categories.findIndex(c => c === formData.category)
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      const idx = categories.findIndex(c => c === formCategory)
       setCategoryFocusedIndex(idx >= 0 ? idx : 0)
     } else {
       setCategoryFocusedIndex(-1)
     }
-  }, [categoryOpen, formData.category, categories])
+  }, [categoryOpen, formCategory, categories])
 
   const handleCategoryKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!categoryOpen) {
@@ -126,13 +170,18 @@ export default function AdminInventory() {
       case 'ArrowDown': e.preventDefault(); setCategoryFocusedIndex(prev => prev < categories.length - 1 ? prev + 1 : prev); break
       case 'ArrowUp': e.preventDefault(); setCategoryFocusedIndex(prev => prev > 0 ? prev - 1 : prev); break
       case 'Enter':
-      case ' ': e.preventDefault(); if (categoryFocusedIndex >= 0 && categoryFocusedIndex < categories.length) { setFormData({ ...formData, category: categories[categoryFocusedIndex] }); setCategoryOpen(false) }; break
+      case ' ': 
+        e.preventDefault()
+        if (categoryFocusedIndex >= 0 && categoryFocusedIndex < categories.length) { 
+          setValue('category', categories[categoryFocusedIndex])
+          setCategoryOpen(false) 
+        }
+        break
     }
   }
 
   const fetchData = async () => {
     try {
-      // Fetch categories
       const catDoc = await getDoc(doc(db, 'settings', 'categories'))
       if (catDoc.exists() && catDoc.data().list) {
         setCategories(catDoc.data().list)
@@ -141,7 +190,6 @@ export default function AdminInventory() {
         await setDoc(doc(db, 'settings', 'categories'), { list: DEFAULT_CATEGORIES })
       }
 
-      // Fetch inventory items
       const snap = await getDocs(collection(db, 'catalog'))
       const fetched: InventoryItem[] = []
       snap.forEach((d) => fetched.push({ ...d.data(), id: d.id } as InventoryItem))
@@ -154,7 +202,6 @@ export default function AdminInventory() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData()
   }, [])
 
@@ -165,11 +212,8 @@ export default function AdminInventory() {
 
     try {
       await deleteDoc(doc(db, 'catalog', deleteId))
-
-      // Trigger dynamic path revalidation in background
       fetch(`/api/revalidate?path=${encodeURIComponent('/catalog')}`).catch(err => console.error(err))
       fetch(`/api/revalidate?path=${encodeURIComponent(`/catalog/${deleteId}`)}`).catch(err => console.error(err))
-
       setItems(items.filter(i => i.id !== deleteId))
     } catch (err) {
       console.error("Error deleting", err)
@@ -180,9 +224,19 @@ export default function AdminInventory() {
   }
 
   const handleEdit = (item: InventoryItem) => {
-    setFormData({
+    reset({
       ...item,
-      orderIndex: item.orderIndex || 0
+      weight: item.weight ? item.weight.replace(/[^\d.]/g, '') : '',
+      orderIndex: item.orderIndex || undefined,
+      standardSizes: item.standardSizes || [],
+      customSizes: item.customSizes || [],
+      standardPurities: item.standardPurities || [],
+      customPurities: item.customPurities || [],
+      standardWeights: item.standardWeights || [],
+      customWeights: item.customWeights || [],
+      standardStones: item.standardStones || [],
+      customStones: item.customStones || [],
+      additionalImages: item.additionalImages || []
     })
     setEditingId(item.id)
     setIsFormOpen(true)
@@ -191,18 +245,21 @@ export default function AdminInventory() {
   const handleCancel = () => {
     setIsFormOpen(false)
     setEditingId(null)
-    setFormData({ ...emptyForm })
+    reset(emptyForm)
     setCustomSizeInput('')
     setCustomPurityInput('')
   }
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formData.id) { alert("ID is required!"); return }
-    const docId = editingId || formData.id
+  const handleAddNew = () => {
+    reset(emptyForm)
+    setEditingId(null)
+    setIsFormOpen(true)
+  }
+
+  const onSubmit = async (data: InventoryValues) => {
+    const docId = editingId || data.id
 
     try {
-      // Uniqueness check for new products
       if (!editingId) {
         const existingDoc = await getDoc(doc(db, 'catalog', docId))
         if (existingDoc.exists()) {
@@ -211,12 +268,11 @@ export default function AdminInventory() {
         }
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id: _id, ...payload } = formData
+      const { id: _id, ...payload } = data as any
 
       let totalSize = payload.imageFile ? payload.imageFile.length : 0
       if (payload.additionalImages) {
-        payload.additionalImages.forEach(img => {
+        payload.additionalImages.forEach((img: string) => {
           totalSize += img.length
         })
       }
@@ -225,14 +281,17 @@ export default function AdminInventory() {
         return
       }
 
-      if (!formData.hasVariants) {
+      if (!payload.hasVariants) {
         payload.standardSizes = []; payload.customSizes = []; payload.standardWeights = []; payload.customWeights = []; payload.standardStones = []; payload.customStones = []
         payload.standardPurities = []; payload.customPurities = []
       }
 
+      if (payload.weight) {
+        payload.weight = payload.weight + 'g'
+      }
+
       await setDoc(doc(db, 'catalog', docId), payload)
 
-      // Trigger dynamic path revalidation in background
       fetch(`/api/revalidate?path=${encodeURIComponent('/catalog')}`).catch(err => console.error(err))
       fetch(`/api/revalidate?path=${encodeURIComponent(`/catalog/${docId}`)}`).catch(err => console.error(err))
 
@@ -249,40 +308,46 @@ export default function AdminInventory() {
   }
 
   const getMatrixFields = () => {
-    if (hasStonesCategory(formData.category)) return ['standardStones', 'customStones'] as const
-    if (formData.category?.includes('Bullion')) return ['standardWeights', 'customWeights'] as const
+    if (hasStonesCategory(formCategory)) return ['standardStones', 'customStones'] as const
+    if (formCategory?.includes('Bullion')) return ['standardWeights', 'customWeights'] as const
     return ['standardSizes', 'customSizes'] as const
   }
 
   const toggleSize = (size: string) => {
     const [stdKey] = getMatrixFields()
-    const current = (formData[stdKey] as string[]) || []
-    setFormData({ ...formData, [stdKey]: current.includes(size) ? current.filter(s => s !== size) : [...current, size] })
+    const current = (formValues[stdKey] as string[]) || []
+    setValue(stdKey, current.includes(size) ? current.filter(s => s !== size) : [...current, size])
   }
 
   const togglePurity = (p: string) => {
-    const current = formData.standardPurities || []
-    setFormData({ ...formData, standardPurities: current.includes(p) ? current.filter(x => x !== p) : [...current, p] })
+    const current = formValues.standardPurities || []
+    setValue('standardPurities', current.includes(p) ? current.filter(x => x !== p) : [...current, p])
   }
 
   const addCustomSize = () => {
     const v = customSizeInput.trim()
     if (!v) return
-    if (!/^\d+(\.\d+)?$/.test(v)) {
+    if (!/^\d+(\.\d+)?$/.test(v) && !hasStonesCategory(formCategory)) {
       alert('Only numeric values are allowed for custom sizes/weights.')
       return
     }
     const [, cstKey] = getMatrixFields()
-    const current = (formData[cstKey] as string[]) || []
-    if (!current.includes(v)) {
-      setFormData({ ...formData, [cstKey]: [...current, v] })
+    const current = (formValues[cstKey] as string[]) || []
+    
+    let finalV = v
+    if (!hasStonesCategory(formCategory)) {
+      finalV = formCategory?.includes('Bullion') ? `${v}g` : `${v}cm`
+    }
+
+    if (!current.includes(finalV)) {
+      setValue(cstKey, [...current, finalV])
     }
     setCustomSizeInput('')
   }
 
   const removeCustomSize = (s: string) => {
     const [, cstKey] = getMatrixFields()
-    setFormData({ ...formData, [cstKey]: ((formData[cstKey] as string[]) || []).filter(x => x !== s) })
+    setValue(cstKey, ((formValues[cstKey] as string[]) || []).filter(x => x !== s))
   }
 
   const addCustomPurity = () => {
@@ -292,16 +357,14 @@ export default function AdminInventory() {
       alert('Only numeric values with up to one decimal point are allowed for purity.')
       return
     }
-    const newCustoms = [...(formData.customPurities || []), val]
-    setFormData({ ...formData, customPurities: Array.from(new Set(newCustoms)) })
+    const newCustoms = [...(formValues.customPurities || []), val]
+    setValue('customPurities', Array.from(new Set(newCustoms)))
     setCustomPurityInput('')
   }
 
   const removeCustomPurity = (p: string) => {
-    setFormData({ ...formData, customPurities: (formData.customPurities || []).filter(x => x !== p) })
+    setValue('customPurities', (formValues.customPurities || []).filter(x => x !== p))
   }
-
-
 
   const numericFilter = (val: string) => val.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1')
 
@@ -318,8 +381,8 @@ export default function AdminInventory() {
           </div>
           <div className="flex items-center gap-4 w-full sm:w-auto">
             <button
-              onClick={() => setIsFormOpen(true)}
-              className="admin-btn-primary flex items-center gap-2 whitespace-nowrap"
+              onClick={handleAddNew}
+              className="btn-primary flex items-center gap-2 whitespace-nowrap"
             >
               <Plus size={18} className="transition-transform" />
               Add Product
@@ -329,44 +392,48 @@ export default function AdminInventory() {
       )}
 
       {isFormOpen && (
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
           <h2 className="text-xl font-semibold mb-6">{editingId ? 'Edit Product' : 'Add New Product'}</h2>
-          <form onSubmit={handleSave} className="space-y-6">
-            {/* Row 1: Slug + SKU */}
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="admin-label required">URL Key (ID)</label>
                 <input
-                  type="text" required disabled={!!editingId}
-                  value={formData.id || ''}
-                  onChange={e => setFormData({ ...formData, id: e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '') })}
-                  className="admin-input disabled:bg-gray-100 disabled:text-gray-500"
+                  type="text"
+                  {...register('id', {
+                    onChange: (e) => {
+                      e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '')
+                      setValue('id', e.target.value)
+                    }
+                  })}
+                  disabled={!!editingId}
+                  className={`admin-input disabled:bg-gray-100 disabled:text-gray-500 ${errors.id ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                   placeholder="e.g., modern-chair"
                 />
+                {errors.id && <p className="text-gray-500 font-medium text-sm mt-1">{errors.id.message}</p>}
               </div>
               <div>
                 <label className="admin-label required">SKU (Internal Code)</label>
                 <input
-                  type="text" required
-                  value={formData.sku || ''}
-                  onChange={e => setFormData({ ...formData, sku: e.target.value })}
-                  className="admin-input"
+                  type="text"
+                  {...register('sku')}
+                  className={`admin-input ${errors.sku ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                   placeholder="e.g., A96-001"
                 />
+                {errors.sku && <p className="text-gray-500 font-medium text-sm mt-1">{errors.sku.message}</p>}
               </div>
             </div>
 
-            {/* Row 2: Name + Category */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="admin-label required">Product Name</label>
                 <input
-                  type="text" required
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  className="admin-input"
+                  type="text"
+                  {...register('name')}
+                  className={`admin-input ${errors.name ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                   placeholder="e.g., Elegance Marble Vase"
                 />
+                {errors.name && <p className="text-gray-500 font-medium text-sm mt-1">{errors.name.message}</p>}
               </div>
               <div>
                 <label className="admin-label required mb-2">Category</label>
@@ -378,10 +445,10 @@ export default function AdminInventory() {
                     aria-expanded={categoryOpen}
                     aria-controls="admin-category-listbox"
                     onClick={() => setCategoryOpen(!categoryOpen)}
-                    className="admin-input flex items-center justify-between text-left"
+                    className={`admin-input flex items-center justify-between text-left ${errors.category ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                   >
-                    <span className={formData.category ? 'text-black' : 'text-gray-400'}>
-                      {formData.category || 'Select category'}
+                    <span className={formCategory ? 'text-black' : 'text-gray-400'}>
+                      {formCategory || 'Select category'}
                     </span>
                     <ChevronDown size={16} className={`text-gray-400 transition-transform ${categoryOpen ? 'rotate-180' : ''}`} />
                   </button>
@@ -389,13 +456,13 @@ export default function AdminInventory() {
                     <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden origin-top animate-[fadeInUp_150ms_var(--ease-out)_forwards]">
                       <ul id="admin-category-listbox" role="listbox" className="m-0 p-0 list-none max-h-60 overflow-y-auto">
                         {categories.map((cat, idx) => (
-                          <li key={cat} role="option" aria-selected={formData.category === cat}>
+                          <li key={cat} role="option" aria-selected={formCategory === cat}>
                             <button
                               type="button"
                               tabIndex={-1}
-                              onClick={() => { setFormData({ ...formData, category: cat }); setCategoryOpen(false) }}
+                              onClick={() => { setValue('category', cat, { shouldValidate: true }); setCategoryOpen(false) }}
                               className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${categoryFocusedIndex === idx ? 'bg-gray-100' : ''
-                                } ${formData.category === cat ? 'bg-gray-100 text-black font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                                } ${formCategory === cat ? 'bg-gray-100 text-black font-semibold' : 'text-gray-500 hover:bg-gray-50'
                                 }`}
                             >
                               {cat}
@@ -406,12 +473,12 @@ export default function AdminInventory() {
                     </div>
                   )}
                 </div>
+                {errors.category && <p className="text-gray-500 font-medium text-sm mt-1">{errors.category.message}</p>}
               </div>
             </div>
 
-            {/* ─── Variant Configuration ─── */}
             <div className="border border-gray-200 rounded-xl overflow-hidden transition-all duration-300">
-              <div className={`p-5 flex items-center justify-between transition-colors duration-200 ${formData.hasVariants ? 'border-b border-gray-100 bg-gray-50/50' : ''}`}>
+              <div className={`p-5 flex items-center justify-between transition-colors duration-200 ${formHasVariants ? 'border-b border-gray-100 bg-gray-50/50' : ''}`}>
                 <div>
                   <h3 className="text-sm font-semibold text-black">Inventory Variants</h3>
                   <p className="text-xs text-gray-500 mt-0.5">Configure sizes, purities, or specific stones/weights.</p>
@@ -419,42 +486,40 @@ export default function AdminInventory() {
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={formData.hasVariants}
-                  onClick={() => setFormData({ ...formData, hasVariants: !formData.hasVariants })}
-                  className={`relative inline-flex h-[22px] w-[42px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out ${formData.hasVariants ? 'bg-black' : 'bg-gray-200'}`}
+                  aria-checked={formHasVariants}
+                  onClick={() => setValue('hasVariants', !formHasVariants)}
+                  className={`relative inline-flex h-[22px] w-[42px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out ${formHasVariants ? 'bg-black' : 'bg-gray-200'}`}
                 >
-                  <span className={`pointer-events-none inline-block h-[18px] w-[18px] transform rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ease-in-out ${formData.hasVariants ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
+                  <span className={`pointer-events-none inline-block h-[18px] w-[18px] transform rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ease-in-out ${formHasVariants ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
                 </button>
               </div>
 
-              {formData.hasVariants && (
+              {formHasVariants && (
                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8 bg-white">
-                  {/* ── Size Column ── */}
-                  <div className={isNoPurityCategory(formData.category) ? 'md:col-span-2' : ''}>
-                    <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">
-                      {hasStonesCategory(formData.category) ? 'Available Stones' : formData.category?.includes('Bullion') ? 'Available Weights' : 'Available Sizes'}
+                  <div className={isNoPurityCategory(formCategory) ? 'md:col-span-2' : ''}>
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-4">
+                      {hasStonesCategory(formCategory) ? 'Available Stones' : formCategory?.includes('Bullion') ? 'Available Weights' : 'Available Sizes'}
                     </p>
                     <div className="flex flex-wrap gap-2 mb-6">
-                      {(hasStonesCategory(formData.category)
+                      {(hasStonesCategory(formCategory)
                         ? STANDARD_STONES
-                        : formData.category?.includes('Bullion')
+                        : formCategory?.includes('Bullion')
                           ? STANDARD_WEIGHTS
                           : STANDARD_SIZES
                       ).map(opt => (
                         <button
                           key={opt} type="button"
                           onClick={() => toggleSize(opt)}
-                          className={`admin-pill ${getStandardSizeMatrix(formData).includes(opt) ? 'admin-pill-active' : ''}`}
+                          className={`admin-pill ${getStandardSizeMatrix(formValues).includes(opt) ? 'admin-pill-active' : ''}`}
                         >
                           {opt}
                         </button>
                       ))}
                     </div>
 
-                    {/* Custom sizes already added */}
-                    {getCustomSizeMatrix(formData).length > 0 && (
+                    {getCustomSizeMatrix(formValues).length > 0 && (
                       <div className="flex flex-wrap gap-2 mb-4">
-                        {getCustomSizeMatrix(formData).map(s => (
+                        {getCustomSizeMatrix(formValues).map(s => (
                           <span key={s} className="admin-pill admin-pill-active flex items-center gap-1.5">
                             {s}
                             <button type="button" onClick={() => removeCustomSize(s)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-[0.97]"><X size={12} /></button>
@@ -463,18 +528,18 @@ export default function AdminInventory() {
                       </div>
                     )}
 
-                    <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">
-                      {hasStonesCategory(formData.category) ? 'Custom Stone' : formData.category?.includes('Bullion') ? 'Custom Weight' : 'Custom Size'}
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-3">
+                      {hasStonesCategory(formCategory) ? 'Custom Stone' : formCategory?.includes('Bullion') ? 'Custom Weight' : 'Custom Size'}
                     </p>
                     <div className="flex items-end gap-3 max-w-sm">
                       <div className="flex-1 relative">
                         <input
                           type="text"
                           value={customSizeInput}
-                          onChange={e => setCustomSizeInput(hasStonesCategory(formData.category) ? e.target.value : numericFilter(e.target.value))}
+                          onChange={e => setCustomSizeInput(hasStonesCategory(formCategory) ? e.target.value : numericFilter(e.target.value))}
                           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSize() } }}
                           className="admin-input-underline"
-                          placeholder={hasStonesCategory(formData.category) ? "e.g., Rose Quartz" : formData.category?.includes('Bullion') ? "e.g., 100" : "e.g., 20"}
+                          placeholder={hasStonesCategory(formCategory) ? "e.g., Rose Quartz" : formCategory?.includes('Bullion') ? "e.g., 100" : "e.g., 20"}
                         />
                       </div>
                       <button type="button" onClick={addCustomSize} className="admin-btn-outline">
@@ -483,26 +548,24 @@ export default function AdminInventory() {
                     </div>
                   </div>
 
-                  {/* ── Purity Column ── */}
-                  {!isNoPurityCategory(formData.category) && (
+                  {!isNoPurityCategory(formCategory) && (
                     <div>
-                      <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-4">Available Purities</p>
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-4">Available Purities</p>
                       <div className="flex flex-wrap gap-2 mb-6">
                         {STANDARD_PURITIES.map(p => (
                           <button
                             key={p} type="button"
                             onClick={() => togglePurity(p)}
-                            className={`admin-pill ${(formData.standardPurities || []).includes(p) ? 'admin-pill-active' : ''}`}
+                            className={`admin-pill ${(formValues.standardPurities || []).includes(p) ? 'admin-pill-active' : ''}`}
                           >
                             {p}
                           </button>
                         ))}
                       </div>
 
-                      {/* Custom purities already added */}
-                      {(formData.customPurities || []).length > 0 && (
+                      {(formValues.customPurities || []).length > 0 && (
                         <div className="flex flex-wrap gap-2 mb-4">
-                          {(formData.customPurities || []).map(p => (
+                          {(formValues.customPurities || []).map(p => (
                             <span key={p} className="admin-pill admin-pill-active flex items-center gap-1.5">
                               {p}
                               <button type="button" onClick={() => removeCustomPurity(p)} className="opacity-60 hover:opacity-100 transition-[opacity,transform] active:scale-[0.97]"><X size={12} /></button>
@@ -511,7 +574,7 @@ export default function AdminInventory() {
                         </div>
                       )}
 
-                      <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">Custom Purity</p>
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Custom Purity</p>
                       <div className="flex items-end gap-3">
                         <div className="flex-1 relative">
                           <input
@@ -533,91 +596,105 @@ export default function AdminInventory() {
               )}
             </div>
 
-            {/* Row 3: Weight + Material + Display Order */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label className="admin-label required">Approx Weight</label>
+                <label className="admin-label required">Approx Weight (in grams)</label>
                 <input
-                  type="text" required={!formData.hasVariants} disabled={formData.hasVariants}
-                  value={formData.hasVariants ? 'Configured per variant' : (formData.weight || '')}
-                  onChange={e => setFormData({ ...formData, weight: e.target.value })}
-                  className="admin-input disabled:bg-gray-100 disabled:text-gray-500"
-                  placeholder="e.g., 2.5 kg"
+                  type="text"
+                  {...register('weight')}
+                  disabled={formHasVariants}
+                  className={`admin-input disabled:bg-gray-100 disabled:text-gray-500 ${errors.weight ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                  placeholder={formHasVariants ? 'Configured per variant' : 'e.g., 2500'}
                 />
+                {errors.weight && <p className="text-gray-500 font-medium text-sm mt-1">{errors.weight.message}</p>}
               </div>
               <div>
                 <label className="admin-label">Material (Optional)</label>
                 <input
                   type="text"
-                  value={formData.material || ''}
-                  onChange={e => setFormData({ ...formData, material: e.target.value })}
-                  className="admin-input"
+                  {...register('material')}
+                  className={`admin-input ${errors.material ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                   placeholder="e.g., 999 Pure Silver"
                 />
+                {errors.material && <p className="text-gray-500 font-medium text-sm mt-1">{errors.material.message}</p>}
               </div>
               <div>
                 <label className="admin-label">Display Order (Optional)</label>
                 <input
                   type="number"
-                  value={formData.orderIndex ?? ''}
-                  onChange={e => setFormData({ ...formData, orderIndex: e.target.value ? parseInt(e.target.value, 10) : undefined })}
-                  className="admin-input"
+                  {...register('orderIndex', { valueAsNumber: true })}
+                  className={`admin-input ${errors.orderIndex ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                   placeholder="Lowest numbers first"
                 />
+                {errors.orderIndex && <p className="text-gray-500 font-medium text-sm mt-1">{errors.orderIndex.message}</p>}
               </div>
             </div>
 
-            {/* Row 4: Description */}
             <div>
               <label className="admin-label required">Description</label>
               <textarea
-                required rows={4}
-                value={formData.description}
-                onChange={e => setFormData({ ...formData, description: e.target.value })}
-                className="admin-input resize-none"
+                rows={4}
+                {...register('description')}
+                className={`admin-input resize-none ${errors.description ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
                 placeholder="Enter detailed product description, materials used, and care instructions..."
               />
+              {errors.description && <p className="text-gray-500 font-medium text-sm mt-1">{errors.description.message}</p>}
             </div>
 
-            {/* Images */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="admin-label required">Thumbnail Image (Portrait 2:3)</label>
-                <ImageDropzone
-                  value={formData.imageFile || ''}
-                  onChange={(url) => setFormData({ ...formData, imageFile: url })}
+                <Controller
+                  name="imageFile"
+                  control={control}
+                  render={({ field }) => (
+                    <ImageDropzone
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
                 />
+                {errors.imageFile && <p className="text-gray-500 font-medium text-sm mt-1">{errors.imageFile.message}</p>}
               </div>
 
               <div>
                 <label className="admin-label">Product Images (Landscape 3:2)</label>
-                <div className="grid grid-cols-1 gap-6">
-                  {(formData.additionalImages || []).map((img, idx) => (
-                    <ImageDropzone
-                      key={idx}
-                      value={img}
-                      onChange={(url) => {
-                        const newImages = [...(formData.additionalImages || [])]
-                        if (url) {
-                          newImages[idx] = url
-                        } else {
-                          newImages.splice(idx, 1)
-                        }
-                        setFormData({ ...formData, additionalImages: newImages })
-                      }}
-                    />
-                  ))}
-                  {(formData.additionalImages || []).length < 4 && (
-                    <ImageDropzone
-                      value=""
-                      onChange={(url) => {
-                        if (url) {
-                          setFormData({ ...formData, additionalImages: [...(formData.additionalImages || []), url] })
-                        }
-                      }}
-                    />
-                  )}
-                </div>
+                <Controller
+                  name="additionalImages"
+                  control={control}
+                  render={({ field }) => {
+                    const currentImages = field.value || []
+                    return (
+                      <div className="grid grid-cols-1 gap-6">
+                        {currentImages.map((img, idx) => (
+                          <ImageDropzone
+                            key={idx}
+                            value={img}
+                            onChange={(url) => {
+                              const newImages = [...currentImages]
+                              if (url) {
+                                newImages[idx] = url
+                              } else {
+                                newImages.splice(idx, 1)
+                              }
+                              field.onChange(newImages)
+                            }}
+                          />
+                        ))}
+                        {currentImages.length < 4 && (
+                          <ImageDropzone
+                            value=""
+                            onChange={(url) => {
+                              if (url) {
+                                field.onChange([...currentImages, url])
+                              }
+                            }}
+                          />
+                        )}
+                      </div>
+                    )
+                  }}
+                />
               </div>
             </div>
 
@@ -625,32 +702,31 @@ export default function AdminInventory() {
               <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
                 Cancel
               </button>
-              <button type="submit" className="admin-btn-primary px-8">
-                {editingId ? 'Update Product' : 'Save Product'}
+              <button type="submit" disabled={isSubmitting} className="btn-primary px-8 disabled:opacity-50">
+                {isSubmitting ? 'Saving...' : (editingId ? 'Update Product' : 'Save Product')}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* ─── Table ─── */}
       {!isFormOpen && (
         loading ? (
           <div className="flex justify-center py-20">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Image</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Product / SKU</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-gray-600 whitespace-nowrap">Category</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Sizes</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Purities</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-right">Actions</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-500">Image</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-500">Product / SKU</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-500 whitespace-nowrap">Category</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-500">Sizes</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-500">Purities</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-500 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -661,10 +737,9 @@ export default function AdminInventory() {
                       <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                         <td className="px-6 py-4">
                           {item.imageFile ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={item.imageFile.startsWith('data:') || item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`} alt="Product" className="w-12 h-12 object-cover rounded-md bg-[#f5f5f7]" />
+                            <img src={item.imageFile.startsWith('data:') || item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`} alt="Product" className="w-12 h-12 object-cover rounded-lg bg-[#f5f5f7]" />
                           ) : (
-                            <div className="w-12 h-12 bg-[#f5f5f7] rounded-md flex items-center justify-center">
+                            <div className="w-12 h-12 bg-[#f5f5f7] rounded-lg flex items-center justify-center">
                               <Box size={20} className="text-gray-400" />
                             </div>
                           )}
@@ -674,7 +749,7 @@ export default function AdminInventory() {
                           <div className="text-xs text-gray-500 mt-1">{item.sku} · /{item.id}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md whitespace-nowrap">{item.category}</span>
+                          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg whitespace-nowrap">{item.category}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1">

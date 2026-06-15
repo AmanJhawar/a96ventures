@@ -114,7 +114,7 @@ export function ConfirmModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 8 }}
             transition={{ duration: 0.2, ease: EASE_OUT }}
-            className="relative bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden z-10"
+            className="relative bg-white rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.06)] w-full max-w-md overflow-hidden z-10"
           >
             <div className="p-6 md:p-8">
               <div className="flex items-center justify-between mb-4">
@@ -142,7 +142,7 @@ export function ConfirmModal({
                 </button>
                 <button
                   onClick={() => onConfirm()}
-                  className="w-full sm:w-auto px-6 py-3 text-sm font-semibold text-white bg-black rounded-lg hover:bg-gray-800 transition-[background-color,transform] active:scale-[0.97]"
+                  className="btn-primary w-full sm:w-auto"
                 >
                   {confirmText}
                 </button>

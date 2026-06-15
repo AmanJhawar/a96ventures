@@ -85,7 +85,7 @@ export default function NetworkHero() {
 
         {/* Main Title */}
         <motion.h1 
-          className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-normal text-black mb-24"
+          className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight text-black mb-24"
           initial={{ clipPath: 'inset(0 0 100% 0)' }}
           animate={{ clipPath: 'inset(0 0 0% 0)' }}
           transition={{ duration: 0.8, ease: EASE_OUT }}
@@ -113,7 +113,7 @@ export default function NetworkHero() {
         >
           <Link
             href="/portfolio"
-            className="inline-block bg-black text-white px-8 py-4 rounded-lg font-medium tracking-wide text-sm transition-[background-color,transform,box-shadow] duration-[150ms] ease-[var(--ease-out)] hover:bg-gray-800 active:scale-[0.97] shadow-sm"
+            className="btn-primary shadow-sm"
           >
             View Portfolio
           </Link>

@@ -194,7 +194,7 @@ export function CartDrawer() {
                 <Link 
                   href="/contact?fromCart=true"
                   onClick={() => setIsCartOpen(false)}
-                  className="w-full bg-black text-white px-6 py-4 rounded-lg font-semibold flex items-center justify-between hover:bg-gray-800 transition-[background-color,transform] active:scale-[0.97]"
+                  className="btn-primary w-full justify-between"
                 >
                   <span>Inquire About Items</span>
                   <ArrowRight size={18} />

@@ -4,7 +4,7 @@ import { StaggerContainer, FadeInUp } from '@/components/motion-transitions'
 export default function NotFound() {
   return (
     <StaggerContainer className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center">
-      <FadeInUp className="text-8xl font-bold tracking-tighter text-gray-100 mb-6 select-none">
+      <FadeInUp className="text-8xl font-bold tracking-tight text-gray-100 mb-6 select-none">
         404
       </FadeInUp>
       <FadeInUp 

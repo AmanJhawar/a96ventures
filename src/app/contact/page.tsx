@@ -5,26 +5,70 @@ import { useSearchParams } from 'next/navigation'
 import CustomSelect from '@/components/custom-select'
 import { submitInquiry } from '@/lib/firebase/db'
 import { useCart } from '@/components/cart-provider'
+import { useForm, Controller } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+
+const contactSchema = z.object({
+  inquiryType: z.string().min(1, 'Please select an inquiry type'),
+  firstName: z.string().min(1, 'First name is required'),
+  middleName: z.string().optional(),
+  lastName: z.string().min(1, 'Last name is required'),
+  countryCode: z.string().regex(/^\d{1,4}$/, 'Invalid code (e.g. 91)'),
+  mobile: z.string().regex(/^\d{7,15}$/, 'Must be between 7 and 15 digits'),
+  email: z.string().email('Invalid email address').optional().or(z.literal('')),
+  company: z.string().optional(),
+  gstinPan: z.string().optional(),
+  message: z.string().min(10, 'Message must be at least 10 characters long')
+}).refine(data => {
+  if (data.countryCode === '91') {
+    return data.mobile.length === 10;
+  }
+  return true;
+}, {
+  message: 'Indian mobile numbers must be exactly 10 digits',
+  path: ['mobile']
+})
+
+type ContactValues = z.infer<typeof contactSchema>
 
 function ContactForm() {
   const searchParams = useSearchParams()
   const { cartItems, clearCart } = useCart()
   const fromCart = searchParams.get('fromCart') === 'true'
 
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    company: '',
-    message: '',
-    inquiryType: fromCart ? 'product' : 'general'
-  })
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
 
+  const {
+    register,
+    handleSubmit,
+    control,
+    setValue,
+    watch,
+    reset,
+    formState: { errors, isSubmitting }
+  } = useForm<ContactValues>({
+    resolver: zodResolver(contactSchema),
+    defaultValues: {
+      inquiryType: fromCart ? 'product' : 'general',
+      firstName: '',
+      middleName: '',
+      lastName: '',
+      countryCode: '91',
+      mobile: '',
+      email: '',
+      company: '',
+      gstinPan: '',
+      message: ''
+    }
+  })
+
+  const currentMessage = watch('message')
+
   // Pre-fill from Cart
   useEffect(() => {
-    if (fromCart && cartItems.length > 0 && !formData.message) {
+    if (fromCart && cartItems.length > 0 && !currentMessage) {
       const intro = "I would like to inquire about the following items:\n\n"
       const itemsList = cartItems.map(item => {
         let text = `- [${item.sku}] ${item.quantity}x ${item.productName}`
@@ -46,119 +90,183 @@ function ContactForm() {
         return text
       }).join('\n')
       
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setFormData(prev => ({
-        ...prev,
-        message: intro + itemsList + "\n\nAdditional comments:\n"
-      }))
+      setValue('message', intro + itemsList + "\n\nAdditional comments:\n", { shouldValidate: true })
     }
-  }, [fromCart, cartItems, formData.message])
+  }, [fromCart, cartItems, currentMessage, setValue])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> | { target: { name: string; value: string } }) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    })
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting(true)
+  const onSubmit = async (data: ContactValues) => {
     setError('')
-    
     try {
-      await submitInquiry(formData)
+      await submitInquiry({
+        firstName: data.firstName,
+        middleName: data.middleName,
+        lastName: data.lastName,
+        countryCode: '+' + data.countryCode,
+        mobile: data.mobile,
+        email: data.email || undefined,
+        company: data.company || undefined,
+        gstinPan: data.gstinPan || undefined,
+        message: data.message,
+        inquiryType: data.inquiryType
+      })
       if (fromCart) {
         clearCart()
       }
       setSuccess(true)
-      setFormData({
-        name: '',
-        email: '',
-        company: '',
-        message: '',
-        inquiryType: 'general'
-      })
+      reset()
       setTimeout(() => setSuccess(false), 5000)
     } catch (err) {
       console.error('Error submitting form:', err)
       setError('There was an error sending your message. Please try again.')
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
   return (
-    <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
+    <form className="flex flex-col gap-6" onSubmit={handleSubmit(onSubmit)}>
       <div className="flex flex-col">
         <label htmlFor="inquiryType" className="text-sm font-medium text-black mb-2">Inquiry Type</label>
-        <CustomSelect
-          id="inquiryType"
+        <Controller
           name="inquiryType"
-          value={formData.inquiryType}
-          onChange={handleChange}
-          options={[
-            { value: "general", label: "General Inquiry" },
-            { value: "product", label: "Product & Order Inquiry" },
-            { value: "pitch", label: "Startup Pitch" },
-            { value: "lp", label: "Limited Partner" },
-            { value: "press", label: "Press & Media" },
-            { value: "partnership", label: "Partnership" }
-          ]}
+          control={control}
+          render={({ field }) => (
+            <CustomSelect
+              id="inquiryType"
+              name="inquiryType"
+              value={field.value}
+              onChange={field.onChange}
+              options={[
+                { value: "general", label: "General Inquiry" },
+                { value: "product", label: "Product & Order Inquiry" },
+                { value: "pitch", label: "Startup Pitch" },
+                { value: "lp", label: "Limited Partner" },
+                { value: "press", label: "Press & Media" },
+                { value: "partnership", label: "Partnership" }
+              ]}
+            />
+          )}
         />
+        {errors.inquiryType && <p className="text-gray-500 font-medium text-sm mt-1">{errors.inquiryType.message}</p>}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="flex flex-col">
+          <label htmlFor="firstName" className="text-sm font-medium text-black mb-2">First Name *</label>
+          <input
+            type="text"
+            id="firstName"
+            placeholder="e.g., Jane"
+            {...register('firstName')}
+            className={`px-4 py-3 border rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10 ${errors.firstName ? 'border-gray-900' : 'border-gray-200'}`}
+          />
+          {errors.firstName && <p className="text-gray-500 font-medium text-sm mt-1">{errors.firstName.message}</p>}
+        </div>
+
+        <div className="flex flex-col">
+          <label htmlFor="middleName" className="text-sm font-medium text-black mb-2">Middle Name</label>
+          <input
+            type="text"
+            id="middleName"
+            placeholder="e.g., A."
+            {...register('middleName')}
+            className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10"
+          />
+        </div>
+
+        <div className="flex flex-col">
+          <label htmlFor="lastName" className="text-sm font-medium text-black mb-2">Last Name *</label>
+          <input
+            type="text"
+            id="lastName"
+            placeholder="e.g., Doe"
+            {...register('lastName')}
+            className={`px-4 py-3 border rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10 ${errors.lastName ? 'border-gray-900' : 'border-gray-200'}`}
+          />
+          {errors.lastName && <p className="text-gray-500 font-medium text-sm mt-1">{errors.lastName.message}</p>}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div className="flex flex-col">
-          <label htmlFor="name" className="text-sm font-medium text-black mb-2">Full Name *</label>
+          <label htmlFor="mobile" className="text-sm font-medium text-black mb-2">Phone Number *</label>
+          <div className="flex gap-2 relative items-center">
+            <span className="absolute left-4 text-gray-500 font-medium pointer-events-none">+</span>
+            <input
+              type="tel"
+              id="countryCode"
+              placeholder="91"
+              {...register('countryCode', {
+                onChange: (e) => {
+                  e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                }
+              })}
+              className={`w-20 min-w-0 pl-8 pr-3 py-3 border rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10 ${errors.countryCode ? 'border-gray-900' : 'border-gray-200'}`}
+            />
+              <input
+              type="tel"
+              id="mobile"
+              {...register('mobile', {
+                onChange: (e) => {
+                  e.target.value = e.target.value.replace(/\D/g, '').slice(0, 15);
+                }
+              })}
+              placeholder="e.g., 9876543210"
+              className={`flex-1 min-w-0 px-4 py-3 border rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10 ${errors.mobile ? 'border-gray-900' : 'border-gray-200'}`}
+            />
+          </div>
+          {(errors.countryCode || errors.mobile) && (
+            <p className="text-gray-500 font-medium text-sm mt-1">
+              {errors.countryCode?.message || errors.mobile?.message}
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col">
+          <label htmlFor="email" className="text-sm font-medium text-black mb-2">Email Address</label>
+          <input
+            type="email"
+            id="email"
+            placeholder="e.g., jane@example.com"
+            {...register('email')}
+            className={`px-4 py-3 border rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10 ${errors.email ? 'border-gray-900' : 'border-gray-200'}`}
+          />
+          {errors.email && <p className="text-gray-500 font-medium text-sm mt-1">{errors.email.message}</p>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="flex flex-col">
+          <label htmlFor="company" className="text-sm font-medium text-black mb-2">Company Name</label>
           <input
             type="text"
-            id="name"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
+            id="company"
+            placeholder="e.g., Acme Corp"
+            {...register('company')}
             className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10"
-            required
           />
         </div>
 
         <div className="flex flex-col">
-          <label htmlFor="email" className="text-sm font-medium text-black mb-2">Email Address *</label>
+          <label htmlFor="gstinPan" className="text-sm font-medium text-black mb-2">GSTIN / PAN</label>
           <input
-            type="email"
-            id="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10"
-            required
+            type="text"
+            id="gstinPan"
+            {...register('gstinPan')}
+            className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10 uppercase"
+            placeholder="e.g., ABCDE1234F"
           />
         </div>
-      </div>
-
-      <div className="flex flex-col">
-        <label htmlFor="company" className="text-sm font-medium text-black mb-2">Company</label>
-        <input
-          type="text"
-          id="company"
-          name="company"
-          value={formData.company}
-          onChange={handleChange}
-          className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10"
-        />
       </div>
 
       <div className="flex flex-col">
         <label htmlFor="message" className="text-sm font-medium text-black mb-2">Message *</label>
         <textarea
           id="message"
-          name="message"
-          value={formData.message}
-          onChange={handleChange}
-          className="px-4 py-3 border border-gray-200 rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10 resize-y min-h-[160px]"
+          placeholder="How can we help you?"
+          {...register('message')}
+          className={`px-4 py-3 border rounded-lg text-base bg-white transition-colors duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10 resize-y min-h-[160px] ${errors.message ? 'border-gray-900' : 'border-gray-200'}`}
           rows={8}
-          required
         ></textarea>
+        {errors.message && <p className="text-gray-500 font-medium text-sm mt-1">{errors.message.message}</p>}
       </div>
 
       {error && <p className="text-black text-sm font-semibold bg-gray-50 border border-gray-200 p-4 rounded-lg">{error}</p>}
@@ -174,7 +282,7 @@ function ContactForm() {
       <button 
         type="submit" 
         disabled={isSubmitting}
-        className={`btn-primary border-none ${isSubmitting ? 'opacity-50' : 'cursor-pointer'}`}
+        className={`btn-primary border-none ${isSubmitting ? 'opacity-50' : ''}`}
       >
         {isSubmitting ? 'Sending...' : 'Send Message'}
       </button>
@@ -195,7 +303,7 @@ export default function Contact() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-20 max-w-[1000px] mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.5fr] gap-12 lg:gap-20 max-w-[1200px] mx-auto">
           <div className="flex flex-col gap-10">
             <div>
               <h3 className="text-xl font-semibold text-black mb-4">For Entrepreneurs</h3>

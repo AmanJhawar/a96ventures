@@ -33,12 +33,12 @@ export function ProductCard({ item, showVariants = false }: ProductCardProps) {
         <div className="flex flex-col items-start mb-2">
           <h2 className="text-sm font-semibold text-black tracking-wide uppercase line-clamp-2">{item.name}</h2>
           {item.category && (
-            <span className="text-xs font-medium tracking-widest uppercase text-gray-400 mt-2">{item.category}</span>
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mt-2">{item.category}</span>
           )}
         </div>
         
         {showVariants && (
-          <div className="mt-auto pt-4 border-t border-gray-50">
+          <div className="mt-auto pt-4 border-t border-gray-100">
             {(() => {
               let sizes = 0
               let sizeLabel = 'sizes'

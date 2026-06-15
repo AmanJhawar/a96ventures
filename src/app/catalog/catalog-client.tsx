@@ -117,7 +117,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                 className={`px-6 py-2 rounded-lg text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border ${
                   activeFilter === cat 
                     ? 'bg-white text-black border-black shadow-[0_0_0_1px_black]' 
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-black/30'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-black/30'
                 }`}
               >
                 {cat}
@@ -154,7 +154,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                   role="option"
                   aria-selected={sortBy === 'default'}
                   onClick={() => { setSortBy('default'); closeDropdown() }}
-                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'default' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 0 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
+                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'default' ? 'font-semibold text-black' : 'text-gray-500'} ${focusedIndex === 0 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
                 >
                   Default
                 </button>
@@ -162,7 +162,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                   role="option"
                   aria-selected={sortBy === 'name-asc'}
                   onClick={() => { setSortBy('name-asc'); closeDropdown() }}
-                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-asc' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 1 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
+                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-asc' ? 'font-semibold text-black' : 'text-gray-500'} ${focusedIndex === 1 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
                 >
                   Name (A-Z)
                 </button>
@@ -170,7 +170,7 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
                   role="option"
                   aria-selected={sortBy === 'name-desc'}
                   onClick={() => { setSortBy('name-desc'); closeDropdown() }}
-                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-desc' ? 'font-semibold text-black' : 'text-gray-700'} ${focusedIndex === 2 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
+                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-desc' ? 'font-semibold text-black' : 'text-gray-500'} ${focusedIndex === 2 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
                 >
                   Name (Z-A)
                 </button>

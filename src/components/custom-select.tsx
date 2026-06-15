@@ -102,7 +102,7 @@ export default function CustomSelect({ id, name, value, onChange, options }: Cus
       </button>
 
       {isOpen && (
-        <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.12)] overflow-hidden animate-[fadeInUp_200ms_var(--ease-out)_forwards] origin-top">
+        <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.06)] overflow-hidden animate-[fadeInUp_200ms_var(--ease-out)_forwards] origin-top">
           <ul 
             id={`${id}-listbox`}
             role="listbox"
@@ -117,7 +117,7 @@ export default function CustomSelect({ id, name, value, onChange, options }: Cus
                   className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 ease-[var(--ease-out)] hover:bg-gray-100 ${
                     focusedIndex === idx ? 'bg-gray-100' : ''
                   } ${
-                    value === option.value ? 'bg-gray-50 font-semibold text-black' : 'text-gray-700'
+                    value === option.value ? 'bg-gray-50 font-semibold text-black' : 'text-gray-500'
                   }`}
                 >
                   {option.label}

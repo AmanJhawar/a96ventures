@@ -42,7 +42,7 @@ function SidebarContent({ setIsMobileMenuOpen }: { setIsMobileMenuOpen: (v: bool
               href={item.href}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,color] duration-150 ${isActive
                   ? 'bg-white text-black outline outline-2 outline-offset-[-2px] outline-black shadow-[0_0_0_1px_black]'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-black'
+                  : 'text-gray-500 hover:bg-gray-100 hover:text-black'
                 }`}
             >
               <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
@@ -138,7 +138,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Mobile Top Bar */}
       <div className="md:hidden bg-white border-b border-gray-200 p-4 flex items-center justify-between sticky top-0 z-20">
         <span className="text-lg font-bold tracking-tight">A96 Admin</span>
-        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -mr-2 text-gray-600 hover:text-black">
+        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -mr-2 text-gray-500 hover:text-black">
           <Menu size={24} />
         </button>
       </div>

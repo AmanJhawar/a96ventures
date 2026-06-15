@@ -1,32 +1,55 @@
 'use client'
 
-import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+
+const newsletterSchema = z.object({
+  email: z.string().email({ message: 'Please enter a valid email address' })
+})
+
+type NewsletterValues = z.infer<typeof newsletterSchema>
 
 export default function NewsletterForm() {
-  const [email, setEmail] = useState('')
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting }
+  } = useForm<NewsletterValues>({
+    resolver: zodResolver(newsletterSchema),
+    defaultValues: { email: '' }
+  })
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    console.log('Email submitted:', email)
-    setEmail('')
+  const onSubmit = async (data: NewsletterValues) => {
+    console.log('Email submitted:', data.email)
+    reset()
   }
 
   return (
-    <form className="flex flex-col sm:flex-row max-w-[500px] mx-auto gap-4" onSubmit={handleSubmit}>
-      <input
-        type="email"
-        placeholder="Enter your email address"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="flex-1 px-6 py-4 border border-gray-200 rounded-lg text-base bg-white transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10"
-        required
-      />
-      <button 
-        type="submit" 
-        className="px-8 py-4 bg-black text-white rounded-lg text-base font-semibold transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-gray-700 active:scale-[0.97] active:opacity-60 whitespace-nowrap"
-      >
-        Subscribe
-      </button>
-    </form>
+    <div className="w-full max-w-[500px] mx-auto">
+      <form className="flex flex-col sm:flex-row gap-4" onSubmit={handleSubmit(onSubmit)}>
+        <div className="flex-1">
+          <input
+            type="email"
+            placeholder="Enter your email address"
+            {...register('email')}
+            className={`w-full px-6 py-4 border rounded-lg text-base bg-white transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] focus:border-black focus:ring-4 focus:ring-black/10 ${
+              errors.email ? 'border-gray-900' : 'border-gray-200'
+            }`}
+          />
+        </div>
+        <button 
+          type="submit" 
+          disabled={isSubmitting}
+          className="btn-primary whitespace-nowrap active:opacity-60 disabled:opacity-50"
+        >
+          {isSubmitting ? 'Subscribing...' : 'Subscribe'}
+        </button>
+      </form>
+      {errors.email && (
+        <p className="text-gray-500 font-medium text-sm font-medium mt-2">{errors.email.message}</p>
+      )}
+    </div>
   )
 }

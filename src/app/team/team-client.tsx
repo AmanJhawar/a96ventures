@@ -58,7 +58,7 @@ export default function TeamClient() {
                       {member.expertise.map((skill, skillIndex) => (
                         <span 
                           key={skillIndex} 
-                          className="text-[11px] uppercase tracking-widest text-gray-400"
+                          className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest"
                         >
                           {skill}
                         </span>

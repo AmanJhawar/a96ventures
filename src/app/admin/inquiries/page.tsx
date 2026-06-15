@@ -37,7 +37,7 @@ function StatusDropdown({ status, onChange }: { status: Inquiry['status'], onCha
     <div className="relative inline-block text-left" ref={ref}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between gap-2 w-28 text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:border-gray-300 transition-[border-color,transform] active:scale-[0.97]"
+        className="flex items-center justify-between gap-2 w-28 text-sm bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:border-gray-200 transition-[border-color,transform] active:scale-[0.97]"
       >
         <span className="capitalize">{currentOption?.label}</span>
         <ChevronDown size={14} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -50,7 +50,7 @@ function StatusDropdown({ status, onChange }: { status: Inquiry['status'], onCha
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -4 }}
             transition={{ duration: 0.15, ease: EASE_OUT }}
-            className="absolute z-10 mt-1 w-full bg-white border border-gray-100 rounded-lg shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] overflow-hidden origin-top"
+            className="absolute z-10 mt-1 w-full bg-white border border-gray-100 rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.06)] overflow-hidden origin-top"
           >
             {options.map((opt) => (
               <button
@@ -60,7 +60,7 @@ function StatusDropdown({ status, onChange }: { status: Inquiry['status'], onCha
                   setIsOpen(false)
                 }}
                 className={`block w-full text-left px-3 py-2 text-sm transition-colors ${
-                  status === opt.value ? 'bg-gray-50 font-medium text-black' : 'text-gray-600 hover:bg-gray-50 hover:text-black'
+                  status === opt.value ? 'bg-gray-50 font-medium text-black' : 'text-gray-500 hover:bg-gray-50 hover:text-black'
                 }`}
               >
                 {opt.label}
@@ -75,9 +75,15 @@ function StatusDropdown({ status, onChange }: { status: Inquiry['status'], onCha
 
 interface Inquiry {
   id: string;
-  name: string;
-  email: string;
-  company: string;
+  name?: string; // Legacy
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  countryCode?: string;
+  mobile?: string;
+  email?: string;
+  company?: string;
+  gstinPan?: string;
   message: string;
   inquiryType: string;
   status?: 'unread' | 'read' | 'handled';
@@ -201,17 +207,17 @@ export default function AdminInquiries() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[1000px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Status</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Date (IST)</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Contact</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Type</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600">Message</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-right">Actions</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-500">Status</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-500">Date (IST)</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-500">Contact</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-500">Type</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-500">Message</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-gray-500 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -231,16 +237,22 @@ export default function AdminInquiries() {
                         {formatDate(inquiry.createdAt)}
                       </td>
                       <td className="px-6 py-4">
-                        <div className={`font-medium ${isUnread ? 'text-black' : 'text-gray-700'}`}>{inquiry.name}</div>
-                        <div className="text-sm text-gray-500 mt-1">{inquiry.email}</div>
+                        <div className={`font-medium ${isUnread ? 'text-black' : 'text-gray-500'}`}>
+                          {inquiry.firstName ? `${inquiry.firstName} ${inquiry.middleName ? inquiry.middleName + ' ' : ''}${inquiry.lastName}` : inquiry.name}
+                        </div>
+                        {(inquiry.countryCode || inquiry.mobile) && (
+                          <div className="text-sm text-gray-500 mt-1">{inquiry.countryCode} {inquiry.mobile}</div>
+                        )}
+                        {inquiry.email && <div className="text-sm text-gray-500 mt-1">{inquiry.email}</div>}
                         {inquiry.company && <div className="text-xs text-gray-400 mt-1">{inquiry.company}</div>}
+                        {inquiry.gstinPan && <div className="text-xs text-gray-400 mt-1 uppercase">GST/PAN: {inquiry.gstinPan}</div>}
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-md border border-gray-200 font-medium">
+                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg border border-gray-200 font-medium">
                           {inquiry.inquiryType}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-gray-600 text-sm max-w-sm whitespace-pre-wrap">
+                      <td className="px-6 py-4 text-gray-500 text-sm max-w-sm whitespace-pre-wrap">
                         {inquiry.message}
                       </td>
                       <td className="px-6 py-4 text-right">
