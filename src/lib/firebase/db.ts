@@ -1,5 +1,5 @@
 import { db } from './config';
-import { collection, getDocs, doc, getDoc, addDoc, serverTimestamp, query, limit } from 'firebase/firestore/lite';
+import { collection, getDocs, doc, getDoc, addDoc, query, limit } from 'firebase/firestore/lite';
 import { CatalogItem, TeamMember, Brand, PortfolioCompany, DEFAULT_CATEGORIES } from '@/lib/types';
 
 // Helper to wrap a promise with a timeout (default 8 seconds) to prevent hanging builds
@@ -82,7 +82,7 @@ export async function submitInquiry(data: {
   return await withTimeout(addDoc(collection(db, 'inquiries'), {
     ...data,
     status: 'unread',
-    createdAt: serverTimestamp()
+    createdAt: new Date()
   }));
 }
 
