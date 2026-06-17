@@ -130,7 +130,7 @@ export function CartDrawer() {
               ) : (
                 cartItems.map((item) => (
                   <div key={item.cartId} className="flex gap-4">
-                    <div className="w-16 h-24 bg-[#f5f5f7] rounded-xl relative overflow-hidden flex-shrink-0 border border-gray-100">
+                    <div className="w-16 aspect-[3/4] bg-[#f5f5f7] rounded-xl relative overflow-hidden flex-shrink-0 border border-gray-100">
                       <ProtectedImage 
                         src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
                         alt={item.productName}

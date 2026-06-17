@@ -22,7 +22,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
   if (safeImages.length === 0) {
     return (
       <div className="flex flex-col gap-4 w-full">
-        <div className="aspect-[3/2] bg-[#f5f5f7] rounded-xl flex items-center justify-center">
+        <div className="aspect-[4/3] bg-[#f5f5f7] rounded-xl flex items-center justify-center">
           <span className="text-gray-400 text-sm">Image not available</span>
         </div>
       </div>
@@ -56,7 +56,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
     <div className="flex flex-col gap-6 w-full relative group">
       {/* Main Image Carousel Wrapper */}
       <div 
-        className="relative aspect-[3/2] rounded-xl overflow-hidden bg-[#f5f5f7] touch-pan-y"
+        className="relative aspect-[4/3] rounded-xl overflow-hidden bg-[#f5f5f7] touch-pan-y"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}

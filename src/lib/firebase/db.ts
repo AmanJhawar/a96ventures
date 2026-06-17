@@ -1,5 +1,5 @@
-import { db } from './config';
-import { collection, getDocs, doc, getDoc, addDoc, query, limit } from 'firebase/firestore/lite';
+import { app, db } from './config';
+import { collection, getDocs, doc, getDoc, query, limit } from 'firebase/firestore/lite';
 import { CatalogItem, TeamMember, Brand, PortfolioCompany, DEFAULT_CATEGORIES } from '@/lib/types';
 
 // Helper to wrap a promise with a timeout (default 8 seconds) to prevent hanging builds
@@ -67,6 +67,8 @@ export async function getCatalogItemById(id: string): Promise<CatalogItem | null
 }
 
 // Submit a new inquiry
+// NOTE: firestore/lite does not support client-side writes (addDoc).
+// We lazily import the full firebase/firestore SDK here for this one write operation.
 export async function submitInquiry(data: {
   firstName: string;
   middleName?: string;
@@ -79,10 +81,12 @@ export async function submitInquiry(data: {
   message: string;
   inquiryType: string;
 }) {
-  return await withTimeout(addDoc(collection(db, 'inquiries'), {
+  const { getFirestore, collection: col, addDoc: add, serverTimestamp } = await import('firebase/firestore');
+  const fullDb = getFirestore(app);
+  return await withTimeout(add(col(fullDb, 'inquiries'), {
     ...data,
     status: 'unread',
-    createdAt: new Date()
+    createdAt: serverTimestamp()
   }));
 }
 

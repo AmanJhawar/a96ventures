@@ -10,14 +10,19 @@ service cloud.firestore {
     // Function to validate inquiry submissions and block bloated payloads
     function isValidInquiry() {
       let data = request.resource.data;
-      return data.keys().hasAll(['name', 'email', 'message', 'inquiryType', 'status', 'createdAt'])
-        && data.name is string && data.name.size() > 0 && data.name.size() < 100
-        && data.email is string && data.email.size() > 0 && data.email.size() < 100
+      return data.keys().hasAll(['firstName', 'lastName', 'countryCode', 'mobile', 'message', 'inquiryType', 'status', 'createdAt'])
+        && data.firstName is string && data.firstName.size() > 0 && data.firstName.size() < 100
+        && data.lastName is string && data.lastName.size() > 0 && data.lastName.size() < 100
+        && data.countryCode is string && data.countryCode.size() > 0 && data.countryCode.size() < 10
+        && data.mobile is string && data.mobile.size() >= 7 && data.mobile.size() <= 15
         && data.message is string && data.message.size() > 0 && data.message.size() < 5000
         && data.inquiryType is string
         && data.status == 'unread'
         && data.createdAt == request.time
-        && (!('company' in data) || (data.company is string && data.company.size() < 200));
+        && (!('middleName' in data) || (data.middleName is string && data.middleName.size() < 100))
+        && (!('email' in data) || (data.email is string && data.email.size() < 200))
+        && (!('company' in data) || (data.company is string && data.company.size() < 200))
+        && (!('gstinPan' in data) || (data.gstinPan is string && data.gstinPan.size() < 20));
     }
 
     // Admins Collection
