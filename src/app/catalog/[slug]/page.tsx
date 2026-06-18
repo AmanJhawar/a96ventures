@@ -1,8 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getCatalogItems, getCatalogItemById, getMoreCatalogItems } from '@/lib/firebase/db'
-import { AddToCartSection } from './add-to-cart-section'
-import { ProductCarousel } from './product-carousel'
+import { ProductGalleryInteractive } from './product-gallery-interactive'
 import { ProductCard } from '@/components/product-card'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -96,67 +95,58 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </FadeInUp>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-start relative">
-            {/* Image Gallery Area (Left, wider) */}
-            <FadeInUp className="lg:col-span-7 xl:col-span-8 lg:sticky lg:top-28 lg:h-fit z-10 pb-10">
-              <ProductCarousel 
-                images={Array.from(new Set([item.imageFile, ...(item.additionalImages || [])].filter(Boolean)))} 
-                productName={item.name} 
-              />
-            </FadeInUp>
-
-            {/* Details Area (Right, narrower) */}
-            <FadeInUp className="lg:col-span-5 xl:col-span-4 flex flex-col">
-              <h1 className="text-4xl md:text-5xl font-bold leading-tight tracking-tight text-black mb-2">
-                {item.name}
-              </h1>
-              <p className="text-sm font-medium tracking-wide text-gray-500 mb-6">
-                Price on request
-              </p>
-              
-              <p className="text-lg font-normal text-gray-500 leading-relaxed mb-10">
-                {item.description}
-              </p>
-
-              {/* Add to Cart Section (Client Component) */}
-              <AddToCartSection item={item} />
-
-              <div className="mt-12 space-y-1 text-sm text-gray-500">
-                <div className="flex justify-between py-2">
-                  <span className="font-medium">Category</span>
-                  <span className="text-black text-right">{item.category}</span>
-                </div>
-                {item.material && (
+            {/* ProductGalleryInteractive owns selectedVariant state and renders both columns */}
+            <ProductGalleryInteractive
+              item={item}
+              headingSlot={
+                <>
+                  <h1 className="text-4xl md:text-5xl font-bold leading-tight tracking-tight text-black mb-2">
+                    {item.name}
+                  </h1>
+                  <p className="text-sm font-medium tracking-wide text-gray-500 mb-6">
+                    Price on request
+                  </p>
+                  <p className="text-lg font-normal text-gray-500 leading-relaxed mb-10">
+                    {item.description}
+                  </p>
+                </>
+              }
+              specsSlot={
+                <div className="mt-12 space-y-1 text-sm text-gray-500">
                   <div className="flex justify-between py-2">
-                    <span className="font-medium">Material</span>
-                    <span className="text-black text-right">{item.material}</span>
+                    <span className="font-medium">Category</span>
+                    <span className="text-black text-right">{item.category}</span>
                   </div>
-                )}
-                {(() => {
-                  let hasVariants = false
-                  if (item.category?.includes('Marble')) {
-                    hasVariants = (item.standardStones?.length || 0) > 0 || (item.customStones?.length || 0) > 0
-                  } else if (item.category?.includes('Bullion')) {
-                    hasVariants = (item.standardWeights?.length || 0) > 0 || (item.customWeights?.length || 0) > 0
-                  } else {
-                    const hasSizes = (item.standardSizes?.length || 0) > 0 || (item.customSizes?.length || 0) > 0
-                    const hasPurities = (item.standardPurities?.length || 0) > 0 || (item.customPurities?.length || 0) > 0
-                    hasVariants = hasSizes && hasPurities
-                  }
-                  
-                  if (hasVariants || !item.weight) return null
-                  
-                  return (
+                  {item.material && (
                     <div className="flex justify-between py-2">
-                      <span className="font-medium">Approx Weight</span>
-                      <span className="text-black text-right">
-                        {item.weight.match(/[a-zA-Z]/) ? item.weight : `${item.weight}g`}
-                      </span>
+                      <span className="font-medium">Material</span>
+                      <span className="text-black text-right">{item.material}</span>
                     </div>
-                  )
-                })()}
-              </div>
-
-            </FadeInUp>
+                  )}
+                  {(() => {
+                    let hasVariants = false
+                    if (item.category?.includes('Marble')) {
+                      hasVariants = (item.standardStones?.length || 0) > 0 || (item.customStones?.length || 0) > 0
+                    } else if (item.category?.includes('Bullion')) {
+                      hasVariants = (item.standardWeights?.length || 0) > 0 || (item.customWeights?.length || 0) > 0
+                    } else {
+                      const hasSizes = (item.standardSizes?.length || 0) > 0 || (item.customSizes?.length || 0) > 0
+                      const hasPurities = (item.standardPurities?.length || 0) > 0 || (item.customPurities?.length || 0) > 0
+                      hasVariants = hasSizes && hasPurities
+                    }
+                    if (hasVariants || !item.weight) return null
+                    return (
+                      <div className="flex justify-between py-2">
+                        <span className="font-medium">Approx Weight</span>
+                        <span className="text-black text-right">
+                          {item.weight.match(/[a-zA-Z]/) ? item.weight : `${item.weight}g`}
+                        </span>
+                      </div>
+                    )
+                  })()}
+                </div>
+              }
+            />
           </div>
         </StaggerContainer>
 

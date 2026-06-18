@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ProtectedImage } from '@/components/protected-image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -18,6 +18,11 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
   const minSwipeDistance = 50
 
   const safeImages = images.filter(Boolean)
+
+  // Reset to first slide whenever the image set changes (e.g. variant switch)
+  useEffect(() => {
+    setActiveIndex(0)
+  }, [images])
 
   if (safeImages.length === 0) {
     return (

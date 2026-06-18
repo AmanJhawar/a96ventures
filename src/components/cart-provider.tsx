@@ -68,12 +68,34 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             const liveItem = liveItemsMap.get(item.productId)
             if (!liveItem) continue // Product was deleted
 
+            // Re-resolve the per-variant SKU and weight from the live product
+            // so renamed or re-priced variants stay correct. Only fall back to
+            // the product-level SKU when the item has no variants.
+            let sku = item.sku
+            let weight = item.weight
+            const variants = liveItem.variantSkus ? Object.entries(liveItem.variantSkus) : []
+            if (variants.length > 0) {
+              const match = variants.find(([, d]) =>
+                (d.size ?? undefined) === item.selectedSize &&
+                (d.purity ?? undefined) === item.selectedPurity &&
+                (d.stone ?? undefined) === item.selectedStone &&
+                ((d.weight ?? undefined) === item.selectedWeight || item.selectedWeight === undefined)
+              )
+              if (match) {
+                sku = match[0]
+                weight = match[1].weight ?? item.weight
+              }
+            } else {
+              sku = liveItem.sku || liveItem.id
+              weight = liveItem.weight || ''
+            }
+
             reconciled.push({
               ...item,
               productName: liveItem.name,
               imageFile: liveItem.imageFile,
-              sku: liveItem.sku || liveItem.id,
-              weight: liveItem.weight || ''
+              sku,
+              weight
             })
           }
 

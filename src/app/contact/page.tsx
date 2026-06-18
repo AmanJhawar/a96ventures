@@ -115,9 +115,10 @@ function ContactForm() {
       setSuccess(true)
       reset()
       setTimeout(() => setSuccess(false), 5000)
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error submitting form:', err)
-      setError('There was an error sending your message. Please try again.')
+      const message = err instanceof Error ? err.message : String(err)
+      setError(`Submission failed: ${message}`)
     }
   }
 

@@ -30,8 +30,38 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
     (!hasWeights || selectedWeight !== undefined) &&
     (!hasStones || selectedStone !== undefined)
 
+  const hasVariants = hasSizes || hasPurities || hasWeights || hasStones
+
+  // Resolve the selected variant to its own SKU and weight by matching the
+  // stored variant definitions (variantSkus is keyed by SKU). No silent
+  // fallback to the product ID: an unmatched variant is a data error.
+  const resolveVariant = (): { sku: string; weight?: string } | null => {
+    if (!hasVariants) {
+      return { sku: item.sku, weight: item.weight }
+    }
+    const entries = Object.entries(item.variantSkus || {})
+    const match = entries.find(([, d]) =>
+      (d.size ?? undefined) === selectedSize &&
+      (d.purity ?? undefined) === selectedPurity &&
+      (d.stone ?? undefined) === selectedStone &&
+      // Bullion stores the weight as the variant attribute; others store the
+      // chosen weight only when it is a variant dimension.
+      (isBullion ? (d.weight ?? undefined) === selectedWeight : true)
+    )
+    if (!match) return null
+    const [sku, detail] = match
+    return { sku, weight: detail.weight ?? selectedWeight ?? item.weight }
+  }
+
   const handleAddToCart = () => {
     if (!canAddToCart) return
+
+    const resolved = resolveVariant()
+    if (!resolved) {
+      console.error('No matching variant SKU for selection', { selectedSize, selectedPurity, selectedWeight, selectedStone })
+      alert('Sorry, this combination is unavailable. Please contact us and we will help with your order.')
+      return
+    }
 
     const cartId = `${item.id}-${selectedSize || ''}-${selectedPurity || ''}-${selectedWeight || ''}-${selectedStone || ''}`
 
@@ -39,13 +69,13 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
       cartId,
       productId: item.id,
       productName: item.name,
-      sku: item.sku || item.id,
+      sku: resolved.sku,
       imageFile: item.imageFile,
       selectedSize,
       selectedPurity,
       selectedWeight,
       selectedStone,
-      weight: selectedWeight || item.weight,
+      weight: resolved.weight,
       quantity: 1
     })
   }
@@ -65,7 +95,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedSize === s 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
+                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
                   }`}
                 >
                   {s}
@@ -78,7 +108,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedSize === s 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
                   }`}
                 >
                   {s} <span className="text-xs opacity-70">(Custom)</span>
@@ -100,7 +130,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedPurity === p 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
+                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
                   }`}
                 >
                   {p}%
@@ -113,7 +143,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedPurity === p 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
                   }`}
                 >
                   {p}% <span className="text-xs opacity-70">(Custom)</span>
@@ -135,7 +165,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedWeight === w 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
+                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
                   }`}
                 >
                   {w}
@@ -148,7 +178,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedWeight === w 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
                   }`}
                 >
                   {w} <span className="text-xs opacity-70">(Custom)</span>
@@ -170,7 +200,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedStone === st 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
+                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
                   }`}
                 >
                   {st}
@@ -183,7 +213,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedStone === st 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
                   }`}
                 >
                   {st} <span className="text-xs opacity-70">(Custom)</span>
@@ -198,7 +228,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
         <button 
           onClick={handleAddToCart}
           disabled={!canAddToCart}
-          className="btn-primary w-full sm:w-auto disabled:opacity-50 disabled:active:scale-100 gap-2"
+          className="w-full sm:w-auto px-8 py-4 bg-black text-white rounded-lg font-semibold text-sm hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2"
         >
           {canAddToCart ? 'Add to Inquiry' : 'Please select options'}
         </button>
