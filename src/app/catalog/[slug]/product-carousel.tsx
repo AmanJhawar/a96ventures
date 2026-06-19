@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { ProtectedImage } from '@/components/protected-image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -52,6 +52,8 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
     }
   }
 
+  const clampedIndex = Math.min(activeIndex, Math.max(0, safeImages.length - 1))
+
   return (
     <div className="flex flex-col gap-6 w-full relative group">
       {/* Main Image Carousel Wrapper */}
@@ -63,7 +65,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
       >
         <div 
           className="flex h-full w-full transition-transform duration-200 ease-[var(--ease-out)]"
-          style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+          style={{ transform: `translateX(-${clampedIndex * 100}%)` }}
         >
           {safeImages.map((img, idx) => (
             <div key={idx} className="w-full h-full flex-shrink-0 relative overflow-hidden">
@@ -81,10 +83,10 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
         {safeImages.length > 1 && (
           <>
             <button 
-              onClick={() => setActiveIndex(Math.max(0, activeIndex - 1))}
-              disabled={activeIndex === 0}
+              onClick={() => setActiveIndex(Math.max(0, clampedIndex - 1))}
+              disabled={clampedIndex === 0}
               className={`absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-sm transition-[opacity,background-color,transform] duration-200 ease-[var(--ease-out)] hover:bg-white active:scale-[0.95] z-20 ${
-                activeIndex === 0 
+                clampedIndex === 0 
                   ? 'opacity-0 pointer-events-none' 
                   : 'opacity-100'
               }`}
@@ -92,10 +94,10 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
               <ChevronLeft className="w-5 h-5 text-black" />
             </button>
             <button 
-              onClick={() => setActiveIndex(Math.min(safeImages.length - 1, activeIndex + 1))}
-              disabled={activeIndex === safeImages.length - 1}
+              onClick={() => setActiveIndex(Math.min(safeImages.length - 1, clampedIndex + 1))}
+              disabled={clampedIndex === safeImages.length - 1}
               className={`absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-sm transition-[opacity,background-color,transform] duration-200 ease-[var(--ease-out)] hover:bg-white active:scale-[0.95] z-20 ${
-                activeIndex === safeImages.length - 1 
+                clampedIndex === safeImages.length - 1 
                   ? 'opacity-0 pointer-events-none' 
                   : 'opacity-100'
               }`}
@@ -113,7 +115,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
                 key={idx}
                 onClick={() => setActiveIndex(idx)}
                 className={`h-1.5 rounded-full transition-[width,background-color,transform] duration-300 ease-[var(--ease-out)] active:scale-[0.97] ${
-                  activeIndex === idx ? 'bg-black w-5' : 'bg-black/20 w-1.5'
+                  clampedIndex === idx ? 'bg-black w-5' : 'bg-black/20 w-1.5'
                 }`}
                 aria-label={`Go to slide ${idx + 1}`}
               />

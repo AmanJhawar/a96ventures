@@ -5,7 +5,6 @@ import { motion, HTMLMotionProps } from 'framer-motion'
 
 // Custom Emil Kowalski easing curves
 export const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1] // Strong ease-out
-const EASE_IN_OUT: [number, number, number, number] = [0.77, 0, 0.175, 1]
 
 // Stagger parent container
 interface StaggerContainerProps extends HTMLMotionProps<'div'> {

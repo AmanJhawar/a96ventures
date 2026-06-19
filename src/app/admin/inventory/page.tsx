@@ -938,7 +938,6 @@ export default function AdminInventory() {
                       <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                         <td className="px-6 py-4">
                           {item.imageFile ? (
-                            // eslint-disable-next-line @next/next/no-img-element
                             <Image unoptimized width={48} height={64} src={item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`} alt="Product" className="w-12 h-auto aspect-[3/4] object-cover rounded-lg bg-[#f5f5f7]" />
                           ) : (
                             <div className="w-12 h-auto aspect-[3/4] bg-[#f5f5f7] rounded-lg flex items-center justify-center">

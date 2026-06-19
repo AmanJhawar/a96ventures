@@ -71,7 +71,7 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
         className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black bg-white transition-colors duration-150"
       />
       <p className="text-[10px] text-gray-400 leading-tight">
-        Paste a Google Drive link (must be set to "Anyone with the link can view").
+        Paste a Google Drive link (must be set to &quot;Anyone with the link can view&quot;).
       </p>
     </div>
   )
