@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import CustomSelect from '@/components/custom-select'
 import { submitInquiry } from '@/lib/firebase/db'
 import { useCart } from '@/components/cart-provider'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
@@ -43,10 +43,9 @@ function ContactForm() {
   const {
     register,
     handleSubmit,
-    control,
     setValue,
-    watch,
     reset,
+    control,
     formState: { errors, isSubmitting }
   } = useForm<ContactValues>({
     resolver: zodResolver(contactSchema),
@@ -64,7 +63,7 @@ function ContactForm() {
     }
   })
 
-  const currentMessage = watch('message')
+  const currentMessage = useWatch({ control, name: 'message' })
 
   // Pre-fill from Cart
   useEffect(() => {

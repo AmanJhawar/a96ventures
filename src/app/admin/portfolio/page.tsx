@@ -39,23 +39,25 @@ export default function AdminPortfolio() {
     defaultValues: { id: '', name: '', stage: '', sector: '', description: '' }
   })
 
-  const fetchCompanies = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, 'portfolio'))
-      const items: (PortfolioCompany & { id: string })[] = []
-      querySnapshot.forEach((docSnap) => {
-        items.push({ ...docSnap.data(), id: docSnap.id } as (PortfolioCompany & { id: string }))
-      })
-      setCompanies(items)
-    } catch (err) {
-      console.error("Error fetching companies", err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
+    let active = true
+    const fetchCompanies = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'portfolio'))
+        if (!active) return
+        const items: (PortfolioCompany & { id: string })[] = []
+        querySnapshot.forEach((docSnap) => {
+          items.push({ ...docSnap.data(), id: docSnap.id } as (PortfolioCompany & { id: string }))
+        })
+        setCompanies(items)
+      } catch (err) {
+        console.error("Error fetching companies", err)
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
     fetchCompanies()
+    return () => { active = false }
   }, [])
 
   const confirmDelete = (id: string) => setDeleteId(id)

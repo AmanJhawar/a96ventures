@@ -51,7 +51,7 @@ export default async function Catalog() {
             title="Failed to Load Products" 
             description="We encountered a problem loading our catalog collection. Please try again later."
             action={
-              <Link href="/catalog" className="btn-primary text-sm py-3 px-6">
+              <Link href="/catalog" className="btn-primary">
                 Retry
               </Link>
             }

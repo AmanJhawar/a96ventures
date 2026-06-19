@@ -57,8 +57,15 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center px-8 py-4 bg-black text-white rounded-lg text-base font-semibold tracking-wide hover:bg-gray-800 active:scale-[0.97];
-    transition: background-color 200ms var(--ease-out), transform 200ms var(--ease-out);
+    @apply inline-flex items-center justify-center bg-black text-white hover:bg-gray-800 active:scale-[0.97] border border-black rounded-lg font-semibold uppercase tracking-[0.1em] text-[13px];
+    padding: 0.75rem 1.5rem; /* using explicit padding to perfectly match 42px height */
+    transition: background-color 160ms var(--ease-out), transform 160ms var(--ease-out);
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center bg-transparent text-gray-600 hover:bg-gray-50 hover:text-black hover:border-black active:scale-[0.97] border border-gray-300 rounded-lg font-semibold uppercase tracking-[0.1em] text-[13px];
+    padding: 0.75rem 1.5rem;
+    transition: border-color 160ms var(--ease-out), background-color 160ms var(--ease-out), transform 160ms var(--ease-out);
   }
 }
 

@@ -40,7 +40,7 @@ export default function Error({
         >
           Try Again
         </button>
-        <Link href="/catalog" className="px-6 py-3 text-sm font-semibold text-black bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+        <Link href="/catalog" className="btn-secondary">
           Return to Catalog
         </Link>
       </FadeInUp>

@@ -28,7 +28,7 @@ export function CartDrawer() {
       const focusableElements = drawerRef.current?.querySelectorAll(
         'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
       ) as NodeListOf<HTMLElement>
-      
+
       if (focusableElements && focusableElements.length > 0) {
         focusableElements[0].focus()
       }
@@ -82,7 +82,7 @@ export function CartDrawer() {
       {isCartOpen && (
         <>
           {/* Backdrop */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -92,7 +92,7 @@ export function CartDrawer() {
           />
 
           {/* Drawer */}
-          <motion.div 
+          <motion.div
             ref={drawerRef}
             role="dialog"
             aria-modal="true"
@@ -105,7 +105,7 @@ export function CartDrawer() {
           >
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
               <h2 id="inquiry-drawer-title" className="text-xl font-bold tracking-tight">Your Inquiry</h2>
-              <button 
+              <button
                 onClick={() => setIsCartOpen(false)}
                 className="p-2 hover:bg-gray-100 rounded-full transition-[background-color,transform] active:scale-[0.97]"
               >
@@ -115,11 +115,11 @@ export function CartDrawer() {
 
             <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
               {cartItems.length === 0 ? (
-                <EmptyState 
+                <EmptyState
                   title="Your inquiry is empty."
                   icon={<ShoppingBag size={32} strokeWidth={1} />}
                   action={
-                    <button 
+                    <button
                       onClick={() => setIsCartOpen(false)}
                       className="text-sm font-medium text-black underline underline-offset-4 transition-transform active:scale-[0.97]"
                     >
@@ -129,10 +129,10 @@ export function CartDrawer() {
                 />
               ) : (
                 cartItems.map((item) => (
-                  <div key={item.cartId} className="flex gap-4">
+                  <div key={item.cartId} className="flex gap-4 items-start">
                     <div className="w-16 aspect-[3/4] bg-[#f5f5f7] rounded-xl relative overflow-hidden flex-shrink-0 border border-gray-100">
-                      <ProtectedImage 
-                        src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
+                      <ProtectedImage
+                        src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`}
                         alt={item.productName}
                         className="w-full h-full object-cover"
                         containerClassName="absolute inset-0"
@@ -140,17 +140,10 @@ export function CartDrawer() {
                     </div>
                     <div className="flex-1 flex flex-col">
                       <div className="flex justify-between items-start">
-                        <h3 className="font-semibold text-sm line-clamp-2 pr-4">{item.productName}</h3>
-                        <button 
-                          onClick={() => removeFromCart(item.cartId)}
-                          className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-1 -mr-1"
-                          aria-label="Remove item"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <h3 className="font-semibold text-sm line-clamp-2 pr-4 text-black">{item.productName}</h3>
                       </div>
-                      
-                      <div className="flex flex-col gap-0.5 mt-1 text-xs text-gray-500">
+
+                      <div className="flex flex-col mt-0.5 text-[13px] text-gray-500 leading-snug">
                         {item.selectedSize && <span>Size: {item.selectedSize}</span>}
                         {item.selectedPurity && <span>Purity: {item.selectedPurity}%</span>}
                         {item.selectedStone && <span>Stone: {item.selectedStone}</span>}
@@ -165,23 +158,33 @@ export function CartDrawer() {
                         )}
                       </div>
 
-                      <div className="mt-auto flex items-center gap-4">
-                        <div className="flex items-center gap-3 bg-[#f5f5f7] rounded-lg px-3 py-1 border border-gray-200">
-                          <button 
-                            onClick={() => updateQuantity(item.cartId, -1)}
-                            className="text-gray-500 hover:text-black transition-colors disabled:opacity-50 active:scale-[0.97]"
-                            disabled={item.quantity <= 1}
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="relative">
+                          <select
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const newQty = parseInt(e.target.value, 10);
+                              updateQuantity(item.cartId, newQty - item.quantity);
+                            }}
+                            className="appearance-none bg-[#f5f5f7] border border-gray-200 hover:border-gray-300 rounded-lg py-1 pl-3 pr-8 text-[13px] font-medium text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent cursor-pointer transition-colors"
                           >
-                            <Minus size={14} />
-                          </button>
-                          <span className="text-sm font-medium w-4 text-center">{item.quantity}</span>
-                          <button 
-                            onClick={() => updateQuantity(item.cartId, 1)}
-                            className="text-gray-500 hover:text-black transition-colors active:scale-[0.97]"
-                          >
-                            <Plus size={14} />
-                          </button>
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                              <option key={num} value={num}>{num}</option>
+                            ))}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                              <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                            </svg>
+                          </div>
                         </div>
+
+                        <button
+                          onClick={() => removeFromCart(item.cartId)}
+                          className="text-[13px] text-gray-400 hover:text-black hover:underline underline-offset-4 transition-colors active:scale-[0.97]"
+                        >
+                          Remove
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -191,7 +194,7 @@ export function CartDrawer() {
 
             {cartItems.length > 0 && (
               <div className="p-6 bg-white">
-                <Link 
+                <Link
                   href="/contact?fromCart=true"
                   onClick={() => setIsCartOpen(false)}
                   className="btn-primary w-full justify-between"

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useCart } from '@/components/cart-provider'
 import type { CatalogItem } from '@/lib/types'
 
@@ -32,23 +32,32 @@ export function AddToCartSection({ item, onVariantChange }: { item: CatalogItem,
 
   const hasVariants = hasSizes || hasPurities || hasWeights || hasStones
 
-  useEffect(() => {
+  const updateVariantKey = (
+    size: string | undefined = selectedSize,
+    purity: string | undefined = selectedPurity,
+    weight: string | undefined = selectedWeight,
+    stone: string | undefined = selectedStone
+  ) => {
     if (!onVariantChange) return
     if (!hasVariants) {
       onVariantChange(undefined)
       return
     }
-    
     let key: string | undefined = undefined
     if (isMarble) {
-      key = selectedStone ? `stone:${selectedStone}` : undefined
+      key = stone ? `stone:${stone}` : undefined
     } else if (isBullion) {
-      key = selectedWeight ? `weight:${selectedWeight}` : undefined
+      key = weight ? `weight:${weight}` : undefined
     } else if (isSilver) {
-      key = (selectedSize && selectedPurity) ? `size:${selectedSize}|purity:${selectedPurity}` : undefined
+      key = (size && purity) ? `size:${size}|purity:${purity}` : undefined
     }
     onVariantChange(key)
-  }, [hasVariants, isMarble, isBullion, isSilver, selectedStone, selectedWeight, selectedSize, selectedPurity, onVariantChange])
+  }
+
+  const handleSizeChange = (s: string) => { setSelectedSize(s); updateVariantKey(s, selectedPurity, selectedWeight, selectedStone); }
+  const handlePurityChange = (p: string) => { setSelectedPurity(p); updateVariantKey(selectedSize, p, selectedWeight, selectedStone); }
+  const handleWeightChange = (w: string) => { setSelectedWeight(w); updateVariantKey(selectedSize, selectedPurity, w, selectedStone); }
+  const handleStoneChange = (st: string) => { setSelectedStone(st); updateVariantKey(selectedSize, selectedPurity, selectedWeight, st); }
 
   // Resolve the selected variant to its own SKU and weight by matching the
   // stored variant definitions (variantSkus is keyed by SKU). No silent
@@ -109,11 +118,11 @@ export function AddToCartSection({ item, onVariantChange }: { item: CatalogItem,
               {item.standardSizes?.map((s) => (
                 <button 
                   key={`std-size-${s}`} 
-                  onClick={() => setSelectedSize(s)}
-                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
+                  onClick={() => handleSizeChange(s)}
+                  className={`px-5 py-2.5 rounded-lg text-[13px] font-semibold uppercase tracking-[0.1em] transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedSize === s 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {s}
@@ -122,11 +131,11 @@ export function AddToCartSection({ item, onVariantChange }: { item: CatalogItem,
               {item.customSizes?.map((s) => (
                 <button 
                   key={`cust-size-${s}`} 
-                  onClick={() => setSelectedSize(s)}
-                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
+                  onClick={() => handleSizeChange(s)}
+                  className={`px-5 py-2.5 rounded-lg text-[13px] font-semibold uppercase tracking-[0.1em] transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedSize === s 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {s} <span className="text-xs opacity-70">(Custom)</span>
@@ -144,11 +153,11 @@ export function AddToCartSection({ item, onVariantChange }: { item: CatalogItem,
               {item.standardPurities?.map((p) => (
                 <button 
                   key={`std-pur-${p}`} 
-                  onClick={() => setSelectedPurity(p)}
-                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
+                  onClick={() => handlePurityChange(p)}
+                  className={`px-5 py-2.5 rounded-lg text-[13px] font-semibold uppercase tracking-[0.1em] transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedPurity === p 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {p}%
@@ -157,11 +166,11 @@ export function AddToCartSection({ item, onVariantChange }: { item: CatalogItem,
               {item.customPurities?.map((p) => (
                 <button 
                   key={`cust-pur-${p}`} 
-                  onClick={() => setSelectedPurity(p)}
-                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
+                  onClick={() => handlePurityChange(p)}
+                  className={`px-5 py-2.5 rounded-lg text-[13px] font-semibold uppercase tracking-[0.1em] transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedPurity === p 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {p}% <span className="text-xs opacity-70">(Custom)</span>
@@ -179,11 +188,11 @@ export function AddToCartSection({ item, onVariantChange }: { item: CatalogItem,
               {item.standardWeights?.map((w) => (
                 <button 
                   key={`std-weight-${w}`} 
-                  onClick={() => setSelectedWeight(w)}
-                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
+                  onClick={() => handleWeightChange(w)}
+                  className={`px-5 py-2.5 rounded-lg text-[13px] font-semibold uppercase tracking-[0.1em] transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedWeight === w 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {w}
@@ -192,11 +201,11 @@ export function AddToCartSection({ item, onVariantChange }: { item: CatalogItem,
               {item.customWeights?.map((w) => (
                 <button 
                   key={`cust-weight-${w}`} 
-                  onClick={() => setSelectedWeight(w)}
-                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
+                  onClick={() => handleWeightChange(w)}
+                  className={`px-5 py-2.5 rounded-lg text-[13px] font-semibold uppercase tracking-[0.1em] transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedWeight === w 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {w} <span className="text-xs opacity-70">(Custom)</span>
@@ -214,11 +223,11 @@ export function AddToCartSection({ item, onVariantChange }: { item: CatalogItem,
               {item.standardStones?.map((st) => (
                 <button 
                   key={`std-stone-${st}`} 
-                  onClick={() => setSelectedStone(st)}
-                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
+                  onClick={() => handleStoneChange(st)}
+                  className={`px-5 py-2.5 rounded-lg text-[13px] font-semibold uppercase tracking-[0.1em] transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ${
                     selectedStone === st 
                       ? 'bg-white text-black border border-black shadow-[0_0_0_1px_black]' 
-                      : 'bg-white text-gray-800 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {st}
@@ -227,11 +236,11 @@ export function AddToCartSection({ item, onVariantChange }: { item: CatalogItem,
               {item.customStones?.map((st) => (
                 <button 
                   key={`cust-stone-${st}`} 
-                  onClick={() => setSelectedStone(st)}
-                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
+                  onClick={() => handleStoneChange(st)}
+                  className={`px-5 py-2.5 rounded-lg text-[13px] font-semibold uppercase tracking-[0.1em] transition-[box-shadow,background-color,border-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] border-dashed flex items-center gap-1 ${
                     selectedStone === st 
                       ? 'bg-white text-black border-black shadow-[0_0_0_1px_black] border-solid' 
-                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-400'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:border-black/30'
                   }`}
                 >
                   {st} <span className="text-xs opacity-70">(Custom)</span>
@@ -246,7 +255,7 @@ export function AddToCartSection({ item, onVariantChange }: { item: CatalogItem,
         <button 
           onClick={handleAddToCart}
           disabled={!canAddToCart}
-          className="w-full sm:w-auto px-8 py-4 bg-black text-white rounded-lg font-semibold text-sm hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2"
+          className="btn-primary w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 gap-2"
         >
           {canAddToCart ? 'Add to Inquiry' : 'Please select options'}
         </button>

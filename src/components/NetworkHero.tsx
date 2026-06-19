@@ -119,7 +119,7 @@ export default function NetworkHero() {
           </Link>
           <Link
             href="/catalog"
-            className="inline-block bg-white text-black border border-gray-200 px-8 py-4 rounded-lg font-medium tracking-wide text-sm transition-[background-color,border-color,transform,box-shadow] duration-[150ms] ease-[var(--ease-out)] hover:bg-gray-50 hover:border-gray-400 active:scale-[0.97] shadow-sm"
+            className="btn-secondary shadow-sm"
           >
             Explore Catalog
           </Link>

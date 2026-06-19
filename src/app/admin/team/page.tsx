@@ -41,23 +41,25 @@ export default function AdminTeam() {
     defaultValues: { name: '', role: '', bio: '', imageFile: '', linkedin: '', expertise: '' }
   })
 
-  const fetchTeam = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, 'team'))
-      const fetchedTeam: (TeamMember & { id: string })[] = []
-      querySnapshot.forEach((docSnap) => {
-        fetchedTeam.push({ ...docSnap.data(), id: docSnap.id } as (TeamMember & { id: string }))
-      })
-      setTeam(fetchedTeam)
-    } catch (err) {
-      console.error("Error fetching team", err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
+    let active = true
+    const fetchTeam = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'team'))
+        if (!active) return
+        const fetchedTeam: (TeamMember & { id: string })[] = []
+        querySnapshot.forEach((docSnap) => {
+          fetchedTeam.push({ ...docSnap.data(), id: docSnap.id } as (TeamMember & { id: string }))
+        })
+        setTeam(fetchedTeam)
+      } catch (err) {
+        console.error("Error fetching team", err)
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
     fetchTeam()
+    return () => { active = false }
   }, [])
 
   const confirmDelete = (id: string) => setDeleteId(id)

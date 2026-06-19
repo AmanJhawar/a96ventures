@@ -40,23 +40,25 @@ export default function AdminBrands() {
     defaultValues: { name: '', sector: '', description: '', logoFile: '' }
   })
 
-  const fetchBrands = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, 'brands'))
-      const items: Brand[] = []
-      querySnapshot.forEach((docSnap) => {
-        items.push({ ...docSnap.data(), id: docSnap.id } as Brand)
-      })
-      setBrands(items)
-    } catch (err) {
-      console.error("Error fetching brands", err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
+    let active = true
+    const fetchBrands = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'brands'))
+        if (!active) return
+        const items: Brand[] = []
+        querySnapshot.forEach((docSnap) => {
+          items.push({ ...docSnap.data(), id: docSnap.id } as Brand)
+        })
+        setBrands(items)
+      } catch (err) {
+        console.error("Error fetching brands", err)
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
     fetchBrands()
+    return () => { active = false }
   }, [])
 
   const confirmDelete = (id: string) => setDeleteId(id)

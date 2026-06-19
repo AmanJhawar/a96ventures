@@ -27,7 +27,7 @@ function SidebarContent({ setIsMobileMenuOpen }: { setIsMobileMenuOpen: (v: bool
         <Link href="/" className="text-xl font-bold tracking-tight hover:opacity-70 transition-opacity duration-200">
           Admin
         </Link>
-        <button className="md:hidden p-2 -mr-2 text-gray-500 hover:text-black" onClick={() => setIsMobileMenuOpen(false)}>
+        <button className="md:hidden p-2 -mr-2 text-gray-500 hover:text-black transition-[color,transform] active:scale-[0.97]" onClick={() => setIsMobileMenuOpen(false)}>
           <X size={20} />
         </button>
       </div>
@@ -138,7 +138,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Mobile Top Bar */}
       <div className="md:hidden bg-white border-b border-gray-200 p-4 flex items-center justify-between sticky top-0 z-20">
         <span className="text-lg font-bold tracking-tight">A96 Admin</span>
-        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -mr-2 text-gray-500 hover:text-black">
+        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -mr-2 text-gray-500 hover:text-black transition-[color,transform] active:scale-[0.97]">
           <Menu size={24} />
         </button>
       </div>

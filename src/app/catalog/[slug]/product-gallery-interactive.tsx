@@ -17,9 +17,10 @@ interface ProductGalleryInteractiveProps {
 export function ProductGalleryInteractive({ item, headingSlot, specsSlot, onVariantChange }: ProductGalleryInteractiveProps) {
   const [selectedVariant, setSelectedVariant] = useState<string | undefined>(undefined)
 
-  useEffect(() => {
-    if (onVariantChange) onVariantChange(selectedVariant)
-  }, [selectedVariant, onVariantChange])
+  const handleVariantChange = (variant: string | undefined) => {
+    setSelectedVariant(variant)
+    if (onVariantChange) onVariantChange(variant)
+  }
 
   const gallery = resolveGallery(item, selectedVariant)
   const deduped = Array.from(new Set(gallery.filter(Boolean)))
@@ -34,7 +35,7 @@ export function ProductGalleryInteractive({ item, headingSlot, specsSlot, onVari
       {/* Right column — static content + interactive variant picker */}
       <div className="lg:col-span-5 xl:col-span-4 flex flex-col">
         {headingSlot}
-        <AddToCartSection item={item} onVariantChange={setSelectedVariant} />
+        <AddToCartSection item={item} onVariantChange={handleVariantChange} />
         {specsSlot}
       </div>
     </>
