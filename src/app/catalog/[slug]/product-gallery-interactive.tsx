@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { ProductCarousel } from './product-carousel'
 import { AddToCartSection } from './add-to-cart-section'
@@ -22,14 +22,16 @@ export function ProductGalleryInteractive({ item, headingSlot, specsSlot, onVari
     if (onVariantChange) onVariantChange(variant)
   }
 
-  const gallery = resolveGallery(item, selectedVariant)
-  const deduped = Array.from(new Set(gallery.filter(Boolean)))
+  const deduped = useMemo(() => {
+    const gallery = resolveGallery(item, selectedVariant)
+    return Array.from(new Set(gallery.filter(Boolean)))
+  }, [item, selectedVariant])
 
   return (
     <>
       {/* Left column — sticky carousel */}
       <div className="lg:col-span-7 xl:col-span-8 lg:sticky lg:top-28 lg:h-fit z-10 pb-10">
-        <ProductCarousel images={deduped} productName={item.name} />
+        <ProductCarousel key={deduped.join()} images={deduped} productName={item.name} />
       </div>
 
       {/* Right column — static content + interactive variant picker */}

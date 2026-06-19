@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from 'react'
+import Image from 'next/image'
 import { collection, setDoc, deleteDoc, doc, getDocs, getDoc, getFirestore } from 'firebase/firestore/lite'
 import { app } from '@/lib/firebase/config'
 
@@ -222,34 +223,6 @@ export default function AdminInventory() {
 
   const combos = useMemo(() => buildVariantCombos(formData), [formData])
 
-  // Clean up orphaned variant inputs when attributes are deselected
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
-    if (!isFormOpen) return
-    const validKeys = new Set(combos.map(c => c.key))
-    
-    setVariantSkuInputs(prev => {
-      let changed = false
-      const next = { ...prev }
-      for (const k in next) if (!validKeys.has(k)) { delete next[k]; changed = true }
-      return changed ? next : prev
-    })
-    
-    setVariantWeightInputs(prev => {
-      let changed = false
-      const next = { ...prev }
-      for (const k in next) if (!validKeys.has(k)) { delete next[k]; changed = true }
-      return changed ? next : prev
-    })
-
-    setVariantImageInputs(prev => {
-      let changed = false
-      const next = { ...prev }
-      for (const k in next) if (!validKeys.has(k)) { delete next[k]; changed = true }
-      return changed ? next : prev
-    })
-  }, [combos, isFormOpen])
-
   const handleEdit = (item: InventoryItem) => {
     setFormData({
       ...item,
@@ -391,6 +364,31 @@ export default function AdminInventory() {
     }
   }
 
+  const cleanupOrphanedInputs = (newFormData: Partial<InventoryItem>) => {
+    const validKeys = new Set(buildVariantCombos(newFormData).map(c => c.key))
+    
+    setVariantSkuInputs(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const k in next) if (!validKeys.has(k)) { delete next[k]; changed = true }
+      return changed ? next : prev
+    })
+    
+    setVariantWeightInputs(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const k in next) if (!validKeys.has(k)) { delete next[k]; changed = true }
+      return changed ? next : prev
+    })
+
+    setVariantImageInputs(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const k in next) if (!validKeys.has(k)) { delete next[k]; changed = true }
+      return changed ? next : prev
+    })
+  }
+
   const getMatrixFields = () => {
     if (hasStonesCategory(formData.category)) return ['standardStones', 'customStones'] as const
     if (formData.category?.includes('Bullion')) return ['standardWeights', 'customWeights'] as const
@@ -400,12 +398,18 @@ export default function AdminInventory() {
   const toggleSize = (size: string) => {
     const [stdKey] = getMatrixFields()
     const current = (formData[stdKey] as string[]) || []
-    setFormData({ ...formData, [stdKey]: current.includes(size) ? current.filter(s => s !== size) : [...current, size] })
+    const isRemoving = current.includes(size)
+    const newFormData = { ...formData, [stdKey]: isRemoving ? current.filter(s => s !== size) : [...current, size] }
+    setFormData(newFormData)
+    if (isRemoving) cleanupOrphanedInputs(newFormData)
   }
 
   const togglePurity = (p: string) => {
     const current = formData.standardPurities || []
-    setFormData({ ...formData, standardPurities: current.includes(p) ? current.filter(x => x !== p) : [...current, p] })
+    const isRemoving = current.includes(p)
+    const newFormData = { ...formData, standardPurities: isRemoving ? current.filter(x => x !== p) : [...current, p] }
+    setFormData(newFormData)
+    if (isRemoving) cleanupOrphanedInputs(newFormData)
   }
 
   const addCustomSize = () => {
@@ -425,7 +429,9 @@ export default function AdminInventory() {
 
   const removeCustomSize = (s: string) => {
     const [, cstKey] = getMatrixFields()
-    setFormData({ ...formData, [cstKey]: ((formData[cstKey] as string[]) || []).filter(x => x !== s) })
+    const newFormData = { ...formData, [cstKey]: ((formData[cstKey] as string[]) || []).filter(x => x !== s) }
+    setFormData(newFormData)
+    cleanupOrphanedInputs(newFormData)
   }
 
   const addCustomPurity = () => {
@@ -441,7 +447,9 @@ export default function AdminInventory() {
   }
 
   const removeCustomPurity = (p: string) => {
-    setFormData({ ...formData, customPurities: (formData.customPurities || []).filter(x => x !== p) })
+    const newFormData = { ...formData, customPurities: (formData.customPurities || []).filter(x => x !== p) }
+    setFormData(newFormData)
+    cleanupOrphanedInputs(newFormData)
   }
 
 
@@ -472,7 +480,7 @@ export default function AdminInventory() {
       )}
 
       {isFormOpen && (
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
           <h2 className="text-xl font-semibold mb-6">{editingId ? 'Edit Product' : 'Add New Product'}</h2>
           <form onSubmit={handleSave} className="space-y-6">
             {/* Row 1: Slug + SKU */}
@@ -536,7 +544,12 @@ export default function AdminInventory() {
                             <button
                               type="button"
                               tabIndex={-1}
-                              onClick={() => { setFormData({ ...formData, category: cat }); setCategoryOpen(false) }}
+                              onClick={() => { 
+                                const newFormData = { ...formData, category: cat };
+                                setFormData(newFormData);
+                                cleanupOrphanedInputs(newFormData);
+                                setCategoryOpen(false);
+                              }}
                               className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${categoryFocusedIndex === idx ? 'bg-gray-100' : ''
                                 } ${formData.category === cat ? 'bg-gray-100 text-black font-semibold' : 'text-gray-600 hover:bg-gray-50'
                                 }`}
@@ -563,7 +576,11 @@ export default function AdminInventory() {
                   type="button"
                   role="switch"
                   aria-checked={formData.hasVariants}
-                  onClick={() => setFormData({ ...formData, hasVariants: !formData.hasVariants })}
+                  onClick={() => {
+                    const newFormData = { ...formData, hasVariants: !formData.hasVariants }
+                    setFormData(newFormData)
+                    if (!newFormData.hasVariants) cleanupOrphanedInputs(newFormData)
+                  }}
                   className={`relative inline-flex h-[22px] w-[42px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-[160ms] ease-[var(--ease-in-out)] ${formData.hasVariants ? 'bg-black' : 'bg-gray-200'}`}
                 >
                   <span className={`pointer-events-none inline-block h-[18px] w-[18px] transform rounded-full bg-white shadow-sm ring-0 transition-transform duration-[160ms] ease-[var(--ease-in-out)] ${formData.hasVariants ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
@@ -732,9 +749,16 @@ export default function AdminInventory() {
                               )}
                             </div>
                             <div className="flex flex-col gap-2 pt-3 mt-3 border-t border-gray-100">
-                              <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                                {hasStonesCategory(formData.category) || isBullion ? 'Image Overrides (All)' : 'Image Override (Last Image)'}
-                              </label>
+                              <div>
+                                <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block">
+                                  {hasStonesCategory(formData.category) || isBullion ? 'Image Overrides (All)' : 'Image Override (Last Image)'}
+                                </label>
+                                <p className="text-[10px] text-gray-400 mt-0.5 mb-2 leading-tight">
+                                  {hasStonesCategory(formData.category) || isBullion 
+                                    ? 'These images will completely replace the default product gallery when this variant is selected.' 
+                                    : 'This image will replace ONLY the last slide of the product gallery when this variant is selected.'}
+                                </p>
+                              </div>
                               <div className="grid grid-cols-2 gap-3">
                                 {(() => {
                                   const isFullOverride = hasStonesCategory(formData.category) || isBullion
@@ -892,7 +916,7 @@ export default function AdminInventory() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
@@ -915,9 +939,9 @@ export default function AdminInventory() {
                         <td className="px-6 py-4">
                           {item.imageFile ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={item.imageFile.startsWith('data:') || item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`} alt="Product" className="w-12 h-auto aspect-[3/4] object-cover rounded-md bg-[#f5f5f7]" />
+                            <Image unoptimized width={48} height={64} src={item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`} alt="Product" className="w-12 h-auto aspect-[3/4] object-cover rounded-lg bg-[#f5f5f7]" />
                           ) : (
-                            <div className="w-12 h-auto aspect-[3/4] bg-[#f5f5f7] rounded-md flex items-center justify-center">
+                            <div className="w-12 h-auto aspect-[3/4] bg-[#f5f5f7] rounded-lg flex items-center justify-center">
                               <Box size={20} className="text-gray-400" />
                             </div>
                           )}
@@ -927,7 +951,7 @@ export default function AdminInventory() {
                           <div className="text-xs text-gray-500 mt-1">{item.sku} · /{item.id}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-md whitespace-nowrap">{item.category}</span>
+                          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg whitespace-nowrap">{item.category}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1">

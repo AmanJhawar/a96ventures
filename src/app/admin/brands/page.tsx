@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { collection, addDoc, setDoc, deleteDoc, doc, getDocs, getFirestore } from 'firebase/firestore/lite'
 import { app } from '@/lib/firebase/config'
 import { Brand } from '@/lib/types'
@@ -225,7 +226,7 @@ export default function AdminBrands() {
                     </td>
                     <td className="px-6 py-4">
                       {brand.logoFile ? (
-                        <img src={brand.logoFile.startsWith('data:') || brand.logoFile.startsWith('http') ? brand.logoFile : `/assets/${brand.logoFile}`} alt={brand.name} className="h-8 object-contain" />
+                        <Image width={120} height={32} unoptimized src={brand.logoFile.startsWith('http') ? brand.logoFile : `/assets/${brand.logoFile}`} alt={brand.name} className="h-8 w-auto object-contain" />
                       ) : (
                         <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
                           <Bookmark size={16} />

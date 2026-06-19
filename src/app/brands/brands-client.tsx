@@ -59,7 +59,7 @@ export default function BrandsClient() {
                 <div className="w-full md:w-[35%] bg-gray-100 flex items-center justify-center border-b md:border-b-0 md:border-r border-gray-200 min-h-[200px] p-6">
                   <div className="relative w-full h-full flex items-center justify-center">
                     <ProtectedImage 
-                      src={brand.logoFile.startsWith('data:') || brand.logoFile.startsWith('http') ? brand.logoFile : `/assets/${brand.logoFile}`} 
+                      src={brand.logoFile.startsWith('http') ? brand.logoFile : `/assets/${brand.logoFile}`} 
                       alt={`${brand.name} logo`}
                       className="max-w-[150px] max-h-[150px] object-contain w-auto h-auto"
                       containerClassName="flex items-center justify-center w-full h-full transition-transform duration-200 ease-[var(--ease-out)] group-hover:scale-105"

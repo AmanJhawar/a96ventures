@@ -19,11 +19,6 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
 
   const safeImages = images.filter(Boolean)
 
-  // Reset to first slide whenever the image set changes (e.g. variant switch)
-  useEffect(() => {
-    setActiveIndex(0)
-  }, [images])
-
   if (safeImages.length === 0) {
     return (
       <div className="flex flex-col gap-4 w-full">
@@ -73,7 +68,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
           {safeImages.map((img, idx) => (
             <div key={idx} className="w-full h-full flex-shrink-0 relative overflow-hidden">
               <ProtectedImage
-                src={img.startsWith('data:') ? img : `/assets/${img}`}
+                src={img.startsWith('http') ? img : `/assets/${img}`}
                 alt={`${productName} - View ${idx + 1}`}
                 className="w-full h-full object-cover"
                 containerClassName="w-full h-full flex items-center justify-center absolute inset-0"

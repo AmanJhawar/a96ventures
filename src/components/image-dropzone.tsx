@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from 'react'
-import { UploadCloud, X } from 'lucide-react'
+import { X } from 'lucide-react'
 
 interface ImageDropzoneProps {
   value: string;
@@ -9,7 +9,7 @@ interface ImageDropzoneProps {
 }
 
 // Extract the Google Drive file ID from sharing URLs and format as direct CDN link
-export function parseGoogleDriveLink(url: string): string {
+function parseGoogleDriveLink(url: string): string {
   if (!url) return ''
   const trimmed = url.trim()
   
@@ -45,7 +45,7 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
   }
 
   if (value) {
-    const imgSrc = value.startsWith('data:') || value.startsWith('http') ? value : `/assets/${value}`
+    const imgSrc = value.startsWith('http') ? value : `/assets/${value}`
     return (
       <div className="relative group border border-gray-200 rounded-lg overflow-hidden bg-gray-50 h-48 flex items-center justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -62,29 +62,17 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-2">
-        <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
-          Paste Google Drive share link or image URL
-        </label>
-        <input
-          type="url"
-          value={inputValue}
-          onChange={handleInputChange}
-          placeholder="e.g., https://drive.google.com/file/d/.../view"
-          className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black bg-white transition-colors duration-150"
-        />
-      </div>
-
-      <div className="relative border-2 border-dashed border-gray-200 rounded-xl p-6 text-center bg-gray-50/50">
-        <div className="flex flex-col items-center justify-center pointer-events-none">
-          <UploadCloud className="w-8 h-8 text-gray-400 mb-3" />
-          <p className="text-sm font-medium text-gray-500 mb-1">Local file upload disabled</p>
-          <p className="text-xs text-gray-400 max-w-xs mx-auto leading-relaxed">
-            Please upload your images to Google Drive, set sharing permissions to <strong>Anyone with the link can view</strong>, and paste the sharing link above.
-          </p>
-        </div>
-      </div>
+    <div className="flex flex-col gap-2">
+      <input
+        type="url"
+        value={inputValue}
+        onChange={handleInputChange}
+        placeholder="e.g., https://drive.google.com/file/d/.../view"
+        className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-black focus:ring-1 focus:ring-black bg-white transition-colors duration-150"
+      />
+      <p className="text-[10px] text-gray-400 leading-tight">
+        Paste a Google Drive link (must be set to "Anyone with the link can view").
+      </p>
     </div>
   )
 }

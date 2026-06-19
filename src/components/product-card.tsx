@@ -19,7 +19,7 @@ export function ProductCard({ item, showVariants = false }: ProductCardProps) {
           <div className="w-full h-full relative flex items-center justify-center text-gray-400 text-sm">
             {item.imageFile ? (
               <ProtectedImage 
-                src={item.imageFile.startsWith('data:') ? item.imageFile : `/assets/${item.imageFile}`} 
+                src={item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`} 
                 alt={item.name}
                 className="w-full h-full object-cover"
                 containerClassName="w-full h-full transition-transform duration-700 ease-[var(--ease-out)] group-hover:scale-[1.04]"

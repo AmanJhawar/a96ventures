@@ -108,7 +108,7 @@ export default function AdminPortfolio() {
       const docId = editingId || data.id
       const docRef = doc(db, 'portfolio', docId)
       
-      const { id, ...saveData } = data
+      const { id: _, ...saveData } = data
       await setDoc(docRef, saveData)
       
       // Trigger dynamic path revalidation in background

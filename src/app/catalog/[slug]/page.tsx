@@ -31,8 +31,8 @@ export async function generateMetadata(
     }
   }
 
-  const imageUrl = item.imageFile && !item.imageFile.startsWith('data:')
-    ? `https://a96ventures.com/assets/${item.imageFile}`
+  const imageUrl = item.imageFile
+    ? (item.imageFile.startsWith('http') ? item.imageFile : `https://a96ventures.com/assets/${item.imageFile}`)
     : undefined
 
   return {
@@ -69,8 +69,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     name: item.name,
     description: item.description,
     category: item.category,
-    ...(item.imageFile && !item.imageFile.startsWith('data:') && {
-      image: `https://a96ventures.com/assets/${item.imageFile}`
+    ...(item.imageFile && {
+      image: item.imageFile.startsWith('http') ? item.imageFile : `https://a96ventures.com/assets/${item.imageFile}`
     })
   }
 

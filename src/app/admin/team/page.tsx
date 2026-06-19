@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { collection, addDoc, setDoc, deleteDoc, doc, getDocs, getFirestore } from 'firebase/firestore/lite'
 import { app } from '@/lib/firebase/config'
 const db = getFirestore(app)
@@ -260,7 +261,7 @@ export default function AdminTeam() {
                     </td>
                     <td className="px-6 py-4">
                       {member.imageFile ? (
-                        <img src={member.imageFile.startsWith('data:') || member.imageFile.startsWith('http') ? member.imageFile : `/assets/${member.imageFile}`} alt={member.name} className="w-10 h-10 object-cover rounded-full bg-gray-100" />
+                        <Image width={40} height={40} unoptimized src={member.imageFile.startsWith('http') ? member.imageFile : `/assets/${member.imageFile}`} alt={member.name} className="w-10 h-10 object-cover rounded-full bg-gray-100" />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
                           <Users size={16} />
