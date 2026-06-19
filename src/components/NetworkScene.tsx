@@ -43,21 +43,15 @@ export default function NetworkScene({ inView }: { inView: boolean }) {
           },
           onHover: {
             enable: !isReducedMotion,
-            mode: ['grab', 'bubble'],
+            mode: 'grab',
           },
         },
         modes: {
           grab: {
-            distance: 180,
+            distance: 250,
             links: {
-              opacity: 0.6,
+              opacity: 0.15,
             },
-          },
-          bubble: {
-            distance: 180,
-            size: 3.5,
-            duration: 2,
-            opacity: 0.9,
           },
           push: {
             quantity: 3,
@@ -66,18 +60,18 @@ export default function NetworkScene({ inView }: { inView: boolean }) {
       },
       particles: {
         color: {
-          value: '#9ca3af', // solid grey
+          value: '#000000', // stark black for high contrast minimalist look
         },
         links: {
-          color: '#e5e7eb', // lighter gray
-          distance: 180,
+          color: '#000000',
+          distance: 140,
           enable: true,
-          opacity: 0.8,
+          opacity: 0.06, // very delicate default lines
           width: 1,
         },
         move: {
           enable: !isReducedMotion,
-          speed: 0.8,
+          speed: 0.3, // slower, more elegant ambient movement
           direction: 'none' as const,
           random: true,
           straight: false,
@@ -89,16 +83,16 @@ export default function NetworkScene({ inView }: { inView: boolean }) {
           density: {
             enable: true,
           },
-          value: 150, // 150 points for a good network feel
+          value: 180, // slightly more particles since they are smaller and fainter
         },
         opacity: {
-          value: 0.6,
+          value: 0.15,
         },
         shape: {
           type: 'circle' as const,
         },
         size: {
-          value: { min: 1, max: 2.5 },
+          value: { min: 0.5, max: 1.5 },
         },
       },
       detectRetina: true,
