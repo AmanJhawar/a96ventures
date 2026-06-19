@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useCart } from '@/components/cart-provider'
 import type { CatalogItem } from '@/lib/types'
 
-export function AddToCartSection({ item }: { item: CatalogItem }) {
+export function AddToCartSection({ item, onVariantChange }: { item: CatalogItem, onVariantChange?: (variantKey: string | undefined) => void }) {
   const { addToCart } = useCart()
 
   const category = item.category || ''
@@ -32,6 +32,24 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
 
   const hasVariants = hasSizes || hasPurities || hasWeights || hasStones
 
+  useEffect(() => {
+    if (!onVariantChange) return
+    if (!hasVariants) {
+      onVariantChange(undefined)
+      return
+    }
+    
+    let key: string | undefined = undefined
+    if (isMarble) {
+      key = selectedStone ? `stone:${selectedStone}` : undefined
+    } else if (isBullion) {
+      key = selectedWeight ? `weight:${selectedWeight}` : undefined
+    } else if (isSilver) {
+      key = (selectedSize && selectedPurity) ? `size:${selectedSize}|purity:${selectedPurity}` : undefined
+    }
+    onVariantChange(key)
+  }, [hasVariants, isMarble, isBullion, isSilver, selectedStone, selectedWeight, selectedSize, selectedPurity, onVariantChange])
+
   // Resolve the selected variant to its own SKU and weight by matching the
   // stored variant definitions (variantSkus is keyed by SKU). No silent
   // fallback to the product ID: an unmatched variant is a data error.
@@ -58,7 +76,7 @@ export function AddToCartSection({ item }: { item: CatalogItem }) {
 
     const resolved = resolveVariant()
     if (!resolved) {
-      console.error('No matching variant SKU for selection', { selectedSize, selectedPurity, selectedWeight, selectedStone })
+      console.error(`No matching variant SKU for selection: size=${selectedSize}, purity=${selectedPurity}, weight=${selectedWeight}, stone=${selectedStone}`)
       alert('Sorry, this combination is unavailable. Please contact us and we will help with your order.')
       return
     }

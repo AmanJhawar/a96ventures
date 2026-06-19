@@ -101,6 +101,7 @@ interface InventoryItem {
   standardStones?: string[]
   customStones?: string[]
   variantSkus?: Record<string, VariantDetail>
+  variantImages?: Record<string, string[]>
   weight: string
   material?: string
   additionalImages?: string[]
@@ -131,6 +132,7 @@ export default function AdminInventory() {
   // which would churn on every keystroke). Serialised to variantSkus on save.
   const [variantSkuInputs, setVariantSkuInputs] = useState<Record<string, string>>({})
   const [variantWeightInputs, setVariantWeightInputs] = useState<Record<string, string>>({})
+  const [variantImageInputs, setVariantImageInputs] = useState<Record<string, string[]>>({})
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [categoryFocusedIndex, setCategoryFocusedIndex] = useState(-1)
   const categoryRef = useRef<HTMLDivElement>(null)
@@ -243,6 +245,7 @@ export default function AdminInventory() {
     }
     setVariantSkuInputs(skuInputs)
     setVariantWeightInputs(weightInputs)
+    setVariantImageInputs(item.variantImages || {})
     setEditingId(item.id)
     setIsFormOpen(true)
   }
@@ -255,6 +258,7 @@ export default function AdminInventory() {
     setCustomPurityInput('')
     setVariantSkuInputs({})
     setVariantWeightInputs({})
+    setVariantImageInputs({})
   }
 
   const handleSave = async (e: React.FormEvent) => {
@@ -290,6 +294,7 @@ export default function AdminInventory() {
         payload.standardSizes = []; payload.customSizes = []; payload.standardWeights = []; payload.customWeights = []; payload.standardStones = []; payload.customStones = []
         payload.standardPurities = []; payload.customPurities = []
         payload.variantSkus = {}
+        payload.variantImages = {}
       } else {
         const combos = buildVariantCombos(formData)
         if (combos.length === 0) {
@@ -328,6 +333,14 @@ export default function AdminInventory() {
         }
 
         payload.variantSkus = variantSkus
+        
+        // Serialize variant images, filtering out empty arrays and empty URLs
+        const cleanedImages: Record<string, string[]> = {}
+        for (const [key, imgs] of Object.entries(variantImageInputs)) {
+          const valid = imgs.filter(Boolean)
+          if (valid.length > 0) cleanedImages[key] = valid
+        }
+        payload.variantImages = cleanedImages
       }
 
       await setDoc(doc(db, 'catalog', docId), payload)
@@ -687,6 +700,51 @@ export default function AdminInventory() {
                                 </div>
                               )}
                             </div>
+                            <div className="flex flex-col gap-2 pt-3 mt-3 border-t border-gray-100">
+                              <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                                {hasStonesCategory(formData.category) || isBullion ? 'Image Overrides (All)' : 'Image Override (Last Image)'}
+                              </label>
+                              <div className="grid grid-cols-2 gap-3">
+                                {(() => {
+                                  const isFullOverride = hasStonesCategory(formData.category) || isBullion
+                                  const currentImages = variantImageInputs[combo.key] || []
+                                  
+                                  if (!isFullOverride) {
+                                    return (
+                                      <ImageDropzone 
+                                        value={currentImages[0] || ''} 
+                                        onChange={url => setVariantImageInputs({ ...variantImageInputs, [combo.key]: url ? [url] : [] })} 
+                                      />
+                                    )
+                                  }
+                                  
+                                  return (
+                                    <>
+                                      {currentImages.map((img, idx) => (
+                                        <ImageDropzone 
+                                          key={idx} 
+                                          value={img} 
+                                          onChange={url => {
+                                            const newImgs = [...currentImages]
+                                            if (url) newImgs[idx] = url
+                                            else newImgs.splice(idx, 1)
+                                            setVariantImageInputs({ ...variantImageInputs, [combo.key]: newImgs })
+                                          }} 
+                                        />
+                                      ))}
+                                      {currentImages.length < 4 && (
+                                        <ImageDropzone 
+                                          value="" 
+                                          onChange={url => {
+                                            if (url) setVariantImageInputs({ ...variantImageInputs, [combo.key]: [...currentImages, url] })
+                                          }} 
+                                        />
+                                      )}
+                                    </>
+                                  )
+                                })()}
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -745,7 +803,7 @@ export default function AdminInventory() {
             {/* Images */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="admin-label required">Thumbnail Image (Portrait 2:3)</label>
+                <label className="admin-label required">Thumbnail Image (3:4 Portrait)</label>
                 <ImageDropzone
                   value={formData.imageFile || ''}
                   onChange={(url) => setFormData({ ...formData, imageFile: url })}
@@ -753,7 +811,7 @@ export default function AdminInventory() {
               </div>
 
               <div>
-                <label className="admin-label">Product Images (Landscape 3:2)</label>
+                <label className="admin-label">Product Images (4:3 Landscape)</label>
                 <div className="grid grid-cols-1 gap-6">
                   {(formData.additionalImages || []).map((img, idx) => (
                     <ImageDropzone
@@ -788,7 +846,7 @@ export default function AdminInventory() {
               <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
                 Cancel
               </button>
-              <button type="submit" className="admin-btn-primary px-8">
+              <button type="submit" className="admin-btn-primary">
                 {editingId ? 'Update Product' : 'Save Product'}
               </button>
             </div>
@@ -811,9 +869,10 @@ export default function AdminInventory() {
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600">Image</th>
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600">Product / SKU</th>
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600 whitespace-nowrap">Category</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Sizes</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Purities</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-right">Actions</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-500">Variants</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-500">Purities</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-500">Weight</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-500 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -849,9 +908,12 @@ export default function AdminInventory() {
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1">
                             {allPurities.length > 0 ? allPurities.map(p => (
-                              <span key={p} className="text-xs border border-gray-200 px-1.5 py-0.5 rounded">{p}</span>
+                              <span key={p} className="text-xs border border-gray-200 px-1.5 py-0.5 rounded">{p}{p !== '—' && !p.endsWith('%') ? '%' : ''}</span>
                             )) : <span className="text-xs text-gray-400">—</span>}
                           </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm text-gray-900">{item.weight ? item.weight : <span className="text-gray-400">—</span>}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-2">
@@ -868,7 +930,7 @@ export default function AdminInventory() {
                   })}
                   {items.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No products found.</td>
+                      <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No products found.</td>
                     </tr>
                   )}
                 </tbody>

@@ -124,7 +124,7 @@ export default function AdminBrands() {
           </div>
           <button 
             onClick={handleAddNew}
-            className="btn-primary flex items-center gap-2"
+            className="admin-btn-primary flex items-center gap-2"
           >
             <Plus size={18} className="transition-transform" />
             Add Brand
@@ -189,7 +189,7 @@ export default function AdminBrands() {
               <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
                 Cancel
               </button>
-              <button type="submit" disabled={isSubmitting} className="btn-primary px-8 disabled:opacity-50">
+              <button type="submit" disabled={isSubmitting} className="admin-btn-primary disabled:opacity-50">
                 {isSubmitting ? 'Saving...' : (editingId ? 'Update Brand' : 'Save Brand')}
               </button>
             </div>

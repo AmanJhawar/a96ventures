@@ -92,7 +92,7 @@ export default function AdminLogin() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="btn-primary w-full disabled:opacity-70"
+            className="admin-btn-primary w-full disabled:opacity-70"
           >
             {isSubmitting ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white/30 border-t-white"></div> : 'Sign In'}
           </button>

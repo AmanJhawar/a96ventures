@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { ProductCarousel } from './product-carousel'
 import { AddToCartSection } from './add-to-cart-section'
@@ -11,10 +11,15 @@ interface ProductGalleryInteractiveProps {
   item: CatalogItem
   headingSlot: ReactNode
   specsSlot: ReactNode
+  onVariantChange?: (variantKey: string | undefined) => void
 }
 
-export function ProductGalleryInteractive({ item, headingSlot, specsSlot }: ProductGalleryInteractiveProps) {
+export function ProductGalleryInteractive({ item, headingSlot, specsSlot, onVariantChange }: ProductGalleryInteractiveProps) {
   const [selectedVariant, setSelectedVariant] = useState<string | undefined>(undefined)
+
+  useEffect(() => {
+    if (onVariantChange) onVariantChange(selectedVariant)
+  }, [selectedVariant, onVariantChange])
 
   const gallery = resolveGallery(item, selectedVariant)
   const deduped = Array.from(new Set(gallery.filter(Boolean)))

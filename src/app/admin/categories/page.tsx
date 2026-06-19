@@ -162,7 +162,7 @@ export default function AdminCategories() {
               />
               {errors.name && <p className="text-gray-500 font-medium text-sm mt-1">{errors.name.message}</p>}
             </div>
-            <button type="submit" disabled={isSubmitting} className="btn-primary whitespace-nowrap px-8 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100">
+            <button type="submit" disabled={isSubmitting} className="admin-btn-primary whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100">
               {isSubmitting ? 'Adding...' : 'Add Category'}
             </button>
           </form>

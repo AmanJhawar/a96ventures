@@ -21,10 +21,13 @@ export interface CatalogItem {
   customWeights?: string[];
   standardStones?: string[];
   customStones?: string[];
+  hasVariants?: boolean;
   // Per-variant SKUs, keyed by the variant's SKU. Each entry records the
   // size/purity/stone/weight that SKU represents, so the storefront can
   // resolve a customer's selection to the correct SKU and weight.
   variantSkus?: Record<string, VariantDetail>;
+  // Map variant combo string (e.g. 'size:4cm|purity:92.5') to array of image URLs
+  variantImages?: Record<string, string[]>;
   weight: string;
   material?: string;
   imageFile: string;
