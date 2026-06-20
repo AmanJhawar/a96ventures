@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import NetworkHero from '@/components/NetworkHero'
+import UnicornHero from '@/components/UnicornHero'
 import NewsletterForm from '@/components/newsletter-form'
 import { getBrands, getPortfolioCompanies } from '@/lib/firebase/db'
 
@@ -20,12 +20,12 @@ export default async function Home() {
   } catch (err) {
     console.error("Error fetching stats, falling back to defaults:", err)
   }
-  
+
   const yearsExp = new Date().getFullYear() - 2017
 
   return (
     <>
-      <NetworkHero />
+      <UnicornHero />
 
       {/* Newsletter Section */}
       <section className="py-20 md:py-32 bg-[#f5f5f7]">
@@ -48,12 +48,12 @@ export default async function Home() {
               <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{portfolioCount}+</div>
               <div className="text-base text-gray-500">Portfolio Companies</div>
             </Link>
-            
+
             <Link href="/brands" className="block text-center p-8 bg-white border border-gray-200 rounded-xl transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out)] hover:border-black/20 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 active:scale-[0.97]">
               <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{brandsCount}+</div>
               <div className="text-base text-gray-500">Brands</div>
             </Link>
-            
+
             <div className="block text-center p-8">
               <div className="text-4xl md:text-5xl font-bold leading-none text-black py-8">{yearsExp}+</div>
               <div className="text-base text-gray-500">Years of Experience</div>
