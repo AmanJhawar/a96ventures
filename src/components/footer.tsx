@@ -7,7 +7,7 @@ export default function Footer() {
   return (
     <footer className="mt-auto">
       <div className="max-w-8xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-12 mb-16 text-center">
+        <div className="flex flex-col sm:flex-row justify-center gap-12 md:gap-32 mb-16 text-center">
           <div>
             <h3 className="text-sm font-semibold tracking-widest text-black mb-6 uppercase">Company</h3>
             <ul className="space-y-3">
