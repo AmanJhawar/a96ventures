@@ -25,8 +25,9 @@ export default function NetworkHero() {
         animate={{ opacity: 1 }}
         transition={{ duration: 1.0, ease: EASE_OUT }}
       >
-      {/* Force UnicornScene internals to fill the container */}
-      <style dangerouslySetInnerHTML={{ __html: `
+        {/* Force UnicornScene internals to fill the container */}
+        <style dangerouslySetInnerHTML={{
+          __html: `
         .unicorn-scene-wrapper,
         .unicorn-scene-wrapper > div,
         .unicorn-scene-wrapper canvas {
@@ -35,7 +36,24 @@ export default function NetworkHero() {
           position: absolute !important;
           inset: 0 !important;
         }
+        /* Aggressively hide the Unicorn Studio Watermark */
+        .unicorn-scene-wrapper a, 
+        .unicorn-scene-wrapper [href*="unicorn.studio"],
+        .unicorn-scene-wrapper img,
+        .unicorn-scene-wrapper svg,
+        a[href*="unicorn.studio"] {
+          display: none !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          visibility: hidden !important;
+          z-index: -9999 !important;
+        }
+        /* If the watermark is a fixed div appended to body */
+        div[style*="z-index: 99999"] {
+          display: none !important;
+        }
       `}} />
+        {/* @ts-ignore - unicornstudio-react lacks proper TypeScript definitions */}
         <UnicornScene
           projectId="Pvsa8dKMzsvq5SodEcxA"
           width="100%"
@@ -52,7 +70,7 @@ export default function NetworkHero() {
       <div className="relative z-10 flex flex-col items-center justify-center pointer-events-none text-center px-6 max-w-5xl mx-auto pt-10">
 
         {/* Main Title */}
-        <motion.h1 
+        <motion.h1
           className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tight text-white mb-24"
           initial={{ clipPath: 'inset(0 0 100% 0)' }}
           animate={{ clipPath: 'inset(0 0 0% 0)' }}
@@ -61,7 +79,7 @@ export default function NetworkHero() {
           We partner with{' '}
           <span className="relative inline-block">
             visionaries
-            <motion.span 
+            <motion.span
               className="absolute bottom-1 left-0 right-0 h-0.5 bg-white"
               initial={{ scaleX: 0 }}
               animate={{ scaleX: 1 }}
