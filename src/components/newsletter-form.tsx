@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -21,9 +22,28 @@ export default function NewsletterForm() {
     defaultValues: { email: '' }
   })
 
+  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
+
   const onSubmit = async (data: NewsletterValues) => {
-    console.log('Email submitted:', data.email)
-    reset()
+    try {
+      setStatus('idle')
+      const response = await fetch('/api/newsletter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: data.email }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Subscription failed')
+      }
+
+      setStatus('success')
+      reset()
+    } catch (error) {
+      setStatus('error')
+    }
   }
 
   return (
@@ -48,7 +68,13 @@ export default function NewsletterForm() {
         </button>
       </form>
       {errors.email && (
-        <p className="text-gray-500 font-medium text-sm font-medium mt-2">{errors.email.message}</p>
+        <p className="text-gray-500 font-medium text-sm mt-2">{errors.email.message}</p>
+      )}
+      {status === 'success' && (
+        <p className="text-green-600 font-medium text-sm mt-2">Thanks for subscribing!</p>
+      )}
+      {status === 'error' && (
+        <p className="text-red-600 font-medium text-sm mt-2">Failed to subscribe. Please try again.</p>
       )}
     </div>
   )

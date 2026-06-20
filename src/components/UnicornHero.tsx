@@ -11,13 +11,13 @@ const UnicornScene = dynamic(
   () => import('unicornstudio-react').then((mod) => mod.default),
   {
     ssr: false,
-    loading: () => <div className="absolute inset-0 z-0 bg-white" />,
+    loading: () => <div className="absolute inset-0 z-0 bg-neutral-950" />,
   }
 )
 
 export default function NetworkHero() {
   return (
-    <section className="relative w-full h-screen min-h-[600px] overflow-hidden bg-white -mt-20 flex flex-col justify-center items-center">
+    <section className="relative w-full h-screen min-h-[600px] overflow-hidden bg-neutral-950 -mt-20 flex flex-col justify-center items-center">
       {/* Unicorn Studio Background */}
       <motion.div
         className="absolute inset-0 z-0"
@@ -35,22 +35,6 @@ export default function NetworkHero() {
           height: 100% !important;
           position: absolute !important;
           inset: 0 !important;
-        }
-        /* Aggressively hide the Unicorn Studio Watermark */
-        .unicorn-scene-wrapper a, 
-        .unicorn-scene-wrapper [href*="unicorn.studio"],
-        .unicorn-scene-wrapper img,
-        .unicorn-scene-wrapper svg,
-        a[href*="unicorn.studio"] {
-          display: none !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          visibility: hidden !important;
-          z-index: -9999 !important;
-        }
-        /* If the watermark is a fixed div appended to body */
-        div[style*="z-index: 99999"] {
-          display: none !important;
         }
       `}} />
         {/* @ts-ignore - unicornstudio-react lacks proper TypeScript definitions */}

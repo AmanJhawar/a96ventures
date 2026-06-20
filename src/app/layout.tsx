@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     type: 'website',
   },
   twitter: {
-    card: 'summary_large_image',
+    card: 'summary',
     title: 'A96 Ventures',
     description: 'Early-stage venture capital focused on transformative technologies and exceptional founders.',
   }

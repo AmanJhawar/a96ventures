@@ -13,7 +13,7 @@ function NavLink({ href, children, isActive, isSolid, onClick }: { href: string;
   return (
     <Link
       href={href}
-      className="relative text-sm font-medium tracking-wide no-underline transition-colors duration-200 ease-[var(--ease-out)] active:opacity-60"
+      className="relative text-sm font-medium tracking-wide no-underline transition-[color] duration-200 ease-[var(--ease-out)] active:opacity-60"
       style={{
         color: !isSolid 
           ? (isActive || isHovered ? '#ffffff' : 'rgba(255,255,255,0.7)') 
@@ -44,7 +44,7 @@ export default function Header() {
   const isHome = pathname === '/'
   const isSolid = !isHome || isScrolled
 
-  console.log('Header State:', { pathname, isHome, isScrolled, isSolid }); const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
+  const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen)
   const closeMenu = () => setIsMenuOpen(false)
@@ -118,12 +118,18 @@ export default function Header() {
   }, [isMenuOpen])
 
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,border-color,backdrop-filter] duration-200 ease-[var(--ease-out)] ${
+    <header className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,border-color,backdrop-filter,color] duration-200 ease-[var(--ease-out)] ${
       isSolid
         ? 'bg-white/95 backdrop-blur-md'
         : 'bg-transparent border-transparent'
     }`}>
-      <div className="max-w-8xl mx-auto px-6">
+      <div 
+        className={`absolute inset-0 pointer-events-none transition-opacity duration-200 ease-[var(--ease-out)] bg-gradient-to-b from-black/60 to-transparent ${
+          isSolid ? 'opacity-0' : 'opacity-100'
+        }`} 
+        aria-hidden="true" 
+      />
+      <div className="max-w-8xl mx-auto px-6 relative">
         <div className="flex justify-center items-center h-20 relative">
           
           {/* Desktop Navigation - Left */}
@@ -156,7 +162,7 @@ export default function Header() {
               {(pathname.startsWith('/catalog') || (isInitialized && totalItems > 0)) && (
                 <button 
                   onClick={() => setIsCartOpen(true)}
-                  className={`relative p-2 rounded-full transition-colors duration-200 active:scale-[0.97] ${!isSolid ? 'text-white hover:bg-white/10' : 'text-black hover:bg-gray-100'}`}
+                  className={`relative p-2 rounded-full transition-[color,background-color] duration-200 ease-[var(--ease-out)] active:scale-[0.97] ${!isSolid ? 'text-white hover:bg-white/10' : 'text-black hover:bg-gray-100'}`}
                   aria-label="Open inquiry"
                 >
                   <ShoppingBag size={20} strokeWidth={1.5} />
@@ -175,7 +181,7 @@ export default function Header() {
             <div className="w-10 h-10 flex items-center justify-center">
               {(pathname.startsWith('/catalog') || (isInitialized && totalItems > 0)) && (
                 <button 
-                  className={`p-2 relative flex items-center justify-center rounded-full transition-colors active:scale-[0.97] ${!isSolid ? 'text-white hover:bg-white/10' : 'text-black hover:bg-gray-100'}`}
+                  className={`p-2 relative flex items-center justify-center rounded-full transition-[color,background-color] duration-200 ease-[var(--ease-out)] active:scale-[0.97] ${!isSolid ? 'text-white hover:bg-white/10' : 'text-black hover:bg-gray-100'}`}
                   onClick={() => setIsCartOpen(true)}
                   aria-label="Open inquiry"
                 >
