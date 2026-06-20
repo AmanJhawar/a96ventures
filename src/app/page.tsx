@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import UnicornHero from '@/components/UnicornHero'
-import { getBrands, getPortfolioCompanies } from '@/lib/firebase/db'
+import { getBrands } from '@/lib/services/brand.service'
+import { getPortfolioCompanies } from '@/lib/services/portfolio.service'
 
 export const metadata: Metadata = {
   title: 'A96 Ventures | Early-Stage Venture Capital',

@@ -33,6 +33,7 @@ export interface CatalogItem {
   imageFile: string;
   additionalImages?: string[];
   orderIndex?: number;
+  searchTerms?: string[];
 }
 
 export const DEFAULT_CATEGORIES = ['Silver Articles', 'Marble Photoframes', 'Bullions'];
@@ -59,4 +60,21 @@ export interface PortfolioCompany {
   description: string;
   stage: string;
   sector: string;
+}
+
+export interface Inquiry {
+  id: string;
+  name?: string; // Legacy
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  countryCode?: string;
+  mobile?: string;
+  email?: string;
+  company?: string;
+  gstinPan?: string;
+  message: string;
+  inquiryType: string;
+  status?: 'unread' | 'read' | 'handled';
+  createdAt?: unknown;
 }

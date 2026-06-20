@@ -121,7 +121,7 @@ export function ConfirmModal({
                 <h2 id="confirm-modal-title" className="text-xl font-bold text-black tracking-tight">{title}</h2>
                 <button 
                   onClick={onClose}
-                  className="p-2 -mr-2 text-gray-400 hover:text-black transition-colors rounded-full hover:bg-gray-100"
+                  className="p-2 -mr-2 text-gray-400 hover:text-black transition-[color,background-color,transform] duration-200 ease-[var(--ease-out)] rounded-full hover:bg-gray-100 active:scale-[0.97]"
                 >
                   <X size={20} />
                 </button>
@@ -136,13 +136,13 @@ export function ConfirmModal({
               <div className="flex flex-col-reverse sm:flex-row items-center sm:justify-end gap-3 mt-8">
                 <button
                   onClick={() => onClose()}
-                  className="w-full sm:w-auto px-6 py-3 text-sm font-semibold text-black bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="w-full sm:w-auto px-6 py-3 text-sm font-semibold text-black bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-[background-color,border-color,color,transform] duration-200 ease-[var(--ease-out)] active:scale-[0.97]"
                 >
                   {cancelText}
                 </button>
                 <button
                   onClick={() => onConfirm()}
-                  className="btn-primary w-full sm:w-auto"
+                  className="btn-primary w-full sm:w-auto transition-transform duration-200 ease-[var(--ease-out)] active:scale-[0.97]"
                 >
                   {confirmText}
                 </button>

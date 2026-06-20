@@ -1,5 +1,6 @@
 import { MetadataRoute } from 'next'
-import { getPortfolioCompanies, getCatalogItems } from '@/lib/firebase/db'
+import { getPortfolioCompanies } from '@/lib/services/portfolio.service'
+import { getCatalogItems } from '@/lib/services/catalog.service'
 
 export const dynamic = 'force-static'
 

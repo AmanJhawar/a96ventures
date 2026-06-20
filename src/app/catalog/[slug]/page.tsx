@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { getCatalogItems, getCatalogItemById, getMoreCatalogItems } from '@/lib/firebase/db'
+import { getCatalogItems, getCatalogItemById, getMoreCatalogItems } from '@/lib/services/catalog.service'
 import { ProductGalleryInteractive } from './product-gallery-interactive'
 import { ProductCard } from '@/components/product-card'
 import Link from 'next/link'

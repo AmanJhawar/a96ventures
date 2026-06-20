@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getPortfolioCompanies } from '@/lib/firebase/db'
+import { getPortfolioCompanies } from '@/lib/services/portfolio.service'
 import { PortfolioCompany } from '@/lib/types'
 import { SkeletonGrid } from '@/components/skeleton-grid'
 import { EmptyState } from '@/components/empty-state'

@@ -1,4 +1,5 @@
-import { getCatalogItems, getStoreCategories } from '@/lib/firebase/db'
+import { getStoreCategories } from '@/lib/services/catalog.service'
+import { getCatalogPage } from '@/lib/services/catalog.service'
 import Link from 'next/link'
 import { CatalogClient } from './catalog-client'
 import { EmptyState } from '@/components/empty-state'
@@ -13,12 +14,17 @@ export default async function Catalog() {
   let categories: string[] = []
   let error = false
 
+  let nextCursor: string | null = null
+  let hasNext = false
+
   try {
-    const [fetchedItems, fetchedCategories] = await Promise.all([
-      getCatalogItems(),
+    const [pageResult, fetchedCategories] = await Promise.all([
+      getCatalogPage(6, { category: 'All', sortBy: 'default' }, null),
       getStoreCategories()
     ])
-    items = fetchedItems
+    items = pageResult.items
+    nextCursor = pageResult.lastCursor
+    hasNext = pageResult.hasNext
     categories = fetchedCategories
   } catch (err) {
     console.error("Failed to load catalog:", err)
@@ -58,7 +64,12 @@ export default async function Catalog() {
           />
         </div>
       ) : (
-        <CatalogClient initialItems={items} initialCategories={allCategories} />
+        <CatalogClient 
+          initialItems={items} 
+          initialCategories={allCategories} 
+          initialNextCursor={nextCursor}
+          initialHasNext={hasNext}
+        />
       )}
     </div>
   )

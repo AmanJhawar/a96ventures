@@ -1,13 +1,11 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react'
-import { collection, deleteDoc, setDoc, doc, getDocs, orderBy, query, limit, startAfter, QueryDocumentSnapshot, DocumentData, getFirestore } from 'firebase/firestore/lite'
-import { app } from '@/lib/firebase/config'
 import { Trash2, MessageSquare, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ConfirmModal } from '@/components/confirm-modal'
-
-const db = getFirestore(app)
+import { getInquiriesPage, deleteInquiry, updateInquiryStatus } from '@/lib/services/inquiry.service'
+import { Inquiry } from '@/lib/types'
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
@@ -73,47 +71,22 @@ function StatusDropdown({ status, onChange }: { status: Inquiry['status'], onCha
   )
 }
 
-interface Inquiry {
-  id: string;
-  name?: string; // Legacy
-  firstName?: string;
-  middleName?: string;
-  lastName?: string;
-  countryCode?: string;
-  mobile?: string;
-  email?: string;
-  company?: string;
-  gstinPan?: string;
-  message: string;
-  inquiryType: string;
-  status?: 'unread' | 'read' | 'handled';
-  createdAt?: unknown;
-}
-
 const ITEMS_PER_PAGE = 10;
 
 export default function AdminInquiries() {
   const [inquiries, setInquiries] = useState<Inquiry[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [lastVisible, setLastVisible] = useState<QueryDocumentSnapshot<DocumentData> | null>(null)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(true)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
   const fetchInquiries = async () => {
     try {
-      const q = query(collection(db, 'inquiries'), orderBy('createdAt', 'desc'), limit(ITEMS_PER_PAGE))
-      const querySnapshot = await getDocs(q)
-      const items: Inquiry[] = []
-      querySnapshot.forEach((docSnap) => {
-        items.push({ ...docSnap.data(), id: docSnap.id } as Inquiry)
-      })
-      
+      const { items, nextCursor: newCursor } = await getInquiriesPage(ITEMS_PER_PAGE)
       setInquiries(items)
-      if (querySnapshot.docs.length > 0) {
-        setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1])
-      }
-      setHasMore(querySnapshot.docs.length === ITEMS_PER_PAGE)
+      setNextCursor(newCursor)
+      setHasMore(!!newCursor)
     } catch (err) {
       console.error("Error fetching inquiries", err)
     } finally {
@@ -122,26 +95,13 @@ export default function AdminInquiries() {
   }
 
   const loadMore = async () => {
-    if (!lastVisible) return
+    if (!nextCursor) return
     setLoadingMore(true)
     try {
-      const q = query(
-        collection(db, 'inquiries'), 
-        orderBy('createdAt', 'desc'), 
-        startAfter(lastVisible),
-        limit(ITEMS_PER_PAGE)
-      )
-      const querySnapshot = await getDocs(q)
-      const items: Inquiry[] = []
-      querySnapshot.forEach((docSnap) => {
-        items.push({ ...docSnap.data(), id: docSnap.id } as Inquiry)
-      })
-      
+      const { items, nextCursor: newCursor } = await getInquiriesPage(ITEMS_PER_PAGE, nextCursor)
       setInquiries(prev => [...prev, ...items])
-      if (querySnapshot.docs.length > 0) {
-        setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1])
-      }
-      setHasMore(querySnapshot.docs.length === ITEMS_PER_PAGE)
+      setNextCursor(newCursor)
+      setHasMore(!!newCursor)
     } catch (err) {
       console.error("Error loading more inquiries", err)
     } finally {
@@ -159,7 +119,7 @@ export default function AdminInquiries() {
   const executeDelete = async () => {
     if (!deleteId) return
     try {
-      await deleteDoc(doc(db, 'inquiries', deleteId))
+      await deleteInquiry(deleteId)
       setInquiries(inquiries.filter(i => i.id !== deleteId))
     } catch (err) {
       console.error("Error deleting", err)
@@ -170,7 +130,7 @@ export default function AdminInquiries() {
 
   const handleStatusChange = async (id: string, newStatus: 'unread' | 'read' | 'handled') => {
     try {
-      await setDoc(doc(db, 'inquiries', id), { status: newStatus }, { merge: true })
+      await updateInquiryStatus(id, newStatus)
       setInquiries(inquiries.map(i => i.id === id ? { ...i, status: newStatus } : i))
     } catch (err) {
       console.error("Error updating status", err)

@@ -1,21 +1,8 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { getCatalogItems } from '@/lib/firebase/db'
-
-export type CartItem = {
-  cartId: string;
-  productId: string;
-  productName: string;
-  sku: string;
-  imageFile: string;
-  selectedSize?: string;
-  selectedPurity?: string;
-  selectedWeight?: string;
-  selectedStone?: string;
-  weight?: string;
-  quantity: number;
-}
+import { getCatalogItems } from '@/lib/services/catalog.service'
+import { CartItem, reconcileCart } from '@/lib/domain/cart'
 
 interface CartContextType {
   cartItems: CartItem[];
@@ -55,60 +42,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
     let active = true
 
-    const reconcileCart = async () => {
+    const fetchAndReconcile = async () => {
       try {
         const liveItems = await getCatalogItems()
         if (!active) return
 
-        const liveItemsMap = new Map(liveItems.map(i => [i.id, i]))
-
-        setCartItems(prev => {
-          const reconciled: CartItem[] = []
-          for (const item of prev) {
-            const liveItem = liveItemsMap.get(item.productId)
-            if (!liveItem) continue // Product was deleted
-
-            // Re-resolve the per-variant SKU and weight from the live product
-            // so renamed or re-priced variants stay correct. Only fall back to
-            // the product-level SKU when the item has no variants.
-            let sku = item.sku
-            let weight = item.weight
-            const variants = liveItem.variantSkus ? Object.entries(liveItem.variantSkus) : []
-            if (variants.length > 0) {
-              const match = variants.find(([, d]) =>
-                (d.size ?? undefined) === item.selectedSize &&
-                (d.purity ?? undefined) === item.selectedPurity &&
-                (d.stone ?? undefined) === item.selectedStone &&
-                ((d.weight ?? undefined) === item.selectedWeight || item.selectedWeight === undefined)
-              )
-              if (match) {
-                sku = match[0]
-                weight = match[1].weight ?? item.weight
-              }
-            } else {
-              sku = liveItem.sku || liveItem.id
-              weight = liveItem.weight || ''
-            }
-
-            reconciled.push({
-              ...item,
-              productName: liveItem.name,
-              imageFile: liveItem.imageFile,
-              sku,
-              weight
-            })
-          }
-
-          // Prevent state update loop
-          const isDifferent = JSON.stringify(prev) !== JSON.stringify(reconciled)
-          return isDifferent ? reconciled : prev
-        })
+        setCartItems(prev => reconcileCart(prev, liveItems))
       } catch (err) {
         console.error('Failed to reconcile cart items with catalog:', err)
       }
     }
 
-    reconcileCart()
+    fetchAndReconcile()
 
     return () => {
       active = false

@@ -12,10 +12,10 @@ export default function Footer() {
             <h3 className="text-sm font-semibold tracking-widest text-black mb-6 uppercase">Company</h3>
             <ul className="space-y-3">
               <li>
-                <Link href="/about" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease-out)] active:opacity-60">About Us</Link>
+                <Link href="/about" className="text-sm text-gray-500 hover:text-black transition-[color,transform] duration-200 ease-[var(--ease-out)] active:scale-[0.97] inline-block">About Us</Link>
               </li>
               <li>
-                <Link href="/team" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease-out)] active:opacity-60">Our Team</Link>
+                <Link href="/team" className="text-sm text-gray-500 hover:text-black transition-[color,transform] duration-200 ease-[var(--ease-out)] active:scale-[0.97] inline-block">Our Team</Link>
               </li>
             </ul>
           </div>
@@ -24,13 +24,13 @@ export default function Footer() {
             <h3 className="text-sm font-semibold tracking-widest text-black mb-6 uppercase">Portfolio</h3>
             <ul className="space-y-3">
               <li>
-                <Link href="/portfolio" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease-out)] active:opacity-60">Companies</Link>
+                <Link href="/portfolio" className="text-sm text-gray-500 hover:text-black transition-[color,transform] duration-200 ease-[var(--ease-out)] active:scale-[0.97] inline-block">Companies</Link>
               </li>
               <li>
-                <Link href="/brands" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease-out)] active:opacity-60">Our Brands</Link>
+                <Link href="/brands" className="text-sm text-gray-500 hover:text-black transition-[color,transform] duration-200 ease-[var(--ease-out)] active:scale-[0.97] inline-block">Our Brands</Link>
               </li>
               <li>
-                <Link href="/catalog" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease-out)] active:opacity-60">Catalog</Link>
+                <Link href="/catalog" className="text-sm text-gray-500 hover:text-black transition-[color,transform] duration-200 ease-[var(--ease-out)] active:scale-[0.97] inline-block">Catalog</Link>
               </li>
             </ul>
           </div>
@@ -40,7 +40,7 @@ export default function Footer() {
             <h3 className="text-sm font-semibold tracking-widest text-black mb-6 uppercase">Contact</h3>
             <ul className="space-y-3">
               <li>
-                <Link href="/contact" className="text-sm text-gray-500 hover:text-black transition-colors duration-200 ease-[var(--ease-out)] active:opacity-60">Get in Touch</Link>
+                <Link href="/contact" className="text-sm text-gray-500 hover:text-black transition-[color,transform] duration-200 ease-[var(--ease-out)] active:scale-[0.97] inline-block">Get in Touch</Link>
               </li>
             </ul>
           </div>

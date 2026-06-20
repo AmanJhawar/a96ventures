@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getPortfolioCompanies, getPortfolioCompanyById } from '@/lib/firebase/db'
+import { getPortfolioCompanies, getPortfolioCompanyById } from '@/lib/services/portfolio.service'
 
 export async function generateStaticParams() {
   try {

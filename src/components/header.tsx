@@ -13,7 +13,7 @@ function NavLink({ href, children, isActive, isSolid, onClick }: { href: string;
   return (
     <Link
       href={href}
-      className="relative text-sm font-medium tracking-wide no-underline transition-[color] duration-200 ease-[var(--ease-out)] active:opacity-60"
+      className="relative text-sm font-medium tracking-wide no-underline transition-[color,transform] duration-200 ease-[var(--ease-out)] active:scale-[0.97] inline-block"
       style={{
         color: !isSolid 
           ? (isActive || isHovered ? '#ffffff' : 'rgba(255,255,255,0.7)') 
@@ -25,10 +25,10 @@ function NavLink({ href, children, isActive, isSolid, onClick }: { href: string;
     >
       {children}
       <span 
-        className="absolute bottom-[-4px] left-0 h-[1px] transition-all duration-200 ease-[var(--ease-out)]"
+        className="absolute bottom-[-4px] left-0 h-[1px] w-full origin-left transition-transform duration-200 ease-[var(--ease-out)]"
         style={{ 
           backgroundColor: !isSolid ? '#ffffff' : '#000000',
-          width: isActive || isHovered ? '100%' : '0%'
+          transform: isActive || isHovered ? 'scaleX(1)' : 'scaleX(0)'
         }} 
       />
     </Link>

@@ -1,6 +1,13 @@
-import { doc, setDoc, getDocs, deleteDoc, collection } from 'firebase/firestore';
+import { doc, setDoc, getDocs, deleteDoc, collection } from 'firebase/firestore/lite';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../src/lib/firebase/config';
+
+// Utility to generate search terms
+export function generateSearchTerms(name: string, category: string, material?: string): string[] {
+  const text = `${name} ${category} ${material || ''}`.toLowerCase();
+  const words = text.split(/[^a-z0-9]+/).filter(w => w.length > 1);
+  return Array.from(new Set(words));
+}
 
 const catalogItems = [
   {
@@ -192,16 +199,14 @@ async function seed() {
   const password = process.env.NEXT_PUBLIC_SEED_PASSWORD;
 
   if (!email || !password) {
-    console.error('Error: NEXT_PUBLIC_SEED_EMAIL and NEXT_PUBLIC_SEED_PASSWORD must be set in .env.local');
-    process.exit(1);
-  }
-
-  try {
-    await signInWithEmailAndPassword(auth, email, password);
-    console.log('Authenticated successfully.');
-  } catch (err) {
-    console.error('Authentication failed:', err);
-    process.exit(1);
+    console.warn('Warning: NEXT_PUBLIC_SEED_EMAIL or PASSWORD not found. Continuing without authentication (will only work if Firestore rules allow public writes).');
+  } else {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      console.log('Authenticated successfully.');
+    } catch (err) {
+      console.warn('Authentication failed. Continuing without authentication (will only work if Firestore rules allow public writes).');
+    }
   }
 
   // Wiping and seeding catalog
@@ -218,7 +223,9 @@ async function seed() {
   console.log('Seeding catalog data to Firestore...');
   for (const item of catalogItems) {
     try {
-      await setDoc(doc(db, 'catalog', item.id), item);
+      const searchTerms = generateSearchTerms(item.name || '', item.category || '');
+      const itemWithSearch = { ...item, searchTerms };
+      await setDoc(doc(db, 'catalog', item.id), itemWithSearch);
       console.log(`Successfully seeded catalog item: ${item.id}`);
     } catch (e) {
       console.error(`Failed to seed catalog item ${item.id}:`, e);

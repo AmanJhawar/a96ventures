@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getBrands } from '@/lib/firebase/db'
+import { getBrands } from '@/lib/services/brand.service'
 import { ProtectedImage } from '@/components/protected-image'
 import { Brand } from '@/lib/types'
 import { SkeletonGrid } from '@/components/skeleton-grid'

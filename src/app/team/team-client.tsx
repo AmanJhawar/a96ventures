@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { getTeamMembers } from '@/lib/firebase/db'
+import { getTeamMembers } from '@/lib/services/team.service'
 import { TeamMember } from '@/lib/types'
 import { SkeletonGrid } from '@/components/skeleton-grid'
 import { EmptyState } from '@/components/empty-state'

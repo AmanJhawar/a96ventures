@@ -1,46 +1,58 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Search } from 'lucide-react'
 import { CatalogItem } from '@/lib/types'
 import { EmptyState } from '@/components/empty-state'
 import { ProductCard } from '@/components/product-card'
 import { motion, AnimatePresence } from 'framer-motion'
 import { StaggerContainer, FadeInUp, EASE_OUT } from '@/components/motion-transitions'
+import { useCatalog } from '@/hooks/use-catalog'
 
 interface CatalogClientProps {
   initialItems: CatalogItem[]
   initialCategories: string[]
+  initialNextCursor: string | null
+  initialHasNext: boolean
 }
 
-export function CatalogClient({ initialItems, initialCategories }: CatalogClientProps) {
-  const [activeFilter, setActiveFilter] = useState('All')
-  const [sortBy, setSortBy] = useState('default')
+export function CatalogClient({ initialItems, initialCategories, initialNextCursor, initialHasNext }: CatalogClientProps) {
   const [isSortOpen, setIsSortOpen] = useState(false)
-  const [visibleCount, setVisibleCount] = useState(6)
   const [focusedIndex, setFocusedIndex] = useState(-1)
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false)
   
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const {
+    items,
+    isLoading,
+    activeFilter,
+    sortBy,
+    searchInput,
+    activeSearch,
+    currentPage,
+    hasNext,
+    onSearchInputChange,
+    handleCategoryChange,
+    handleSortChange,
+    handleNextPage,
+    handlePrevPage
+  } = useCatalog({ initialItems, initialNextCursor, initialHasNext })
 
   const closeDropdown = () => {
     setIsSortOpen(false)
     setFocusedIndex(-1)
   }
 
-  // Close sorting dropdown on click outside or escape key
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         closeDropdown()
       }
     }
-    
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        closeDropdown()
-      }
+      if (event.key === 'Escape') closeDropdown()
     }
-
     document.addEventListener('mousedown', handleClickOutside)
     document.addEventListener('keydown', handleKeyDown)
     return () => {
@@ -73,43 +85,20 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
       case ' ':
         e.preventDefault()
         if (focusedIndex >= 0 && focusedIndex < options.length) {
-          setSortBy(options[focusedIndex])
+          handleSortChange(options[focusedIndex])
           closeDropdown()
         }
         break
     }
   }
 
-  // Filter items by category
-  const filteredItems = activeFilter === 'All' 
-    ? initialItems 
-    : initialItems.filter(item => item.category === activeFilter)
-
-  // Sort items
-  const sortedItems = [...filteredItems].sort((a, b) => {
-    if (sortBy === 'name-asc') return a.name.localeCompare(b.name)
-    if (sortBy === 'name-desc') return b.name.localeCompare(a.name)
-    // default: Merchandising orderIndex (lowest first)
-    const orderA = a.orderIndex ?? 999999;
-    const orderB = b.orderIndex ?? 999999;
-    if (orderA !== orderB) return orderA - orderB;
-    return 0 // fallback: Firestore order
-  })
-
-  // Paginate items
-  const paginatedItems = sortedItems.slice(0, visibleCount)
-
-  const handleCategoryChange = (category: string) => {
-    setActiveFilter(category)
-    setVisibleCount(6) // Reset pagination on category change
-  }
-
   return (
     <div className="max-w-8xl mx-auto px-6">
-      {/* Filters & Sorting Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 pb-2">
+      {/* Filters, Search & Sorting Header */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-12 pb-2">
+        
         {/* Category Filter Pills */}
-        <StaggerContainer className="flex flex-wrap gap-3" staggerDelay={0.04} initialDelay={0.2}>
+        <StaggerContainer className="flex flex-wrap gap-3 flex-1" staggerDelay={0.04} initialDelay={0.2}>
           {initialCategories.map((cat) => (
             <FadeInUp key={cat} duration={0.3} yOffset={8} className="flex">
               <button
@@ -126,82 +115,148 @@ export function CatalogClient({ initialItems, initialCategories }: CatalogClient
           ))}
         </StaggerContainer>
 
-        {/* Sort Selection Menu */}
-        <div className="relative self-end md:self-auto" ref={dropdownRef}>
-          <button
-            onClick={() => setIsSortOpen(!isSortOpen)}
-            onKeyDown={handleDropdownKeyDown}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-black hover:bg-gray-50 active:scale-[0.97] transition-[color,background-color,transform] duration-150 ease-[var(--ease-out)]"
-            aria-haspopup="listbox"
-            aria-expanded={isSortOpen}
-            aria-label="Sort products"
-          >
-            <span>Sort: {sortBy === 'default' ? 'Default' : sortBy === 'name-asc' ? 'Name (A-Z)' : 'Name (Z-A)'}</span>
-            <ChevronDown size={14} className={`transition-transform duration-200 ${isSortOpen ? 'rotate-180' : ''}`} />
-          </button>
+        {/* Right side: Search & Sort */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
+          {/* Search Input */}
+          <div className="relative flex items-center justify-end h-[38px] w-full sm:w-[38px]">
+            <div 
+              className={`absolute right-0 top-0 h-[38px] w-full sm:w-64 flex items-center bg-white transition-[clip-path,border-color,background-color,box-shadow,transform] duration-[250ms] ease-[var(--ease-out)] rounded-lg border ${
+                isSearchExpanded || searchInput 
+                  ? 'border-black shadow-[0_4px_12px_rgba(0,0,0,0.05)] z-30'
+                  : 'border-transparent hover:bg-gray-100 z-10'
+              } ${(!isSearchExpanded && !searchInput) ? 'active:scale-[0.97] cursor-pointer' : ''}`}
+              style={{
+                clipPath: (isSearchExpanded || searchInput) ? 'inset(0 0 0 0)' : 'inset(0 0 0 calc(100% - 38px))'
+              }}
+              onClick={() => {
+                if (!isSearchExpanded && !searchInput) {
+                  setIsSearchExpanded(true)
+                  setTimeout(() => document.getElementById('catalog-search')?.focus(), 50)
+                }
+              }}
+            >
+              <input 
+                id="catalog-search"
+                type="text"
+                placeholder="Search catalog..."
+                value={searchInput}
+                onChange={onSearchInputChange}
+                onBlur={() => {
+                  if (!searchInput) setIsSearchExpanded(false)
+                }}
+                className={`w-full h-full pl-4 pr-1 bg-transparent text-sm text-black placeholder:text-gray-400 focus:outline-none transition-opacity duration-[250ms] ease-[var(--ease-out)] ${
+                  isSearchExpanded || searchInput ? 'opacity-100' : 'opacity-0'
+                }`}
+                tabIndex={isSearchExpanded || searchInput ? 0 : -1}
+              />
 
-          <AnimatePresence>
-            {isSortOpen && (
-              <motion.div 
-                role="listbox"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.15, ease: EASE_OUT }}
-                className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-20 origin-top-right"
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (isSearchExpanded || searchInput) {
+                    // Do nothing or clear search
+                  } else {
+                    setIsSearchExpanded(true)
+                    setTimeout(() => document.getElementById('catalog-search')?.focus(), 50)
+                  }
+                }}
+                className={`flex-shrink-0 w-[38px] h-[38px] flex items-center justify-center z-10 transition-colors ${
+                  isSearchExpanded || searchInput ? 'text-black' : 'text-gray-500'
+                }`}
+                aria-label="Search catalog"
               >
-                <button
-                  role="option"
-                  aria-selected={sortBy === 'default'}
-                  onClick={() => { setSortBy('default'); closeDropdown() }}
-                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'default' ? 'font-semibold text-black' : 'text-gray-500'} ${focusedIndex === 0 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
+                <Search size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Sort Selection Menu */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setIsSortOpen(!isSortOpen)}
+              onKeyDown={handleDropdownKeyDown}
+              className="flex items-center justify-between sm:justify-start gap-1.5 w-full sm:w-auto px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:text-black hover:bg-gray-50 active:scale-[0.97] transition-[color,background-color,border-color,transform] duration-150 ease-[var(--ease-out)]"
+              aria-haspopup="listbox"
+              aria-expanded={isSortOpen}
+              aria-label="Sort products"
+            >
+              <span>Sort: {sortBy === 'default' ? 'Default' : sortBy === 'name-asc' ? 'Name (A-Z)' : 'Name (Z-A)'}</span>
+              <ChevronDown size={14} className={`transition-transform duration-200 text-gray-400 ${isSortOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+              {isSortOpen && (
+                <motion.div 
+                  role="listbox"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.15, ease: EASE_OUT }}
+                  className="absolute right-0 mt-2 w-full sm:w-48 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-20 origin-top-right"
                 >
-                  Default
-                </button>
-                <button
-                  role="option"
-                  aria-selected={sortBy === 'name-asc'}
-                  onClick={() => { setSortBy('name-asc'); closeDropdown() }}
-                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-asc' ? 'font-semibold text-black' : 'text-gray-500'} ${focusedIndex === 1 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
-                >
-                  Name (A-Z)
-                </button>
-                <button
-                  role="option"
-                  aria-selected={sortBy === 'name-desc'}
-                  onClick={() => { setSortBy('name-desc'); closeDropdown() }}
-                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-desc' ? 'font-semibold text-black' : 'text-gray-500'} ${focusedIndex === 2 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
-                >
-                  Name (Z-A)
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  <button
+                    role="option"
+                    aria-selected={sortBy === 'default'}
+                    onClick={() => { handleSortChange('default'); closeDropdown() }}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'default' ? 'font-semibold text-black' : 'text-gray-500'} ${focusedIndex === 0 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
+                  >
+                    Default
+                  </button>
+                  <button
+                    role="option"
+                    aria-selected={sortBy === 'name-asc'}
+                    onClick={() => { handleSortChange('name-asc'); closeDropdown() }}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-asc' ? 'font-semibold text-black' : 'text-gray-500'} ${focusedIndex === 1 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
+                  >
+                    Name (A-Z)
+                  </button>
+                  <button
+                    role="option"
+                    aria-selected={sortBy === 'name-desc'}
+                    onClick={() => { handleSortChange('name-desc'); closeDropdown() }}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors duration-150 hover:bg-gray-100 ${sortBy === 'name-desc' ? 'font-semibold text-black' : 'text-gray-500'} ${focusedIndex === 2 ? 'bg-gray-100 outline outline-2 outline-black -outline-offset-2' : ''}`}
+                  >
+                    Name (Z-A)
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 
       {/* Grid of Items */}
-      {paginatedItems.length === 0 ? (
-        <EmptyState title="No products found in this category." />
-      ) : (
-        <StaggerContainer 
-          key={`${activeFilter}-${sortBy}`} 
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
-        >
-          {paginatedItems.map((item) => (
-            <ProductCard key={item.id} item={item} showVariants={true} />
-          ))}
-        </StaggerContainer>
-      )}
-
-      {/* Pagination Load More */}
-      {sortedItems.length > visibleCount && (
-        <div className="flex justify-center mt-16">
-          <button
-            onClick={() => setVisibleCount(prev => prev + 6)}
-            className="btn-primary"
+      <div className={`transition-opacity duration-300 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
+        {items.length === 0 ? (
+          <EmptyState title={activeSearch ? "No products found matching your search." : "No products found in this category."} />
+        ) : (
+          <StaggerContainer 
+            key={`${activeFilter}-${sortBy}-${activeSearch}-${currentPage}`} 
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
           >
-            Load More
+            {items.map((item) => (
+              <ProductCard key={item.id} item={item} showVariants={true} />
+            ))}
+          </StaggerContainer>
+        )}
+      </div>
+
+      {/* Pagination Controls */}
+      {!(items.length === 0 && currentPage === 0) && (
+        <div className="flex justify-center mt-16 gap-4">
+          <button
+            onClick={handlePrevPage}
+            disabled={currentPage === 0 || isLoading}
+            className="px-6 py-3 text-sm font-semibold text-black bg-white border border-gray-200 rounded-lg transition-[background-color,transform] duration-200 ease-[var(--ease-out)] hover:bg-gray-50 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+          >
+            Previous Page
+          </button>
+          <button
+            onClick={handleNextPage}
+            disabled={!hasNext || isLoading}
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next Page
           </button>
         </div>
       )}

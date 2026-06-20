@@ -22,7 +22,7 @@ export function ProductCard({ item, showVariants = false }: ProductCardProps) {
                 src={item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`} 
                 alt={item.name}
                 className="w-full h-full object-cover"
-                containerClassName="w-full h-full transition-transform duration-700 ease-[var(--ease-out)] group-hover:scale-[1.04]"
+                containerClassName="w-full h-full transition-transform duration-[250ms] ease-[var(--ease-out)] group-hover:scale-[1.04]"
               />
             ) : (
               <span>No image</span>
