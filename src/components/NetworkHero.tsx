@@ -17,7 +17,7 @@ const UnicornScene = dynamic(
 
 export default function NetworkHero() {
   return (
-    <section className="relative w-full h-[85vh] min-h-[600px] overflow-hidden bg-white -mt-20 flex flex-col justify-center items-center">
+    <section className="relative w-full h-screen min-h-[600px] overflow-hidden bg-white -mt-20 flex flex-col justify-center items-center">
       {/* Unicorn Studio Background */}
       <motion.div
         className="absolute inset-0 z-0"
@@ -81,7 +81,8 @@ export default function NetworkHero() {
         >
           <Link
             href="/portfolio"
-            className="btn-primary shadow-sm"
+            className="btn-primary"
+            style={{ backgroundColor: 'transparent', borderColor: 'white' }}
           >
             View Portfolio
           </Link>
