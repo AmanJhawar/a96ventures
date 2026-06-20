@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import UnicornHero from '@/components/UnicornHero'
-import NewsletterForm from '@/components/newsletter-form'
 import { getBrands, getPortfolioCompanies } from '@/lib/firebase/db'
 
 export const metadata: Metadata = {
@@ -27,18 +26,7 @@ export default async function Home() {
     <>
       <UnicornHero />
 
-      {/* Newsletter Section */}
-      <section className="py-20 md:py-32 bg-[#f5f5f7]">
-        <div className="max-w-8xl mx-auto px-6">
-          <div className="max-w-[800px] mx-auto text-center">
-            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-4 block">STAY INFORMED</span>
-            <h2 className="text-3xl md:text-4xl font-semibold leading-tight tracking-tight text-black mb-12">
-              New collections, launches, and updates, direct to your inbox.
-            </h2>
-            <NewsletterForm />
-          </div>
-        </div>
-      </section>
+
 
       {/* Stats Section */}
       <section className="py-20 md:py-32 bg-white">

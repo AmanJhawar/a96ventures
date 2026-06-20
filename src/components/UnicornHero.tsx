@@ -37,7 +37,7 @@ export default function NetworkHero() {
           inset: 0 !important;
         }
       `}} />
-        {/* @ts-ignore - unicornstudio-react lacks proper TypeScript definitions */}
+        {/* @ts-expect-error - unicornstudio-react lacks proper TypeScript definitions */}
         <UnicornScene
           projectId="Pvsa8dKMzsvq5SodEcxA"
           width="100%"
