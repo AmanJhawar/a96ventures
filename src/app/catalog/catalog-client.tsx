@@ -242,22 +242,26 @@ export function CatalogClient({ initialItems, initialCategories, initialNextCurs
       </div>
 
       {/* Pagination Controls */}
-      {!(items.length === 0 && currentPage === 0) && (
+      {(currentPage > 0 || hasNext) && !(items.length === 0 && currentPage === 0) && (
         <div className="flex justify-center mt-16 gap-4">
-          <button
-            onClick={handlePrevPage}
-            disabled={currentPage === 0 || isLoading}
-            className="px-6 py-3 text-sm font-semibold text-black bg-white border border-gray-200 rounded-lg transition-[background-color,transform] duration-200 ease-[var(--ease-out)] hover:bg-gray-50 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
-          >
-            Previous Page
-          </button>
-          <button
-            onClick={handleNextPage}
-            disabled={!hasNext || isLoading}
-            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next Page
-          </button>
+          {currentPage > 0 && (
+            <button
+              onClick={handlePrevPage}
+              disabled={isLoading}
+              className="px-6 py-3 text-sm font-semibold text-black bg-white border border-gray-200 rounded-lg transition-[background-color,transform] duration-200 ease-[var(--ease-out)] hover:bg-gray-50 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+            >
+              Previous Page
+            </button>
+          )}
+          {hasNext && (
+            <button
+              onClick={handleNextPage}
+              disabled={isLoading}
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next Page
+            </button>
+          )}
         </div>
       )}
     </div>

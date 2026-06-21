@@ -110,9 +110,9 @@ export function ConfirmModal({
           {/* Modal Container */}
           <motion.div 
             ref={modalRef}
-            initial={{ opacity: 0, scale: 0.95, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 8 }}
+            initial={{ opacity: 0, transform: "scale(0.95) translateY(8px)" }}
+            animate={{ opacity: 1, transform: "scale(1) translateY(0px)" }}
+            exit={{ opacity: 0, transform: "scale(0.95) translateY(8px)" }}
             transition={{ duration: 0.2, ease: EASE_OUT }}
             className="relative bg-white rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.06)] w-full max-w-md overflow-hidden z-10"
           >

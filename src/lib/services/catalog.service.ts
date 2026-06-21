@@ -1,5 +1,7 @@
 import { app } from '@/lib/firebase/config'
-import { getFirestore, collection, doc, getDoc, getDocs, query, orderBy, limit, startAfter, where, QueryConstraint, setDoc, deleteDoc } from 'firebase/firestore/lite'
+import { auth } from '@/lib/firebase/auth'
+import { getFirestore, collection, doc, getDoc, getDocs, query, orderBy, limit, startAfter, where, QueryConstraint, setDoc, deleteDoc, updateDoc } from 'firebase/firestore/lite'
+import { buildSearchTerms } from '@/lib/domain/inventory'
 import { CatalogItem, DEFAULT_CATEGORIES } from '@/lib/types'
 import { withTimeout } from './utils'
 
@@ -24,7 +26,8 @@ export async function getCatalogPage(
   }
 
   if (filters.searchQuery) {
-    constraints.push(where('searchTerms', 'array-contains', filters.searchQuery.toLowerCase().trim()));
+    const normalizedQuery = filters.searchQuery.toLowerCase().replace(/\s+/g, ' ').trim();
+    constraints.push(where('searchTerms', 'array-contains', normalizedQuery));
   }
 
   // Sort logic
@@ -72,16 +75,21 @@ export async function getCatalogItems(): Promise<CatalogItem[]> {
   return items;
 }
 
-export async function getMoreCatalogItems(excludeId: string, maxItems: number = 4): Promise<CatalogItem[]> {
-  const q = query(collection(db, CATALOG_COLLECTION), limit(maxItems + 1));
+export async function getMoreCatalogItems(excludeId: string, category: string, maxItems: number = 4): Promise<CatalogItem[]> {
+  const q = query(
+    collection(db, CATALOG_COLLECTION),
+    where('category', '==', category),
+    limit(20)
+  );
   const querySnapshot = await withTimeout(getDocs(q));
-  const items: CatalogItem[] = [];
+  let items: CatalogItem[] = [];
   querySnapshot.forEach((docSnap) => {
-    if (docSnap.id !== excludeId && items.length < maxItems) {
+    if (docSnap.id !== excludeId) {
       items.push({ ...docSnap.data(), id: docSnap.id } as CatalogItem);
     }
   });
-  return items;
+  
+  return items.sort(() => 0.5 - Math.random()).slice(0, maxItems);
 }
 
 export async function getStoreCategories(): Promise<string[]> {
@@ -108,14 +116,54 @@ export async function setStoreCategories(categories: string[]): Promise<void> {
 
 export async function saveInventoryItem(id: string, payload: Partial<CatalogItem>): Promise<void> {
   await setDoc(doc(db, CATALOG_COLLECTION, id), payload);
-  // Trigger dynamic path revalidation in background
-  fetch(`/api/revalidate?path=${encodeURIComponent('/catalog')}`).catch(err => console.error(err));
-  fetch(`/api/revalidate?path=${encodeURIComponent(`/catalog/${id}`)}`).catch(err => console.error(err));
+  
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) {
+    console.error("No auth token available for revalidation.");
+    return;
+  }
+
+  const res1 = await fetch(`/api/revalidate?path=${encodeURIComponent('/catalog')}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res1.ok) throw new Error("Failed to revalidate /catalog cache.");
+
+  const res2 = await fetch(`/api/revalidate?path=${encodeURIComponent(`/catalog/${id}`)}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res2.ok) throw new Error(`Failed to revalidate item cache.`);
 }
 
 export async function deleteInventoryItem(id: string): Promise<void> {
   await deleteDoc(doc(db, CATALOG_COLLECTION, id));
-  // Trigger dynamic path revalidation in background
-  fetch(`/api/revalidate?path=${encodeURIComponent('/catalog')}`).catch(err => console.error(err));
-  fetch(`/api/revalidate?path=${encodeURIComponent(`/catalog/${id}`)}`).catch(err => console.error(err));
+  
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) {
+    console.error("No auth token available for revalidation.");
+    return;
+  }
+
+  const res1 = await fetch(`/api/revalidate?path=${encodeURIComponent('/catalog')}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res1.ok) throw new Error("Failed to revalidate /catalog cache.");
+
+  const res2 = await fetch(`/api/revalidate?path=${encodeURIComponent(`/catalog/${id}`)}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res2.ok) throw new Error(`Failed to revalidate item cache.`);
+}
+
+export async function backfillSearchTermsForAllItems(): Promise<number> {
+  const querySnapshot = await getDocs(collection(db, CATALOG_COLLECTION));
+  const promises: Promise<void>[] = [];
+  
+  querySnapshot.forEach((docSnap) => {
+    const data = docSnap.data() as Partial<CatalogItem>;
+    const searchTerms = buildSearchTerms(data);
+    promises.push(updateDoc(doc(db, CATALOG_COLLECTION, docSnap.id), { searchTerms }));
+  });
+  
+  await Promise.all(promises);
+  return promises.length;
 }

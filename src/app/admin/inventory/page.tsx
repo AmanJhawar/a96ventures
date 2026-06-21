@@ -1,11 +1,12 @@
 "use client"
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import Image from 'next/image'
-import { Trash2, Plus, Box, Edit2, X, ChevronDown } from 'lucide-react'
+import { Trash2, Plus, Box, Edit2, X, ChevronDown, RefreshCw } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { useInventoryForm } from '@/hooks/use-inventory-form'
+import { backfillSearchTermsForAllItems } from '@/lib/services/catalog.service'
 import { 
   hasStonesCategory, 
   isNoPurityCategory, 
@@ -24,6 +25,7 @@ const STANDARD_WEIGHTS = ['10g', '20g', '50g', '100g']
 
 export default function AdminInventory() {
   const { state, actions } = useInventoryForm()
+  const [isBackfilling, setIsBackfilling] = useState(false)
 
   const {
     items, categories, loading, isFormOpen, editingId, deleteId,
@@ -98,7 +100,28 @@ export default function AdminInventory() {
             </h1>
             <p className="text-gray-500">Manage inventory products, sizes and purity variants.</p>
           </div>
-          <div className="flex items-center gap-4 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
+            <button
+              onClick={async () => {
+                if (confirm("This will regenerate search terms for all products. Continue?")) {
+                  setIsBackfilling(true)
+                  try {
+                    const count = await backfillSearchTermsForAllItems()
+                    alert(`Successfully regenerated search terms for ${count} products.`)
+                  } catch (err) {
+                    console.error(err)
+                    alert("Failed to backfill search terms.")
+                  } finally {
+                    setIsBackfilling(false)
+                  }
+                }
+              }}
+              disabled={isBackfilling}
+              className="admin-btn-outline flex items-center gap-2 whitespace-nowrap disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={isBackfilling ? "animate-spin" : ""} />
+              {isBackfilling ? 'Backfilling...' : 'Backfill Search'}
+            </button>
             <button
               onClick={() => setIsFormOpen(true)}
               className="admin-btn-primary flex items-center gap-2 whitespace-nowrap"

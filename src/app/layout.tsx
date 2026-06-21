@@ -4,13 +4,13 @@ import './globals.css'
 import Header from '@/components/header'
 import Footer from '@/components/footer'
 
-import localFont from 'next/font/local'
+import { Inter } from 'next/font/google'
 
-const inter = localFont({
-  src: '../../public/fonts/inter.woff2',
+const inter = Inter({
+  subsets: ['latin'],
   display: 'swap',
   variable: '--font-inter',
-  weight: '100 900',
+  fallback: ['system-ui', 'arial', 'sans-serif'],
 })
 
 import { CartProvider } from '@/components/cart-provider'

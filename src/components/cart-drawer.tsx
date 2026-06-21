@@ -97,9 +97,9 @@ export function CartDrawer() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="inquiry-drawer-title"
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
+            initial={{ transform: "translateX(100%)" }}
+            animate={{ transform: "translateX(0%)" }}
+            exit={{ transform: "translateX(100%)" }}
             transition={{ duration: 0.35, ease: [0.32, 0.72, 0, 1] }}
             className="fixed top-0 right-0 h-full w-[400px] max-w-[100vw] bg-white z-[70] shadow-2xl flex flex-col"
           >

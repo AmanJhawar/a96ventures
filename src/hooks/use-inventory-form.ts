@@ -4,6 +4,7 @@ import {
   InventoryItem, 
   buildVariantCombos, 
   hasStonesCategory,
+  buildSearchTerms
 } from '@/lib/domain/inventory'
 import { VariantDetail } from '@/lib/types'
 
@@ -258,6 +259,8 @@ export function useInventoryForm() {
         }
         payload.variantImages = cleanedImages
       }
+
+      payload.searchTerms = buildSearchTerms(payload)
 
       await saveInventoryItem(docId, payload)
 

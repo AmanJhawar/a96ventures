@@ -59,13 +59,23 @@
   .btn-primary {
     @apply inline-flex items-center justify-center bg-black text-white hover:bg-gray-800 active:scale-[0.97] border border-black rounded-lg font-semibold uppercase tracking-[0.1em] text-[13px];
     padding: 0.75rem 1.5rem; /* using explicit padding to perfectly match 42px height */
-    transition: background-color 160ms var(--ease-out), transform 160ms var(--ease-out);
+    transition: background-color 160ms var(--ease-out), transform 160ms var(--ease-out), filter 160ms var(--ease-out), opacity 160ms var(--ease-out);
+  }
+
+  .btn-primary:active {
+    filter: blur(1px);
+    opacity: 0.8;
   }
 
   .btn-secondary {
     @apply inline-flex items-center justify-center bg-white text-gray-600 hover:bg-gray-50 hover:text-black hover:border-black active:scale-[0.97] border border-gray-300 rounded-lg font-semibold uppercase tracking-[0.1em] text-[13px];
     padding: 0.75rem 1.5rem;
-    transition: border-color 160ms var(--ease-out), background-color 160ms var(--ease-out), transform 160ms var(--ease-out);
+    transition: border-color 160ms var(--ease-out), background-color 160ms var(--ease-out), transform 160ms var(--ease-out), filter 160ms var(--ease-out), opacity 160ms var(--ease-out);
+  }
+
+  .btn-secondary:active {
+    filter: blur(1px);
+    opacity: 0.8;
   }
 }
 
@@ -151,7 +161,7 @@
   text-transform: uppercase;
   color: var(--color-gray-700);
   cursor: pointer;
-  transition: border-color 160ms var(--ease-out), background-color 160ms var(--ease-out), transform 160ms var(--ease-out);
+  transition: border-color 160ms var(--ease-out), background-color 160ms var(--ease-out), transform 160ms var(--ease-out), filter 160ms var(--ease-out), opacity 160ms var(--ease-out);
 }
 
 .admin-btn-outline:hover {
@@ -161,6 +171,8 @@
 
 .admin-btn-outline:active {
   transform: scale(0.97);
+  filter: blur(1px);
+  opacity: 0.8;
 }
 
 /* ── Primary Button (Save/Add) ── */
@@ -175,7 +187,7 @@
   text-transform: uppercase;
   color: #fff;
   cursor: pointer;
-  transition: background-color 160ms var(--ease-out), transform 160ms var(--ease-out);
+  transition: background-color 160ms var(--ease-out), transform 160ms var(--ease-out), filter 160ms var(--ease-out), opacity 160ms var(--ease-out);
 }
 
 .admin-btn-primary:hover {
@@ -184,6 +196,8 @@
 
 .admin-btn-primary:active {
   transform: scale(0.97);
+  filter: blur(1px);
+  opacity: 0.8;
 }
 
 /* ── Pill / Tag Buttons (for sizes & purities) ── */

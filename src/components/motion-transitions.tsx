@@ -57,11 +57,11 @@ export function FadeInUp({
   const variants = {
     hidden: { 
       opacity: 0, 
-      y: yOffset 
+      transform: `translateY(${yOffset}px)`
     },
     visible: { 
       opacity: 1, 
-      y: 0,
+      transform: 'translateY(0px)',
       transition: { 
         duration, 
         ease: EASE_OUT 

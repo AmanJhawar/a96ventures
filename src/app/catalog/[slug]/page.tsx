@@ -61,7 +61,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     notFound()
   }
 
-  const moreProducts = await getMoreCatalogItems(slug, 4)
+  const moreProducts = await getMoreCatalogItems(slug, item.category, 4)
   
   const jsonLd = {
     '@context': 'https://schema.org',
