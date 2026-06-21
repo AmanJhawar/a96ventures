@@ -6,6 +6,7 @@ import { ProductCard } from '@/components/product-card'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { StaggerContainer, FadeInUp } from '@/components/motion-transitions'
+import { getOptimizedUrl } from '@/lib/utils'
 
 export async function generateStaticParams() {
   try {
@@ -32,8 +33,8 @@ export async function generateMetadata(
   }
 
   const imageUrl = item.imageFile
-    ? (item.imageFile.startsWith('http') ? item.imageFile : `https://a96ventures.com/assets/${item.imageFile}`)
-    : undefined
+    ? getOptimizedUrl(item.imageFile, 1200)
+    : 'https://a96ventures.com/assets/og-default.jpg'
 
   return {
     title: `${item.name} | A96 Ventures`,
@@ -70,7 +71,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     description: item.description,
     category: item.category,
     ...(item.imageFile && {
-      image: item.imageFile.startsWith('http') ? item.imageFile : `https://a96ventures.com/assets/${item.imageFile}`
+      image: getOptimizedUrl(item.imageFile, 1200)
     })
   }
 

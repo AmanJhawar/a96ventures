@@ -4,6 +4,8 @@ import { useRef, useEffect, useState } from 'react'
 import Image from 'next/image'
 import { Trash2, Plus, Box, Edit2, X, ChevronDown, RefreshCw } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
+import { Switch } from '@/components/ui/switch'
+import { getOptimizedUrl } from '@/lib/utils'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { useInventoryForm } from '@/hooks/use-inventory-form'
 import { backfillSearchTermsForAllItems } from '@/lib/services/catalog.service'
@@ -592,7 +594,7 @@ export default function AdminInventory() {
                       <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                         <td className="px-6 py-4">
                           {item.imageFile ? (
-                            <Image unoptimized width={48} height={64} src={item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`} alt="Product" className="w-12 h-auto aspect-[3/4] object-cover rounded-lg bg-[#f5f5f7]" />
+                            <Image unoptimized width={48} height={64} src={getOptimizedUrl(item.imageFile, 400)} alt="Product" className="w-12 h-auto aspect-[3/4] object-cover rounded-lg bg-[#f5f5f7]" />
                           ) : (
                             <div className="w-12 h-auto aspect-[3/4] bg-[#f5f5f7] rounded-lg flex items-center justify-center">
                               <Box size={20} className="text-gray-400" />

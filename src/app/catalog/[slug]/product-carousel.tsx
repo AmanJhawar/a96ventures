@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ProtectedImage } from '@/components/protected-image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { getOptimizedUrl } from '@/lib/utils'
 
 interface ProductCarouselProps {
   images: string[]
@@ -70,7 +71,7 @@ export function ProductCarousel({ images, productName }: ProductCarouselProps) {
           {safeImages.map((img, idx) => (
             <div key={idx} className="w-full h-full flex-shrink-0 relative overflow-hidden">
               <ProtectedImage
-                src={img.startsWith('http') ? img : `/assets/${img}`}
+                src={getOptimizedUrl(img, 1600)}
                 alt={`${productName} - View ${idx + 1}`}
                 className="w-full h-full object-cover"
                 containerClassName="w-full h-full flex items-center justify-center absolute inset-0"

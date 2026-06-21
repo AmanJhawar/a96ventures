@@ -7,6 +7,7 @@ import { ProtectedImage } from './protected-image'
 import { EmptyState } from '@/components/empty-state'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
+import { getOptimizedUrl } from '@/lib/utils'
 import { EASE_OUT } from './motion-transitions'
 
 export function CartDrawer() {
@@ -132,7 +133,7 @@ export function CartDrawer() {
                   <div key={item.cartId} className="flex gap-4 items-start">
                     <div className="w-16 aspect-[3/4] bg-[#f5f5f7] rounded-xl relative overflow-hidden flex-shrink-0 border border-gray-100">
                       <ProtectedImage
-                        src={item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`}
+                        src={getOptimizedUrl(item.imageFile, 400)}
                         alt={item.productName}
                         className="w-full h-full object-cover"
                         containerClassName="absolute inset-0"

@@ -6,6 +6,7 @@ import { collection, addDoc, setDoc, deleteDoc, doc, getDocs, getFirestore } fro
 import { app } from '@/lib/firebase/config'
 const db = getFirestore(app)
 import { TeamMember } from '@/lib/types'
+import { getOptimizedUrl } from '@/lib/utils'
 import { Trash2, Plus, Users, Edit2 } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 import { ConfirmModal } from '@/components/confirm-modal'
@@ -261,7 +262,7 @@ export default function AdminTeam() {
                     </td>
                     <td className="px-6 py-4">
                       {member.imageFile ? (
-                        <Image width={40} height={40} unoptimized src={member.imageFile.startsWith('http') ? member.imageFile : `/assets/${member.imageFile}`} alt={member.name} className="w-10 h-10 object-cover rounded-full bg-gray-100" />
+                        <Image width={40} height={40} unoptimized src={getOptimizedUrl(member.imageFile, 400)} alt={member.name} className="w-10 h-10 object-cover rounded-full bg-gray-100" />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
                           <Users size={16} />

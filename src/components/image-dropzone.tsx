@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { X, UploadCloud, Loader2, ImageIcon } from 'lucide-react'
+import { auth } from '@/lib/firebase/config'
 
 interface ImageDropzoneProps {
   value: string;
@@ -19,21 +20,32 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
     setIsUploading(true)
     try {
       // 1. Get Signature
+      const user = auth.currentUser
+      if (!user) throw new Error('Not authenticated')
+      const token = await user.getIdToken()
+
       const timestamp = Math.round((new Date()).getTime() / 1000)
       const sigRes = await fetch('/api/sign-cloudinary-params', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ paramsToSign: { timestamp } })
       })
       
       if (!sigRes.ok) throw new Error('Failed to get signature')
-      const { signature } = await sigRes.json()
+      const { signature, enforcedParams } = await sigRes.json()
 
       // 2. Upload to Cloudinary
       const formData = new FormData()
       formData.append('file', file)
       formData.append('api_key', process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY || '')
-      formData.append('timestamp', timestamp.toString())
+      
+      // Append all server-enforced parameters that were included in the signature
+      Object.keys(enforcedParams).forEach(key => {
+        formData.append(key, enforcedParams[key])
+      })
       formData.append('signature', signature)
 
       const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'di2w0v5ah'

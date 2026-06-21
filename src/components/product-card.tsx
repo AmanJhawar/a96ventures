@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ProtectedImage } from '@/components/protected-image'
 import { FadeInUp } from '@/components/motion-transitions'
+import { getOptimizedUrl } from '@/lib/utils'
 import type { CatalogItem } from '@/lib/types'
 
 interface ProductCardProps {
@@ -19,7 +20,7 @@ export function ProductCard({ item, showVariants = false }: ProductCardProps) {
           <div className="w-full h-full relative flex items-center justify-center text-gray-400 text-sm">
             {item.imageFile ? (
               <ProtectedImage 
-                src={item.imageFile.startsWith('http') ? item.imageFile : `/assets/${item.imageFile}`} 
+                src={getOptimizedUrl(item.imageFile, 800)} 
                 alt={item.name}
                 className="w-full h-full object-cover"
                 containerClassName="w-full h-full transition-transform duration-[250ms] ease-[var(--ease-out)] group-hover:scale-[1.04] will-change-transform"
