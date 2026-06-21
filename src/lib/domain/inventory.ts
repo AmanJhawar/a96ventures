@@ -99,7 +99,8 @@ export const buildSearchTerms = (item: Partial<InventoryItem>): string[] => {
     const generateForWordList = (wordList: string[], separator: string) => {
       for (let i = 0; i < wordList.length; i++) {
         const remainingString = wordList.slice(i).join(separator)
-        for (let len = 2; len <= remainingString.length; len++) {
+        const maxLen = Math.min(remainingString.length, 30) // Cap prefix length to 30
+        for (let len = 2; len <= maxLen; len++) {
           terms.add(remainingString.substring(0, len))
         }
       }
@@ -131,5 +132,5 @@ export const buildSearchTerms = (item: Partial<InventoryItem>): string[] => {
     Object.keys(item.variantSkus).forEach(sku => addPrefixes(sku))
   }
 
-  return Array.from(terms)
+  return Array.from(terms).slice(0, 500)
 }

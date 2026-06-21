@@ -76,5 +76,11 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "catalog",
+      "fieldPath": "searchTerms",
+      "indexes": []
+    }
+  ]
 }
