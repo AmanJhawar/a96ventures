@@ -51,3 +51,11 @@ export function getOptimizedUrl(url?: string, width = 1600): string {
   // Return the URL as-is if absolute, otherwise prefix with /assets/
   return trimmed.startsWith('http') ? trimmed : `/assets/${trimmed}`
 }
+
+import { type ClassValue, clsx } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+

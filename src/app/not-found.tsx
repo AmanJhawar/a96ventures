@@ -20,8 +20,8 @@ export default function NotFound() {
       <FadeInUp 
         className="btn-primary inline-flex"
       >
-        <Link href="/catalog">
-          Return to Catalog
+        <Link href="/">
+          Return Home
         </Link>
       </FadeInUp>
     </StaggerContainer>

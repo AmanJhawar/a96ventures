@@ -1,0 +1,7 @@
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+core/test_*.py
+backend/app/db/test_*.py
+.git
+*.md

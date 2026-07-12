@@ -4,8 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { ShoppingBag } from 'lucide-react'
-import { useCart } from './cart-provider'
 
 function NavLink({ href, children, isActive, isSolid, onClick }: { href: string; children: React.ReactNode; isActive: boolean; isSolid: boolean; onClick: () => void }) {
   const [isHovered, setIsHovered] = useState(false)
@@ -39,12 +37,8 @@ export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const pathname = usePathname()
-  const { cartItems, setIsCartOpen, isInitialized } = useCart()
-
   const isHome = pathname === '/'
   const isSolid = !isHome || isScrolled
-
-  const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen)
   const closeMenu = () => setIsMenuOpen(false)
@@ -136,7 +130,6 @@ export default function Header() {
           <nav className="hidden md:flex absolute left-0 gap-10 items-center">
             <NavLink href="/portfolio" isActive={pathname === '/portfolio'} isSolid={isSolid} onClick={closeMenu}>PORTFOLIO</NavLink>
             <NavLink href="/brands" isActive={pathname === '/brands'} isSolid={isSolid} onClick={closeMenu}>BRANDS</NavLink>
-            <NavLink href="/catalog" isActive={pathname.startsWith('/catalog')} isSolid={isSolid} onClick={closeMenu}>CATALOG</NavLink>
             <NavLink href="/team" isActive={pathname === '/team'} isSolid={isSolid} onClick={closeMenu}>TEAM</NavLink>
           </nav>
  
@@ -158,42 +151,10 @@ export default function Header() {
           <nav className="hidden md:flex absolute right-0 gap-10 items-center">
             <NavLink href="/about" isActive={pathname === '/about'} isSolid={isSolid} onClick={closeMenu}>ABOUT</NavLink>
             <NavLink href="/contact" isActive={pathname === '/contact'} isSolid={isSolid} onClick={closeMenu}>CONTACT</NavLink>
-            <div style={{ display: pathname.startsWith('/catalog') ? 'block' : 'none' }} className="w-10 h-10 ml-2 flex items-center justify-center">
-              {(pathname.startsWith('/catalog') || (isInitialized && totalItems > 0)) && (
-                <button 
-                  onClick={() => setIsCartOpen(true)}
-                  className={`relative p-2 rounded-full transition-[color,background-color] duration-200 ease-[var(--ease-out)] active:scale-[0.97] ${!isSolid ? 'text-white hover:bg-white/10' : 'text-black hover:bg-gray-100'}`}
-                  aria-label="Open inquiry"
-                >
-                  <ShoppingBag size={20} strokeWidth={1.5} />
-                  {isInitialized && totalItems > 0 && (
-                    <span className="absolute top-1 right-1 bg-black text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full transform translate-x-1 -translate-y-1">
-                      {totalItems}
-                    </span>
-                  )}
-                </button>
-              )}
-            </div>
           </nav>
  
-          {/* Mobile Menu & Cart Container */}
+          {/* Mobile Menu Container */}
           <div ref={mobileControlsRef} className="md:hidden absolute right-0 flex items-center gap-2 h-full">
-            <div className="w-10 h-10 flex items-center justify-center">
-              {(pathname.startsWith('/catalog') || (isInitialized && totalItems > 0)) && (
-                <button 
-                  className={`p-2 relative flex items-center justify-center rounded-full transition-[color,background-color] duration-200 ease-[var(--ease-out)] active:scale-[0.97] ${!isSolid ? 'text-white hover:bg-white/10' : 'text-black hover:bg-gray-100'}`}
-                  onClick={() => setIsCartOpen(true)}
-                  aria-label="Open inquiry"
-                >
-                  <ShoppingBag size={20} strokeWidth={1.5} />
-                  {isInitialized && totalItems > 0 && (
-                    <span className="absolute top-1 right-1 bg-black text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
-                      {totalItems}
-                    </span>
-                  )}
-                </button>
-              )}
-            </div>
             <button 
               className="p-2 bg-transparent border-none cursor-pointer flex items-center justify-center"
               onClick={toggleMenu}
@@ -227,7 +188,6 @@ export default function Header() {
         >
           <NavLink href="/portfolio" isActive={pathname === '/portfolio'} isSolid={true} onClick={closeMenu}>PORTFOLIO</NavLink>
           <NavLink href="/brands" isActive={pathname === '/brands'} isSolid={true} onClick={closeMenu}>BRANDS</NavLink>
-          <NavLink href="/catalog" isActive={pathname.startsWith('/catalog')} isSolid={true} onClick={closeMenu}>CATALOG</NavLink>
           <NavLink href="/team" isActive={pathname === '/team'} isSolid={true} onClick={closeMenu}>TEAM</NavLink>
           <NavLink href="/about" isActive={pathname === '/about'} isSolid={true} onClick={closeMenu}>ABOUT</NavLink>
           <NavLink href="/contact" isActive={pathname === '/contact'} isSolid={true} onClick={closeMenu}>CONTACT</NavLink>

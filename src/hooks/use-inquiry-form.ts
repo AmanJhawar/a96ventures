@@ -1,10 +1,8 @@
-import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { useForm, useWatch } from 'react-hook-form'
+import { useState } from 'react'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { submitInquiry } from '@/lib/services/inquiry.service'
-import { useCart } from '@/components/cart-provider'
 
 export const contactSchema = z.object({
   inquiryType: z.string().min(1, 'Please select an inquiry type'),
@@ -30,17 +28,13 @@ export const contactSchema = z.object({
 export type ContactValues = z.infer<typeof contactSchema>
 
 export function useInquiryForm() {
-  const searchParams = useSearchParams()
-  const { cartItems, clearCart } = useCart()
-  const fromCart = searchParams.get('fromCart') === 'true'
-
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
 
   const form = useForm<ContactValues>({
     resolver: zodResolver(contactSchema),
     defaultValues: {
-      inquiryType: fromCart ? 'product' : 'general',
+      inquiryType: 'general',
       firstName: '',
       middleName: '',
       lastName: '',
@@ -53,36 +47,7 @@ export function useInquiryForm() {
     }
   })
 
-  const { control, setValue, reset } = form
-  const currentMessage = useWatch({ control, name: 'message' })
-
-  // Pre-fill from Cart
-  useEffect(() => {
-    if (fromCart && cartItems.length > 0 && !currentMessage) {
-      const intro = "I would like to inquire about the following items:\n\n"
-      const itemsList = cartItems.map(item => {
-        let text = `- [${item.sku}] ${item.quantity}x ${item.productName}`
-        const opts = []
-        if (item.selectedSize) opts.push(`Size: ${item.selectedSize}`)
-        if (item.selectedPurity) opts.push(`Purity: ${item.selectedPurity}%`)
-        if (item.selectedStone) opts.push(`Stone: ${item.selectedStone}`)
-        if (item.selectedWeight) {
-          opts.push(`Weight: ${item.selectedWeight}`)
-        } else if (item.weight) {
-          const formattedWeight = item.weight.toLowerCase().endsWith('g') || item.weight.toLowerCase().endsWith('kg')
-            ? item.weight
-            : `${item.weight}g`
-          opts.push(`Approx Weight: ${formattedWeight}`)
-        }
-        if (opts.length > 0) {
-          text += ` (${opts.join(', ')})`
-        }
-        return text
-      }).join('\n')
-      
-      setValue('message', intro + itemsList + "\n\nAdditional comments:\n", { shouldValidate: true })
-    }
-  }, [fromCart, cartItems, currentMessage, setValue])
+  const { reset } = form
 
   const onSubmit = async (data: ContactValues) => {
     setError('')
@@ -99,9 +64,6 @@ export function useInquiryForm() {
         message: data.message,
         inquiryType: data.inquiryType
       })
-      if (fromCart) {
-        clearCart()
-      }
       setSuccess(true)
       reset()
       setTimeout(() => setSuccess(false), 5000)

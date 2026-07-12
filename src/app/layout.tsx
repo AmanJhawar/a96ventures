@@ -13,8 +13,6 @@ const inter = Inter({
   fallback: ['system-ui', 'arial', 'sans-serif'],
 })
 
-import { CartProvider } from '@/components/cart-provider'
-import { CartDrawer } from '@/components/cart-drawer'
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://a96ventures.com'),
@@ -44,14 +42,11 @@ export default function RootLayout({
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body className={`${inter.className} min-h-screen flex flex-col text-black bg-white antialiased`}>
-        <CartProvider>
-          <Header />
-          <CartDrawer />
-          <main className="flex-1 pt-20">
-            {children}
-          </main>
-          <Footer />
-        </CartProvider>
+        <Header />
+        <main className="flex-1 pt-20">
+          {children}
+        </main>
+        <Footer />
       </body>
     </html>
   )

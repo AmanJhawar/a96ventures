@@ -1,0 +1,37 @@
+[
+  {
+    "symbol": "SOLIDCO",
+    "name": "Solid Corp Ltd",
+    "sector": "IT",
+    "is_financial": false,
+    "shares_outstanding": 1000000000
+  },
+  {
+    "symbol": "HOTCO",
+    "name": "Hot Industries Ltd",
+    "sector": "IT",
+    "is_financial": false,
+    "shares_outstanding": 1000000000
+  },
+  {
+    "symbol": "TINYCO",
+    "name": "Tiny Ventures Ltd",
+    "sector": "IT",
+    "is_financial": false,
+    "shares_outstanding": 5000000
+  },
+  {
+    "symbol": "BANKCO",
+    "name": "Bank Corp Ltd",
+    "sector": "Banking",
+    "is_financial": true,
+    "shares_outstanding": 2000000000
+  },
+  {
+    "symbol": "WEAKBANK",
+    "name": "Weak Bank Ltd",
+    "sector": "Banking",
+    "is_financial": true,
+    "shares_outstanding": 1500000000
+  }
+]

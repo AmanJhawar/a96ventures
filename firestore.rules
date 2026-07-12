@@ -32,10 +32,6 @@ service cloud.firestore {
     }
 
     // Publicly readable collections (Admin write only)
-    match /catalog/{document=**} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
     match /team/{document=**} {
       allow read: if true;
       allow write: if isAdmin();
@@ -62,6 +58,17 @@ service cloud.firestore {
       allow create: if isValidInquiry();
       allow read, update, delete: if isAdmin();
     }
+
+    // Screener Collections (Admin read/write only)
+    match /runs/{document=**} { allow read, write: if isAdmin(); }
+    match /scores/{document=**} { allow read, write: if isAdmin(); }
+    match /calls/{document=**} { allow read, write: if isAdmin(); }
+    match /metal_scores/{document=**} { allow read, write: if isAdmin(); }
+    match /metal_signals/{document=**} { allow read, write: if isAdmin(); }
+    match /screener_latest/{document=**} { allow read, write: if isAdmin(); }
+    match /prices/{document=**} { allow read, write: if isAdmin(); }
+    match /watchlist/{document=**} { allow read, write: if isAdmin(); }
+    match /symbols/{document=**} { allow read, write: if isAdmin(); }
 
     // Default deny for anything else
     match /{document=**} {

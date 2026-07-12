@@ -1,0 +1,203 @@
+{
+  "SOLIDCO": {
+    "current": {
+      "net_income": 120,
+      "total_assets": 1000,
+      "borrowings": 100,
+      "cash": 40,
+      "operating_profit": 180,
+      "revenue": 900,
+      "gross_margin": 42,
+      "current_ratio": 2.1,
+      "shares_outstanding": 1000000000,
+      "ocf": 150
+    },
+    "prior": {
+      "net_income": 90,
+      "total_assets": 1000,
+      "borrowings": 150,
+      "cash": 30,
+      "operating_profit": 150,
+      "revenue": 800,
+      "gross_margin": 38,
+      "current_ratio": 1.8,
+      "shares_outstanding": 1000000000,
+      "ocf": 110
+    },
+    "annual_periods": [
+      {
+        "end_date": "2021-03-31",
+        "operating_profit": 140,
+        "borrowings": 170,
+        "cash": 25
+      },
+      {
+        "end_date": "2022-03-31",
+        "operating_profit": 150,
+        "borrowings": 160,
+        "cash": 28
+      },
+      {
+        "end_date": "2023-03-31",
+        "operating_profit": 160,
+        "borrowings": 150,
+        "cash": 30
+      },
+      {
+        "end_date": "2024-03-31",
+        "operating_profit": 170,
+        "borrowings": 130,
+        "cash": 35
+      },
+      {
+        "end_date": "2025-03-31",
+        "operating_profit": 180,
+        "borrowings": 100,
+        "cash": 40
+      }
+    ],
+    "debt_to_equity": 0.15
+  },
+  "HOTCO": {
+    "current": {
+      "net_income": 30,
+      "total_assets": 1000,
+      "borrowings": 500,
+      "cash": 10,
+      "operating_profit": 60,
+      "revenue": 600,
+      "gross_margin": 25,
+      "current_ratio": 1.1,
+      "shares_outstanding": 1000000000,
+      "ocf": 20
+    },
+    "prior": {
+      "net_income": 40,
+      "total_assets": 900,
+      "borrowings": 450,
+      "cash": 15,
+      "operating_profit": 70,
+      "revenue": 650,
+      "gross_margin": 28,
+      "current_ratio": 1.3,
+      "shares_outstanding": 1000000000,
+      "ocf": 45
+    },
+    "annual_periods": [
+      {
+        "end_date": "2025-03-31",
+        "operating_profit": 60,
+        "borrowings": 500,
+        "cash": 10
+      }
+    ],
+    "debt_to_equity": 0.9
+  },
+  "TINYCO": {
+    "current": {
+      "net_income": 5,
+      "total_assets": 100,
+      "borrowings": 10,
+      "cash": 5,
+      "operating_profit": 8,
+      "revenue": 90,
+      "gross_margin": 20,
+      "current_ratio": 1.2,
+      "shares_outstanding": 5000000,
+      "ocf": 6
+    },
+    "prior": {
+      "net_income": 4,
+      "total_assets": 95,
+      "borrowings": 12,
+      "cash": 4,
+      "operating_profit": 7,
+      "revenue": 85,
+      "gross_margin": 19,
+      "current_ratio": 1.1,
+      "shares_outstanding": 5000000,
+      "ocf": 5
+    },
+    "annual_periods": [
+      {
+        "end_date": "2025-03-31",
+        "operating_profit": 8,
+        "borrowings": 10,
+        "cash": 5
+      }
+    ],
+    "debt_to_equity": 0.6
+  },
+  "BANKCO": {
+    "current": {
+      "gross_npa": 1.2,
+      "provision_coverage": 78,
+      "roa": 1.4,
+      "nim": 3.5,
+      "cost_to_income": 42,
+      "casa_ratio": 45,
+      "book_value": 320
+    },
+    "prior": {
+      "gross_npa": 1.8,
+      "provision_coverage": 72,
+      "roa": 1.1,
+      "nim": 3.2,
+      "cost_to_income": 48,
+      "casa_ratio": 40
+    },
+    "crar": 15.5,
+    "tier1": 12.8,
+    "book_periods": [
+      {
+        "end_date": "2021-03-31",
+        "book_value": 220
+      },
+      {
+        "end_date": "2022-03-31",
+        "book_value": 250
+      },
+      {
+        "end_date": "2023-03-31",
+        "book_value": 280
+      },
+      {
+        "end_date": "2024-03-31",
+        "book_value": 300
+      },
+      {
+        "end_date": "2025-03-31",
+        "book_value": 320
+      }
+    ],
+    "debt_to_equity": null
+  },
+  "WEAKBANK": {
+    "current": {
+      "gross_npa": 4.5,
+      "provision_coverage": 55,
+      "roa": 0.3,
+      "nim": 2.1,
+      "cost_to_income": 62,
+      "casa_ratio": 28,
+      "book_value": 180
+    },
+    "prior": {
+      "gross_npa": 3.8,
+      "provision_coverage": 60,
+      "roa": 0.5,
+      "nim": 2.4,
+      "cost_to_income": 58,
+      "casa_ratio": 32
+    },
+    "crar": 12.0,
+    "tier1": 10.0,
+    "book_periods": [
+      {
+        "end_date": "2025-03-31",
+        "book_value": 180
+      }
+    ],
+    "debt_to_equity": null
+  }
+}
