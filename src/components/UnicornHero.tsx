@@ -87,12 +87,7 @@ export default function NetworkHero() {
           >
             View Portfolio
           </Link>
-          <Link
-            href="/catalog"
-            className="btn-secondary shadow-sm"
-          >
-            Explore Catalog
-          </Link>
+
         </motion.div>
       </div>
     </section>

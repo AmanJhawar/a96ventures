@@ -69,6 +69,7 @@ service cloud.firestore {
     match /prices/{document=**} { allow read, write: if isAdmin(); }
     match /watchlist/{document=**} { allow read, write: if isAdmin(); }
     match /symbols/{document=**} { allow read, write: if isAdmin(); }
+    match /raw_prices/{document=**} { allow read, write: if isAdmin(); }
 
     // Default deny for anything else
     match /{document=**} {

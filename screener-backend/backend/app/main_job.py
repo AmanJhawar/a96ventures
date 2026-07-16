@@ -227,6 +227,8 @@ def main():
                         help="Write a skipped-run record (NSE holiday)")
     parser.add_argument("--live", action="store_true",
                         help="Run in live mode using live feeds and updating raw_prices")
+    parser.add_argument("--seed-symbols", action="store_true",
+                        help="Seed the symbols collection from fixtures and exit")
     args = parser.parse_args()
 
     # Select store based on environment
@@ -240,6 +242,13 @@ def main():
         print("[job] Using MemoryStore.")
 
     set_store(store)
+
+    if args.seed_symbols:
+        print("[job] Seeding symbols...")
+        symbols = load_fixture_symbols(args.fixtures_dir)
+        store.set_known_symbols(symbols)
+        print(f"[job] Seeded {len(symbols)} symbols successfully.")
+        return
 
     if args.skipped:
         store.write_run(args.date, {

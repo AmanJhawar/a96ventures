@@ -31,8 +31,8 @@ class FirestoreStore:
         return doc.to_dict() if doc.exists else None
 
     def get_runs_index(self) -> list[dict]:
-        # Return descending order of runs
-        docs = self.db.collection("runs").order_by("__name__", direction=firestore.Query.DESCENDING).get()
+        # Return descending order of runs by sorting in memory to avoid __name__ index override
+        docs = self.db.collection("runs").get()
         out = []
         for doc in docs:
             d = doc.to_dict()
@@ -40,6 +40,8 @@ class FirestoreStore:
                 "run_date": doc.id,
                 "status": d.get("status", "unknown")
             })
+        # Sort descending by run_date
+        out.sort(key=lambda x: x["run_date"], reverse=True)
         return out
 
     # ── scores ────────────────────────────────────────────────────────
@@ -148,13 +150,14 @@ class FirestoreStore:
             return doc.to_dict()
         return {"calls": [], "metals": None}
 
-    # ── latest metals snapshot ────────────────────────────────────────
     def get_latest_metals(self) -> dict:
-        docs = self.db.collection("metal_scores").order_by("__name__", direction=firestore.Query.DESCENDING).limit(1).get()
+        docs = list(self.db.collection("metal_scores").get())
         if not docs:
             return {"scores": [], "signals": [], "section": None}
         
-        latest_date = list(docs)[0].id
+        # Sort descending by id to get the latest
+        docs.sort(key=lambda d: d.id, reverse=True)
+        latest_date = docs[0].id
         run_record = self.get_run(latest_date) or {}
         return {
             "run_date": latest_date,
