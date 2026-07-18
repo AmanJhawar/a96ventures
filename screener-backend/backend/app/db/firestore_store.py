@@ -62,6 +62,8 @@ class FirestoreStore:
         # Use a transaction to enforce write-once for price_at_call
         @firestore.transactional
         def _write_calls_txn(transaction, records_batch):
+            if not records_batch:
+                return
             coll = self.db.collection("calls").document(run_date).collection("symbols")
             # First, read existing to find frozen prices
             reads = []
@@ -85,8 +87,8 @@ class FirestoreStore:
         return [doc.to_dict() for doc in docs]
 
     def get_call_history(self, symbol: str) -> list[dict]:
-        # Collection group query across all 'symbols' subcollections where document ID == symbol
-        docs = self.db.collection_group("symbols").where(firestore.FieldPath.document_id(), "==", symbol).get()
+        # Collection group query across all 'symbols' subcollections
+        docs = self.db.collection_group("symbols").where(filter=firestore.FieldFilter("symbol", "==", symbol)).get()
         # Filter down to only those that came from 'calls' (parent's parent is calls)
         out = []
         for doc in docs:
