@@ -274,6 +274,11 @@ class FirestoreStore:
         return results
 
     def _load_symbols_cache_if_needed(self):
-        if self._known_symbols_cache is None:
+        # Use None as sentinel for "never loaded".
+        # An empty dict means Firestore had no docs at load time — we refresh
+        # automatically on next request so a cold-start race doesn't poison cache.
+        if self._known_symbols_cache is None or len(self._known_symbols_cache) == 0:
             docs = self.db.collection("symbols").get()
-            self._known_symbols_cache = {doc.id: doc.to_dict() for doc in docs}
+            loaded = {doc.id: doc.to_dict() for doc in docs}
+            if loaded:  # only cache once we have real data
+                self._known_symbols_cache = loaded
