@@ -46,15 +46,22 @@ async function handleProxy(req: NextRequest, { params }: { params: Promise<{ pat
     // 3. Proxy Request to Cloud Run API
     const targetBaseUrl = process.env.SCREENER_API_URL || 'http://localhost:8000/api'
     const resolvedParams = await params
-    const targetUrl = `${targetBaseUrl.replace(/\/api$/, '')}/api/screener/${resolvedParams.path.join('/')}${req.nextUrl.search}`
-    
+    const subPath = resolvedParams.path.join('/')
+    const targetUrl = `${targetBaseUrl}/${subPath}${req.nextUrl.search}`
+
     // Forward the original authorization header so the Cloud Run API could verify if it wanted to
     const headers = new Headers()
     headers.set('Authorization', authHeader)
+
+    let body = undefined
+    if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+      body = await req.text()
+    }
     
     const response = await fetch(targetUrl, {
       method: req.method,
       headers,
+      body,
     })
 
     const data = await response.text()
