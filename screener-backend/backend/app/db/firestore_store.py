@@ -70,7 +70,7 @@ class FirestoreStore:
             for rec in records_batch:
                 reads.append((rec, coll.document(rec["symbol"])))
                 
-            existing_docs = transaction.get([ref for _, ref in reads])
+            existing_docs = transaction.get_all([ref for _, ref in reads])
             existing_map = {doc.id: doc.to_dict() for doc in existing_docs if doc.exists}
             
             for rec, ref in reads:
@@ -124,7 +124,7 @@ class FirestoreStore:
             for rec in records_batch:
                 reads.append((rec, coll.document(rec["metal"])))
                 
-            existing_docs = transaction.get([ref for _, ref in reads])
+            existing_docs = transaction.get_all([ref for _, ref in reads])
             existing_map = {doc.id: doc.to_dict() for doc in existing_docs if doc.exists}
             
             for rec, ref in reads:
@@ -176,7 +176,7 @@ class FirestoreStore:
         @firestore.transactional
         def _write_prices_txn(transaction, sym, new_rows):
             ref = self.db.collection("prices").document(sym)
-            docs = list(transaction.get([ref]))
+            docs = list(transaction.get(ref))
             doc = docs[0] if docs else None
             
             existing = doc.to_dict().get("history", []) if doc and doc.exists else []
@@ -204,7 +204,7 @@ class FirestoreStore:
         @firestore.transactional
         def _write_raw_prices_txn(transaction, sym, new_rows):
             ref = self.db.collection("raw_prices").document(sym)
-            docs = list(transaction.get([ref]))
+            docs = list(transaction.get(ref))
             doc = docs[0] if docs else None
             
             existing = doc.to_dict().get("history", []) if doc and doc.exists else []
