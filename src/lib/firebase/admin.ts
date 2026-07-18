@@ -4,8 +4,11 @@ import { getAuth } from 'firebase-admin/auth';
 
 const projectId = process.env.FIREBASE_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-
+let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+if (privateKey) {
+  // Strip surrounding quotes if accidentally included, then replace literal \n
+  privateKey = privateKey.replace(/^["']|["']$/g, '').replace(/\\n/g, '\n');
+}
 if (!getApps().length) {
   try {
     if (projectId && clientEmail && privateKey) {
