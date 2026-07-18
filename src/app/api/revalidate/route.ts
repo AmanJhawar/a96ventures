@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { verifyAdminToken } from '@/lib/firebase/admin-verify'
 
 export async function GET(request: NextRequest) {
   const path = request.nextUrl.searchParams.get('path')
@@ -9,25 +9,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: 'Missing path parameter' }, { status: 400 })
   }
 
-  // Verify authentication
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
-  }
-
-  const token = authHeader.split('Bearer ')[1]
-  try {
-    const decodedToken = await adminAuth.verifyIdToken(token)
-    const uid = decodedToken.uid
-
-    // Check if user is an admin
-    const adminDoc = await adminDb.collection('admins').doc(uid).get()
-    if (!adminDoc.exists) {
-      return NextResponse.json({ message: 'Forbidden: Admin access required' }, { status: 403 })
-    }
-  } catch (error) {
-    console.error('Authentication error:', error)
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
+  const result = await verifyAdminToken(request.headers.get('Authorization'))
+  if (!result.ok) {
+    return NextResponse.json({ message: result.message }, { status: result.status })
   }
 
   try {
