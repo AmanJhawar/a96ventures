@@ -176,9 +176,10 @@ class FirestoreStore:
         @firestore.transactional
         def _write_prices_txn(transaction, sym, new_rows):
             ref = self.db.collection("prices").document(sym)
-            doc = transaction.get(ref)
+            docs = list(transaction.get([ref]))
+            doc = docs[0] if docs else None
             
-            existing = doc.to_dict().get("history", []) if doc.exists else []
+            existing = doc.to_dict().get("history", []) if doc and doc.exists else []
             existing_dates = {r["date"] for r in existing}
             
             for r in new_rows:
@@ -203,9 +204,10 @@ class FirestoreStore:
         @firestore.transactional
         def _write_raw_prices_txn(transaction, sym, new_rows):
             ref = self.db.collection("raw_prices").document(sym)
-            doc = transaction.get(ref)
+            docs = list(transaction.get([ref]))
+            doc = docs[0] if docs else None
             
-            existing = doc.to_dict().get("history", []) if doc.exists else []
+            existing = doc.to_dict().get("history", []) if doc and doc.exists else []
             existing_dates = {r["date"] for r in existing}
             
             for r in new_rows:
