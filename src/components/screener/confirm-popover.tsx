@@ -61,6 +61,7 @@ export function ConfirmPopover({ children, message, onConfirm, confirmLabel = 'R
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+            onClick={(e) => e.stopPropagation()}
             className="absolute right-0 bottom-full mb-3 z-50 w-56 p-4 glass-card origin-bottom-right"
           >
             <p className="text-sm text-gray-700 font-medium mb-4">{message}</p>

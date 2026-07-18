@@ -204,8 +204,7 @@ class FirestoreStore:
         @firestore.transactional
         def _write_raw_prices_txn(transaction, sym, new_rows):
             ref = self.db.collection("raw_prices").document(sym)
-            docs = list(transaction.get(ref))
-            doc = docs[0] if docs else None
+            doc = ref.get(transaction=transaction)
             
             existing = doc.to_dict().get("history", []) if doc and doc.exists else []
             existing_dates = {r["date"] for r in existing}
@@ -252,11 +251,12 @@ class FirestoreStore:
 
     # ── known universe ────────────────────────────────────────────────
     def set_known_symbols(self, symbols: list[dict]) -> None:
-        batch = self.db.batch()
         coll = self.db.collection("symbols")
-        for s in symbols:
-            batch.set(coll.document(s["symbol"].upper()), s, merge=True)
-        batch.commit()
+        for i in range(0, len(symbols), 400):
+            batch = self.db.batch()
+            for s in symbols[i:i+400]:
+                batch.set(coll.document(s["symbol"].upper()), s, merge=True)
+            batch.commit()
         # Invalidate cache
         self._known_symbols_cache = None
 

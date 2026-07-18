@@ -49,3 +49,5 @@ firebase-functions/node_modules/
 # Agents
 .agents/
 
+__pycache__/
+*.pyc
