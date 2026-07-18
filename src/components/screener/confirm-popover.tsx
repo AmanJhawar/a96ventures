@@ -47,7 +47,10 @@ export function ConfirmPopover({ children, message, onConfirm, confirmLabel = 'R
 
   return (
     <div className="relative inline-block" ref={popoverRef}>
-      <div onClick={() => setIsOpen(!isOpen)} className="btn-press cursor-pointer">
+      <div 
+        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen) }} 
+        className="btn-press cursor-pointer"
+      >
         {children}
       </div>
       
@@ -63,13 +66,14 @@ export function ConfirmPopover({ children, message, onConfirm, confirmLabel = 'R
             <p className="text-sm text-gray-700 font-medium mb-4">{message}</p>
             <div className="flex justify-end gap-2">
               <button 
-                onClick={() => setIsOpen(false)}
+                onClick={(e) => { e.stopPropagation(); setIsOpen(false) }}
                 className="btn-secondary !px-3 !py-1.5 !text-[11px]"
               >
                 Cancel
               </button>
               <button 
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation()
                   setIsOpen(false)
                   onConfirm()
                 }}
