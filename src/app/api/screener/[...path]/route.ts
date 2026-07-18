@@ -8,24 +8,20 @@ async function handleProxy(req: NextRequest, { params }: { params: Promise<{ pat
   }
 
   const token = authHeader.split('Bearer ')[1]
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
 
   try {
     // 2. Verify Token & Admin Status via Firestore REST API
-    // The security rules allow users to read their own document in the admins collection.
-    // By passing the user's token directly, we verify both the token's validity AND their admin status in one go.
-    // (If the token is invalid or expired, it returns 401/403. If the doc doesn't exist, it returns 404).
-    
-    // First, we need to extract the UID from the JWT token payload (it's base64url encoded)
     const payloadBase64 = token.split('.')[1]
     let base64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/')
     const pad = base64.length % 4
     if (pad) base64 += '='.repeat(4 - pad)
+    
     const payloadJson = atob(base64)
     const payload = JSON.parse(payloadJson)
     const uid = payload.user_id
+    const projectId = payload.aud
 
-    if (!uid) {
+    if (!uid || !projectId) {
       return NextResponse.json({ detail: 'Unauthorized: Invalid token payload' }, { status: 401 })
     }
 
@@ -40,7 +36,8 @@ async function handleProxy(req: NextRequest, { params }: { params: Promise<{ pat
     if (adminCheckRes.status === 404) {
       return NextResponse.json({ detail: 'Forbidden: Admin access required' }, { status: 403 })
     } else if (!adminCheckRes.ok) {
-      return NextResponse.json({ detail: 'Unauthorized: Token verification failed' }, { status: 401 })
+      const errorText = await adminCheckRes.text()
+      return NextResponse.json({ detail: `Unauthorized: Token verification failed (${adminCheckRes.status} ${adminCheckRes.statusText}) - ${errorText}` }, { status: 401 })
     }
 
     // 3. Proxy Request to Cloud Run API
