@@ -117,6 +117,8 @@ class FirestoreStore:
     def write_metal_signals(self, run_date: str, records: list[dict]) -> None:
         @firestore.transactional
         def _write_metal_signals_txn(transaction, records_batch):
+            if not records_batch:
+                return
             coll = self.db.collection("metal_signals").document(run_date).collection("metals")
             reads = []
             for rec in records_batch:

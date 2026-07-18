@@ -81,6 +81,16 @@
       "collectionGroup": "catalog",
       "fieldPath": "searchTerms",
       "indexes": []
+    },
+    {
+      "collectionGroup": "symbols",
+      "fieldPath": "symbol",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
     }
   ]
 }
