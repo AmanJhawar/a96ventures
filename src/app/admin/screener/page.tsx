@@ -9,12 +9,21 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/components/screener/toast-context'
 import { TableSkeleton, CardSkeleton } from '@/components/screener/skeleton'
 import { StockModal } from '@/components/screener/stock-modal'
+import { MetalModal } from '@/components/screener/metal-modal'
+import { MetalScore, MetalSignal } from '@/lib/screener-types'
 
 export default function ScreenerPage() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'nonbank' | 'bank'>('nonbank')
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
+  
+  const [selectedMetal, setSelectedMetal] = useState<{
+    metal: string
+    score: MetalScore
+    signal?: MetalSignal
+  } | null>(null)
+
   const { showToast } = useToast()
 
   useEffect(() => {
@@ -75,6 +84,12 @@ export default function ScreenerPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <StockModal symbol={selectedSymbol} onClose={() => setSelectedSymbol(null)} />
+      <MetalModal 
+        metal={selectedMetal?.metal || null} 
+        score={selectedMetal?.score} 
+        signal={selectedMetal?.signal} 
+        onClose={() => setSelectedMetal(null)} 
+      />
       
       <header className="flex justify-between items-end mb-8">
         <div>
@@ -96,7 +111,10 @@ export default function ScreenerPage() {
         </div>
       </header>
 
-      <MetalsPanel metals={data.metals} />
+      <MetalsPanel 
+        metals={data.metals} 
+        onMetalClick={(metal, score, signal) => setSelectedMetal({ metal, score, signal })} 
+      />
 
       <div className="glass-card overflow-hidden">
         <div className="flex border-b border-gray-200 relative bg-gray-50/50">

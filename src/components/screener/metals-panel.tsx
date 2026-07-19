@@ -3,13 +3,15 @@ import { ScoreBadge } from './score-badge'
 import { motion, Variants } from 'framer-motion'
 
 export function MetalsPanel({
-  metals
+  metals,
+  onMetalClick
 }: {
   metals: {
     section: RunRecord['metals_section']
     scores: MetalScore[]
     signals: MetalSignal[]
   } | undefined
+  onMetalClick: (metal: string, score: MetalScore, signal?: MetalSignal) => void
 }) {
   if (!metals || !metals.section) return null
 
@@ -43,7 +45,8 @@ export function MetalsPanel({
           initial="hidden"
           animate="visible"
           variants={cardVariants}
-          className="bg-white rounded-lg p-4 border border-gray-200"
+          className="bg-white rounded-lg p-4 border border-gray-200 cursor-pointer hover:border-gray-400 transition-colors group"
+          onClick={() => gold && onMetalClick('gold', gold, metals.signals.find(s => s.metal === 'gold'))}
         >
           <div className="flex justify-between items-center mb-2">
             <span className="text-gray-700 font-semibold uppercase tracking-wider">Gold</span>
@@ -64,7 +67,8 @@ export function MetalsPanel({
           initial="hidden"
           animate="visible"
           variants={cardVariants}
-          className="bg-white rounded-lg p-4 border border-gray-200"
+          className="bg-white rounded-lg p-4 border border-gray-200 cursor-pointer hover:border-gray-400 transition-colors group"
+          onClick={() => silver && onMetalClick('silver', silver, metals.signals.find(s => s.metal === 'silver'))}
         >
           <div className="flex justify-between items-center mb-2">
             <span className="text-gray-700 font-semibold uppercase tracking-wider">Silver</span>

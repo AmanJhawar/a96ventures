@@ -3,27 +3,10 @@
 import { useEffect, useState } from 'react'
 import { fetchApi } from '@/lib/screener-api'
 import { ScoreBadge } from '@/components/screener/score-badge'
-import { X, TrendingUp, AlertTriangle, Info, Calendar } from 'lucide-react'
+import { X, TrendingUp, AlertTriangle, Info, ListChecks } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/components/screener/toast-context'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
-
-function calculateSMA(data: any[], windowSize: number): (number | null)[] {
-  const result: (number | null)[] = [];
-  let sum = 0;
-  for (let i = 0; i < data.length; i++) {
-    sum += data[i].close;
-    if (i >= windowSize) {
-      sum -= data[i - windowSize].close;
-    }
-    if (i >= windowSize - 1) {
-      result.push(sum / windowSize);
-    } else {
-      result.push(null);
-    }
-  }
-  return result;
-}
+import { ScoreBreakdown } from '@/components/screener/score-breakdown'
 
 export function StockModal({ symbol, onClose }: { symbol: string | null, onClose: () => void }) {
   const [data, setData] = useState<any>(null)
@@ -66,15 +49,6 @@ export function StockModal({ symbol, onClose }: { symbol: string | null, onClose
   }, [onClose])
 
   const prices = data?.prices || []
-  const sma50Values = calculateSMA(prices, 50)
-  const sma200Values = calculateSMA(prices, 200)
-
-  const chartData = prices.map((p: any, idx: number) => ({
-    date: p.date,
-    price: p.close,
-    sma50: sma50Values[idx],
-    sma200: sma200Values[idx],
-  }))
 
   const InfoBlock = ({ label, value, highlight = false }: { label: string, value: string | number, highlight?: boolean }) => (
     <div className={`p-4 rounded-lg border ${highlight ? 'bg-gray-100 border-black' : 'bg-gray-50 border-gray-200'}`}>
@@ -161,29 +135,22 @@ export function StockModal({ symbol, onClose }: { symbol: string | null, onClose
           </div>
         )}
 
-        {chartData.length > 0 && (
-          <div className="space-y-4">
+        {s && (s.f_breakdown || s.t_breakdown) && (
+          <div className="space-y-6">
             <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-              <Calendar className="w-4 h-4" /> Price History (200 Days)
+              <ListChecks className="w-4 h-4" /> Score Breakdown
             </h3>
-            <div className="h-72 w-full bg-gray-50 border border-gray-200 rounded-xl p-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="date" stroke="#a8a29e" fontSize={12} tickFormatter={(val: any) => val.substring(5)} minTickGap={30} />
-                  <YAxis stroke="#a8a29e" fontSize={12} domain={['auto', 'auto']} tickFormatter={(val: any) => `₹${val}`} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#fff', borderColor: '#e7e5e4', borderRadius: '8px', color: '#1c1917' }}
-                    itemStyle={{ color: '#1c1917' }}
-                    labelStyle={{ color: '#78716c', marginBottom: '4px' }}
-                  />
-                  {s?.price_at_call && (
-                    <ReferenceLine y={s.price_at_call} stroke="#000000" strokeDasharray="3 3" />
-                  )}
-                  <Line type="monotone" dataKey="price" stroke="#000000" strokeWidth={2} dot={false} name="Close" />
-                  <Line type="monotone" dataKey="sma50" stroke="#737373" strokeWidth={1} dot={false} name="50 SMA" />
-                  <Line type="monotone" dataKey="sma200" stroke="#a3a3a3" strokeWidth={1} dot={false} name="200 SMA" />
-                </LineChart>
-              </ResponsiveContainer>
+            <div className="grid grid-cols-1 gap-6">
+              {s.f_breakdown && (
+                <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+                  <ScoreBreakdown breakdown={s.f_breakdown} title="Fundamental Score" />
+                </div>
+              )}
+              {s.t_breakdown && (
+                <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+                  <ScoreBreakdown breakdown={s.t_breakdown} title="Technical Score" />
+                </div>
+              )}
             </div>
           </div>
         )}

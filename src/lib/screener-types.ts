@@ -12,7 +12,9 @@ export interface MetalScore {
   metal: string
   t_score: number
   price_at_signal?: number
+  price_inr?: number
   fx_rate?: number
+  breakdown?: Record<string, number>
 }
 
 export interface MetalSignal {
