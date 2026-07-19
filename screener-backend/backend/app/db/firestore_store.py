@@ -226,6 +226,45 @@ class FirestoreStore:
             return doc.to_dict().get("history", [])
         return []
 
+    # ── metals_feed (gold/silver/usdinr daily bars) ───────────────────
+    def write_metals_feed(self, key: str, rows: list[dict]) -> None:
+        """Write/append to metals_feed/{gold|silver|usdinr}. Deduplicates by date."""
+        @firestore.transactional
+        def _write_txn(transaction, feed_key, new_rows):
+            ref = self.db.collection("metals_feed").document(feed_key)
+            doc = ref.get(transaction=transaction)
+            existing = doc.to_dict().get("history", []) if doc and doc.exists else []
+            existing_dates = {r["date"] for r in existing}
+            for r in new_rows:
+                if r["date"] not in existing_dates:
+                    existing.append(r)
+                    existing_dates.add(r["date"])
+            existing.sort(key=lambda x: x["date"])
+            capped = existing[-600:]  # ~2.5 trading years
+            transaction.set(ref, {"history": capped})
+
+        _write_txn(self.db.transaction(), key, rows)
+
+    def get_metals_feed(self, key: str) -> list[dict]:
+        """Read metals_feed/{gold|silver|usdinr} history array."""
+        doc = self.db.collection("metals_feed").document(key).get()
+        if doc.exists:
+            return doc.to_dict().get("history", [])
+        return []
+
+    # ── fundamentals (per-symbol financial data) ──────────────────────
+    def write_fundamentals(self, symbol: str, data: dict) -> None:
+        self.db.collection("fundamentals").document(symbol.upper()).set(data)
+
+    def get_fundamentals(self, symbol: str) -> dict | None:
+        doc = self.db.collection("fundamentals").document(symbol.upper()).get()
+        return doc.to_dict() if doc.exists else None
+
+    def get_all_fundamentals(self) -> dict[str, dict]:
+        """Bulk read all fundamentals. Returns {SYMBOL: {...}}."""
+        docs = self.db.collection("fundamentals").get()
+        return {doc.id: doc.to_dict() for doc in docs}
+
     # ── watchlist (single-user CRUD) ──────────────────────────────────
     def get_watchlist(self) -> list[str]:
         if self._watchlist_cache is not None:

@@ -69,8 +69,6 @@ def run_job(run_date: str, fixtures_dir: str, store=None, live: bool = False) ->
     if live:
         from app.data.loaders import (
             download_nse_bhavcopy,
-            load_live_metals_fx,
-            load_fixture_fundamentals,
             load_fixture_corp_actions,
         )
 
@@ -79,12 +77,26 @@ def run_job(run_date: str, fixtures_dir: str, store=None, live: bool = False) ->
         symbols = [store.get_symbol_metadata(s) for s in known_symbols if store.get_symbol_metadata(s) is not None]
         print(f"[job] Live: Loaded {len(symbols)} symbols from store universe")
 
-        # Load fundamentals and corporate actions
-        fundamentals = load_fixture_fundamentals(fixtures_dir)
+        # Load fundamentals from Firestore (seeded by bootstrap_fundamentals.py)
+        fundamentals = store.get_all_fundamentals()
+        print(f"[job] Live: Loaded {len(fundamentals)} fundamentals from Firestore")
+
+        # Load corporate actions from fixtures (rarely changes)
         corp_actions = load_fixture_corp_actions(fixtures_dir)
 
-        # Fetch live metals and FX
-        gold_usd, silver_usd, usdinr = load_live_metals_fx()
+        # Load metals + FX from Firestore metals_feed (seeded by bootstrap_metals.py)
+        def _feed_to_df(key, columns):
+            rows = store.get_metals_feed(key)
+            if not rows:
+                return pd.DataFrame(columns=columns)
+            df = pd.DataFrame(rows)
+            df["date"] = pd.to_datetime(df["date"])
+            return df
+
+        gold_usd = _feed_to_df("gold", ["date", "open", "high", "low", "close"])
+        silver_usd = _feed_to_df("silver", ["date", "open", "high", "low", "close"])
+        usdinr = _feed_to_df("usdinr", ["date", "rate"])
+        print(f"[job] Live: Metals feed — gold={len(gold_usd)}, silver={len(silver_usd)}, usdinr={len(usdinr)} bars")
 
         # Fetch, merge, and persist raw daily bhavcopy
         print(f"[job] Live: Downloading today's bhavcopy for {run_date}")
