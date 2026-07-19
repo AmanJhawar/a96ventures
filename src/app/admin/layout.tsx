@@ -5,11 +5,10 @@ import { useRouter, usePathname } from 'next/navigation'
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase/auth'
 import Link from 'next/link'
-import { LogOut, LayoutDashboard, Users, Briefcase, Bookmark, MessageSquare, Menu, X, Activity } from 'lucide-react'
+import { LogOut, LayoutDashboard, Users, Briefcase, Bookmark, MessageSquare, Menu, X } from 'lucide-react'
 
 const navItems = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { name: 'Screener', href: '/admin/screener', icon: Activity },
   { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare },
   { name: 'Team', href: '/admin/team', icon: Users },
   { name: 'Brands', href: '/admin/brands', icon: Bookmark },
