@@ -5,10 +5,13 @@ import { useRouter, usePathname } from 'next/navigation'
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase/auth'
 import Link from 'next/link'
-import { LogOut, LayoutDashboard, Users, Briefcase, Bookmark, MessageSquare, Menu, X } from 'lucide-react'
+import { LogOut, LayoutDashboard, Users, Briefcase, Bookmark, MessageSquare, Menu, X, ShoppingCart, Warehouse, MapPin } from 'lucide-react'
 
 const navItems = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+  { name: 'Inventory', href: '/admin/inventory', icon: Warehouse },
+  { name: 'Sales', href: '/admin/sales', icon: ShoppingCart },
+  { name: 'Locations', href: '/admin/locations', icon: MapPin },
   { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare },
   { name: 'Team', href: '/admin/team', icon: Users },
   { name: 'Brands', href: '/admin/brands', icon: Bookmark },
@@ -157,7 +160,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Main Content */}
       <main className="flex-1 p-6 md:p-12 overflow-y-auto min-h-screen">
-        <div className={pathname === '/admin/inventory' ? 'w-full' : 'max-w-6xl mx-auto'}>
+        <div className={pathname.startsWith('/admin/inventory') || pathname.startsWith('/admin/sales') ? 'w-full max-w-7xl mx-auto' : 'max-w-6xl mx-auto'}>
           {children}
         </div>
       </main>

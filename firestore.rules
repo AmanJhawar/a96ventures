@@ -59,6 +59,17 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // Inventory, Sales & Locations (Admin only)
+    match /locations/{document=**} {
+      allow read, write: if isAdmin();
+    }
+    match /products/{document=**} {
+      allow read, write: if isAdmin();
+    }
+    match /transactions/{document=**} {
+      allow read, write: if isAdmin();
+    }
+
     // Default deny for anything else
     match /{document=**} {
       allow read, write: if false;

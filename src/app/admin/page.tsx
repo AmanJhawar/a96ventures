@@ -1,11 +1,13 @@
 "use client"
 
-import { Package, Users, Briefcase, Bookmark, MessageSquare } from 'lucide-react'
+import { Warehouse, ShoppingCart, MapPin, Users, Briefcase, Bookmark, MessageSquare } from 'lucide-react'
 import Link from 'next/link'
 
 export default function AdminDashboard() {
   const cards = [
-    { name: 'Inventory', href: '/admin/inventory', icon: Package, description: 'Manage your inventory products and variants.' },
+    { name: 'Inventory', href: '/admin/inventory', icon: Warehouse, description: 'Manage products catalog, purchases, transfers, repairs, and melts.' },
+    { name: 'Sales', href: '/admin/sales', icon: ShoppingCart, description: 'Record customer sales and manage returns across locations.' },
+    { name: 'Locations', href: '/admin/locations', icon: MapPin, description: 'Manage showrooms, vaults, warehouses, and workshops.' },
     { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare, description: 'View and respond to customer inquiries.' },
     { name: 'Team', href: '/admin/team', icon: Users, description: 'Manage team members and their roles.' },
     { name: 'Brands', href: '/admin/brands', icon: Bookmark, description: 'Manage the brands in your ecosystem.' },

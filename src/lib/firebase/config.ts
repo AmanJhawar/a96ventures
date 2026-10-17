@@ -3,13 +3,12 @@ import { getFirestore } from "firebase/firestore/lite";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC9u17jg46lvVUsZwjgbDzqe_Ot6ZkXB-w",
-  authDomain: "a96ventures-882ec.firebaseapp.com",
-  projectId: "a96ventures-882ec",
-  storageBucket: "a96ventures-882ec.firebasestorage.app",
-  messagingSenderId: "579157315760",
-  appId: "1:579157315760:web:56a93fc80c4372c51bab75",
-  measurementId: "G-E2VBCYP5YX"
+  apiKey: "AIzaSyDmKFzBNpXXy_rNvRtdgKhv9wDGax2QEKI",
+  authDomain: "a96ventures-979e6.firebaseapp.com",
+  projectId: "a96ventures-979e6",
+  storageBucket: "a96ventures-979e6.firebasestorage.app",
+  messagingSenderId: "983097773812",
+  appId: "1:983097773812:web:0755f4639a8008bace98a1"
 };
 
 // Initialize Firebase securely (avoiding double initialization in dev)
