@@ -39,7 +39,9 @@ export interface Inquiry {
   createdAt?: unknown;
 }
 
-export type ProductCategory = 'MMTC PAMP' | 'Silver Idols' | 'Bullions';
+export type MetalType = 'Gold' | 'Silver';
+
+export type ProductCategory = 'MMTC PAMP' | 'Idols' | 'Bullions';
 
 export type TransactionType = 'purchase' | 'sale' | 'return' | 'transfer' | 'adjustment' | 'repair' | 'melt';
 
@@ -54,10 +56,11 @@ export interface Product {
   id: string;
   name: string;
   category: ProductCategory;
+  metal: MetalType;
   sku: string;
   stock: number;
   stockByLocation: Record<string, number>;
-  weight: number; // in grams
+  weight: number; // in grams (mandatory)
   purity: string; // e.g. "999", "999.9"
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -69,6 +72,7 @@ export interface Transaction {
   productId: string;
   productName: string;
   category: ProductCategory;
+  metal?: MetalType;
   quantity: number;
   price?: number; // per unit (for purchase, sale, return)
   locationId: string;

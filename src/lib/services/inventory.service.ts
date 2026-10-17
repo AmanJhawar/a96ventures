@@ -12,7 +12,7 @@ import {
   query,
   orderBy
 } from 'firebase/firestore/lite';
-import { Location, Product, Transaction, TransactionType, ProductCategory } from '@/lib/types';
+import { Location, Product, Transaction, TransactionType, ProductCategory, MetalType } from '@/lib/types';
 import { withTimeout } from './utils';
 
 const db = getFirestore(app);
@@ -83,10 +83,12 @@ export async function getProducts(): Promise<Product[]> {
   const items: Product[] = [];
   querySnapshot.forEach((docSnap) => {
     const data = docSnap.data();
+    const normalizedCategory = (data.category === 'Silver Idols' ? 'Idols' : data.category) as ProductCategory;
     items.push({
       id: docSnap.id,
       name: data.name || '',
-      category: data.category as ProductCategory,
+      category: normalizedCategory,
+      metal: (data.metal || (normalizedCategory === 'Idols' ? 'Silver' : 'Gold')) as MetalType,
       sku: data.sku || '',
       stock: Number(data.stock || 0),
       stockByLocation: data.stockByLocation || {},
@@ -108,6 +110,7 @@ export async function getProducts(): Promise<Product[]> {
 export async function addProduct(data: {
   name: string;
   category: ProductCategory;
+  metal: MetalType;
   sku: string;
   weight: number;
   purity: string;
@@ -115,10 +118,24 @@ export async function addProduct(data: {
   initialLocationId?: string;
   initialLocationName?: string;
 }): Promise<string> {
+  const isIdol = data.category === 'Idols';
+  let weight = Number(data.weight);
+  if (!isIdol) {
+    if (isNaN(weight) || weight <= 0) {
+      throw new Error('Product weight is mandatory and must be greater than 0 grams.');
+    }
+  } else {
+    // For idols, weight is variable per piece and entered during repair or purchase
+    if (isNaN(weight) || weight < 0) {
+      weight = 0;
+    }
+  }
+
   const stockByLocation: Record<string, number> = {};
   let totalStock = 0;
 
-  const initQty = Number(data.initialStock) || 0;
+  const initQty = isIdol ? Math.min(1, Number(data.initialStock) || 0) : Number(data.initialStock) || 0;
+
   if (initQty > 0 && data.initialLocationId) {
     stockByLocation[data.initialLocationId] = initQty;
     totalStock = initQty;
@@ -127,10 +144,11 @@ export async function addProduct(data: {
   const docRef = await addDoc(collection(db, 'products'), {
     name: data.name.trim(),
     category: data.category,
+    metal: data.metal,
     sku: data.sku.trim().toUpperCase(),
     stock: totalStock,
     stockByLocation,
-    weight: Number(data.weight) || 0,
+    weight,
     purity: data.purity.trim(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -143,6 +161,7 @@ export async function addProduct(data: {
       productId: docRef.id,
       productName: data.name.trim(),
       category: data.category,
+      metal: data.metal,
       quantity: initQty,
       price: 0,
       locationId: data.initialLocationId,
@@ -159,15 +178,29 @@ export async function addProduct(data: {
 export async function updateProduct(id: string, data: {
   name: string;
   category: ProductCategory;
+  metal: MetalType;
   sku: string;
   weight: number;
   purity: string;
 }): Promise<void> {
+  const isIdol = data.category === 'Idols';
+  let weight = Number(data.weight);
+  if (!isIdol) {
+    if (isNaN(weight) || weight <= 0) {
+      throw new Error('Product weight is mandatory and must be greater than 0 grams.');
+    }
+  } else {
+    if (isNaN(weight) || weight < 0) {
+      weight = 0;
+    }
+  }
+
   await setDoc(doc(db, 'products', id), {
     name: data.name.trim(),
     category: data.category,
+    metal: data.metal,
     sku: data.sku.trim().toUpperCase(),
-    weight: Number(data.weight) || 0,
+    weight,
     purity: data.purity.trim(),
     updatedAt: serverTimestamp(),
   }, { merge: true });
@@ -185,7 +218,12 @@ export async function getTransactions(): Promise<Transaction[]> {
   const querySnapshot = await withTimeout(getDocs(collection(db, 'transactions')));
   const items: Transaction[] = [];
   querySnapshot.forEach((docSnap) => {
-    items.push({ ...docSnap.data(), id: docSnap.id } as Transaction);
+    const data = docSnap.data();
+    items.push({
+      ...data,
+      id: docSnap.id,
+      category: (data.category === 'Silver Idols' ? 'Idols' : data.category) as ProductCategory,
+    } as Transaction);
   });
   // Sort by date descending, then createdAt descending
   return items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -196,6 +234,7 @@ export interface RecordTransactionParams {
   productId: string;
   productName: string;
   category: ProductCategory;
+  metal?: MetalType;
   quantity?: number;
   price?: number;
   locationId: string;
@@ -227,6 +266,10 @@ export async function recordTransaction(params: RecordTransactionParams): Promis
 
   switch (params.type) {
     case 'purchase': {
+      const isIdol = productData.category === 'Idols';
+      if (isIdol && qty !== 1) {
+        throw new Error('Idols are unique individual pieces and must be purchased 1 unit at a time.');
+      }
       if (qty <= 0) throw new Error('Quantity must be greater than 0');
       currentLocMap[params.locationId] = sourceLocStock + qty;
       newTotal = currentTotal + qty;
@@ -304,6 +347,7 @@ export async function recordTransaction(params: RecordTransactionParams): Promis
     productId: params.productId,
     productName: params.productName,
     category: params.category,
+    metal: params.metal || productData.metal || 'Gold',
     quantity: qty,
     locationId: params.locationId,
     locationName: params.locationName,
@@ -432,4 +476,21 @@ export async function deleteTransaction(tx: Transaction): Promise<void> {
 
   // Delete the transaction doc
   await deleteDoc(doc(db, 'transactions', tx.id));
+}
+
+/**
+ * Erases all transaction history (purchases, sales, transfers, returns, repairs, melts)
+ * across all products, while strictly retaining current stock quantities and locations untouched.
+ */
+export async function clearTransactionHistory(): Promise<number> {
+  const querySnapshot = await withTimeout(getDocs(collection(db, 'transactions')));
+  if (querySnapshot.empty) return 0;
+
+  const batchSize = 50;
+  for (let i = 0; i < querySnapshot.docs.length; i += batchSize) {
+    const chunk = querySnapshot.docs.slice(i, i + batchSize);
+    await Promise.all(chunk.map((d) => deleteDoc(d.ref)));
+  }
+
+  return querySnapshot.docs.length;
 }

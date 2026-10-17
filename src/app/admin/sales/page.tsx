@@ -13,7 +13,7 @@ import {
   TrendingUp,
   PackageCheck
 } from 'lucide-react'
-import { Product, Location, Transaction, ProductCategory } from '@/lib/types'
+import { Product, Location, Transaction, ProductCategory, MetalType } from '@/lib/types'
 import {
   getProducts,
   getLocations,
@@ -23,14 +23,18 @@ import {
 } from '@/lib/services/inventory.service'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
+import CustomSelect, { SelectOption } from '@/components/custom-select'
+import CustomDatePicker from '@/components/custom-date-picker'
 
-const CATEGORIES: ProductCategory[] = ['MMTC PAMP', 'Silver Idols', 'Bullions']
+const CATEGORIES: ProductCategory[] = ['MMTC PAMP', 'Idols', 'Bullions']
+const METALS: MetalType[] = ['Gold', 'Silver']
 
 type SalesTab = 'sales' | 'returns'
 
 export default function AdminSales() {
   const [activeTab, setActiveTab] = useState<SalesTab>('sales')
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All')
+  const [selectedMetal, setSelectedMetal] = useState<MetalType | 'All'>('All')
 
   // Data state
   const [products, setProducts] = useState<Product[]>([])
@@ -99,16 +103,22 @@ export default function AdminSales() {
   // Filtered sales
   const salesList = useMemo(() => {
     return transactions.filter(
-      (tx) => tx.type === 'sale' && (selectedCategory === 'All' || tx.category === selectedCategory)
+      (tx) =>
+        tx.type === 'sale' &&
+        (selectedCategory === 'All' || tx.category === selectedCategory) &&
+        (selectedMetal === 'All' || tx.metal === selectedMetal)
     )
-  }, [transactions, selectedCategory])
+  }, [transactions, selectedCategory, selectedMetal])
 
   // Filtered returns
   const returnsList = useMemo(() => {
     return transactions.filter(
-      (tx) => tx.type === 'return' && (selectedCategory === 'All' || tx.category === selectedCategory)
+      (tx) =>
+        tx.type === 'return' &&
+        (selectedCategory === 'All' || tx.category === selectedCategory) &&
+        (selectedMetal === 'All' || tx.metal === selectedMetal)
     )
-  }, [transactions, selectedCategory])
+  }, [transactions, selectedCategory, selectedMetal])
 
   // KPI Metrics
   const metrics = useMemo(() => {
@@ -147,6 +157,33 @@ export default function AdminSales() {
     if (!selectedSaleProduct || !saleLocationId) return 0
     return selectedSaleProduct.stockByLocation?.[saleLocationId] || 0
   }, [selectedSaleProduct, saleLocationId])
+
+  const saleProductOptions: SelectOption[] = useMemo(() => {
+    return products.map((p) => ({
+      value: p.id,
+      label: p.name,
+      sublabel: `${p.category} · ${p.weight}g · ${p.sku}`,
+      badge: `${p.stock} in stock`
+    }))
+  }, [products])
+
+  const saleLocationOptions: SelectOption[] = useMemo(() => {
+    return locations.map((l) => {
+      const stock = selectedSaleProduct?.stockByLocation?.[l.id] || 0
+      return {
+        value: l.id,
+        label: l.name,
+        badge: `${stock} available`
+      }
+    })
+  }, [locations, selectedSaleProduct])
+
+  const returnLocationOptions: SelectOption[] = useMemo(() => {
+    return locations.map((l) => ({
+      value: l.id,
+      label: l.name
+    }))
+  }, [locations])
 
   // Open Sale modal
   const handleOpenSaleForm = () => {
@@ -213,6 +250,7 @@ export default function AdminSales() {
         productId: prod.id,
         productName: prod.name,
         category: prod.category,
+        metal: prod.metal,
         quantity: qty,
         price: salePrice ? Number(salePrice) : undefined,
         locationId: saleLocationId,
@@ -259,6 +297,7 @@ export default function AdminSales() {
         productId: prod.id,
         productName: prod.name,
         category: prod.category,
+        metal: prod.metal,
         quantity: qty,
         price: returnPrice ? Number(returnPrice) : undefined,
         locationId: returnLocationId,
@@ -393,32 +432,51 @@ export default function AdminSales() {
         </button>
       </div>
 
-      {/* Category Filter Pills */}
-      <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-1">
-        <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Category:</span>
-        <button
-          onClick={() => setSelectedCategory('All')}
-          className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
-            selectedCategory === 'All'
-              ? 'bg-black text-white'
-              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
-          }`}
-        >
-          All Categories
-        </button>
-        {CATEGORIES.map((cat) => (
+      {/* Category & Metal Filter Pills */}
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Category:</span>
           <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
-              selectedCategory === cat
+            onClick={() => setSelectedCategory('All')}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+              selectedCategory === 'All'
                 ? 'bg-black text-white'
                 : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
             }`}
           >
-            {cat}
+            All Categories
           </button>
-        ))}
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                selectedCategory === cat
+                  ? 'bg-black text-white'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Metal:</span>
+          {(['All', 'Gold', 'Silver'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setSelectedMetal(m)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                selectedMetal === m
+                  ? 'bg-black text-white'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
+              }`}
+            >
+              {m === 'All' ? 'All Metals' : m}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Record Sale Modal / Card */}
@@ -447,39 +505,24 @@ export default function AdminSales() {
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                   Select Product <span className="text-red-500">*</span>
                 </label>
-                <select
+                <CustomSelect
                   value={saleProductId}
-                  onChange={(e) => setSaleProductId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  required
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.category}) — Total Stock: {p.stock}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setSaleProductId}
+                  options={saleProductOptions}
+                  placeholder="Select product to sell..."
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                   Fulfill from Location <span className="text-red-500">*</span>
                 </label>
-                <select
+                <CustomSelect
                   value={saleLocationId}
-                  onChange={(e) => setSaleLocationId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  required
-                >
-                  {locations.map((l) => {
-                    const locStock = selectedSaleProduct?.stockByLocation?.[l.id] || 0
-                    return (
-                      <option key={l.id} value={l.id}>
-                        {l.name} — {locStock} units available
-                      </option>
-                    )
-                  })}
-                </select>
+                  onValueChange={setSaleLocationId}
+                  options={saleLocationOptions}
+                  placeholder="Select selling location..."
+                />
                 <div className="text-xs text-gray-500 mt-1">
                   Available at selected location:{' '}
                   <strong className={availableStockAtSaleLocation > 0 ? 'text-black' : 'text-red-600'}>
@@ -524,12 +567,10 @@ export default function AdminSales() {
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                   Sale Date <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="date"
+                <CustomDatePicker
                   value={saleDate}
-                  onChange={(e) => setSaleDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  required
+                  onChange={setSaleDate}
+                  placeholder="Select sale date"
                 />
               </div>
             </div>
@@ -609,34 +650,24 @@ export default function AdminSales() {
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                   Select Product <span className="text-red-500">*</span>
                 </label>
-                <select
+                <CustomSelect
                   value={returnProductId}
-                  onChange={(e) => setReturnProductId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  required
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} [{p.category}]
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setReturnProductId}
+                  options={saleProductOptions}
+                  placeholder="Select product..."
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                   Restock into Location <span className="text-red-500">*</span>
                 </label>
-                <select
+                <CustomSelect
                   value={returnLocationId}
-                  onChange={(e) => setReturnLocationId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  required
-                >
-                  {locations.map((l) => (
-                    <option key={l.id} value={l.id}>{l.name}</option>
-                  ))}
-                </select>
+                  onValueChange={setReturnLocationId}
+                  options={returnLocationOptions}
+                  placeholder="Select location to restock..."
+                />
               </div>
             </div>
 
@@ -674,12 +705,10 @@ export default function AdminSales() {
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                   Return Date
                 </label>
-                <input
-                  type="date"
+                <CustomDatePicker
                   value={returnDate}
-                  onChange={(e) => setReturnDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  required
+                  onChange={setReturnDate}
+                  placeholder="Select return date"
                 />
               </div>
             </div>
@@ -763,6 +792,7 @@ export default function AdminSales() {
                     <th className="px-6 py-3.5">Date</th>
                     <th className="px-6 py-3.5">Customer</th>
                     <th className="px-6 py-3.5">Product</th>
+                    <th className="px-6 py-3.5">Metal</th>
                     <th className="px-6 py-3.5">Category</th>
                     <th className="px-6 py-3.5">Location</th>
                     <th className="px-6 py-3.5 text-right">Quantity</th>
@@ -785,6 +815,11 @@ export default function AdminSales() {
                         </td>
                         <td className="px-6 py-4 font-semibold text-black">
                           {tx.productName}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
+                            {tx.metal || 'Silver'}
+                          </span>
                         </td>
                         <td className="px-6 py-4 text-xs text-gray-600">
                           {tx.category}
@@ -847,6 +882,7 @@ export default function AdminSales() {
                     <th className="px-6 py-3.5">Date</th>
                     <th className="px-6 py-3.5">Customer</th>
                     <th className="px-6 py-3.5">Product</th>
+                    <th className="px-6 py-3.5">Metal</th>
                     <th className="px-6 py-3.5">Category</th>
                     <th className="px-6 py-3.5">Restocked At</th>
                     <th className="px-6 py-3.5 text-right">Quantity</th>
@@ -869,6 +905,11 @@ export default function AdminSales() {
                         </td>
                         <td className="px-6 py-4 font-semibold text-black">
                           {tx.productName}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
+                            {tx.metal || 'Silver'}
+                          </span>
                         </td>
                         <td className="px-6 py-4 text-xs text-gray-600">
                           {tx.category}

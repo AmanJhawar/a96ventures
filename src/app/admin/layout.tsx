@@ -5,13 +5,14 @@ import { useRouter, usePathname } from 'next/navigation'
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase/auth'
 import Link from 'next/link'
-import { LogOut, LayoutDashboard, Users, Briefcase, Bookmark, MessageSquare, Menu, X, ShoppingCart, Warehouse, MapPin } from 'lucide-react'
+import { LogOut, LayoutDashboard, Users, Briefcase, Bookmark, MessageSquare, Menu, X, ShoppingCart, Warehouse, MapPin, BarChart3 } from 'lucide-react'
 
 const navItems = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Inventory', href: '/admin/inventory', icon: Warehouse },
   { name: 'Sales', href: '/admin/sales', icon: ShoppingCart },
   { name: 'Locations', href: '/admin/locations', icon: MapPin },
+  { name: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare },
   { name: 'Team', href: '/admin/team', icon: Users },
   { name: 'Brands', href: '/admin/brands', icon: Bookmark },
