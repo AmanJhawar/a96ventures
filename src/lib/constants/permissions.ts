@@ -1,5 +1,28 @@
 import { UserPermissions, UserRole } from '@/lib/types'
 
+export const EMPTY_PERMISSIONS: UserPermissions = {
+  products: { view: false, add: false, edit: false, delete: false },
+  purchases: { view: false, add: false, delete: false },
+  movements: {
+    view: false,
+    transfer: false,
+    adjustment: false,
+    repair: false,
+    melt: false,
+    delete: false
+  },
+  sales: { view: false, add: false, delete: false },
+  returns: { view: false, add: false, delete: false },
+  inquiries: { view: false, edit: false, delete: false },
+  locations: { view: false, add: false, edit: false, delete: false },
+  brands: { view: false, add: false, edit: false, delete: false },
+  team: { view: false, add: false, edit: false, delete: false },
+  portfolio: { view: false, add: false, edit: false, delete: false },
+  reports: { view: false, export: false },
+  archive: { zeroBalance: false, uploadArchive: false },
+  users: { view: false, add: false, edit: false, delete: false }
+}
+
 export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
   products: { view: true, add: true, edit: true, delete: true },
   purchases: { view: true, add: true, delete: true },
@@ -97,7 +120,7 @@ export const ROLE_PRESETS: Record<UserRole, UserPermissions> = {
   store_manager: STORE_MANAGER_PERMISSIONS,
   sales_cashier: SALES_CASHIER_PERMISSIONS,
   vault_custodian: VAULT_CUSTODIAN_PERMISSIONS,
-  custom: STORE_MANAGER_PERMISSIONS
+  custom: EMPTY_PERMISSIONS
 }
 
 export const ROLE_LABELS: Record<UserRole, { label: string; description: string }> = {

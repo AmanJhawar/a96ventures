@@ -38,7 +38,8 @@ import {
   SUPER_ADMIN_PERMISSIONS,
   STORE_MANAGER_PERMISSIONS,
   SALES_CASHIER_PERMISSIONS,
-  VAULT_CUSTODIAN_PERMISSIONS
+  VAULT_CUSTODIAN_PERMISSIONS,
+  EMPTY_PERMISSIONS
 } from '@/lib/constants/permissions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { ConfirmModal } from '@/components/confirm-modal'
@@ -74,6 +75,7 @@ export default function AdminUsersPage() {
   const [formDisplayName, setFormDisplayName] = useState('')
   const [formEmail, setFormEmail] = useState('')
   const [formPhone, setFormPhone] = useState('')
+  const [formPassword, setFormPassword] = useState('')
   const [formRole, setFormRole] = useState<UserRole>('store_manager')
   const [formStatus, setFormStatus] = useState<UserStatus>('active')
   const [formLocationId, setFormLocationId] = useState('')
@@ -151,6 +153,7 @@ export default function AdminUsersPage() {
     setFormDisplayName('')
     setFormEmail('')
     setFormPhone('')
+    setFormPassword('')
     setFormRole('store_manager')
     setFormStatus('active')
     setFormLocationId('')
@@ -165,10 +168,11 @@ export default function AdminUsersPage() {
     setFormDisplayName(user.displayName)
     setFormEmail(user.email)
     setFormPhone(user.phoneNumber || '')
+    setFormPassword('')
     setFormRole(user.role)
     setFormStatus(user.status)
     setFormLocationId(user.assignedLocationId || '')
-    setFormPermissions(user.permissions || ROLE_PRESETS[user.role] || ROLE_PRESETS.custom)
+    setFormPermissions(user.permissions || (user.role === 'super_admin' ? SUPER_ADMIN_PERMISSIONS : EMPTY_PERMISSIONS))
     setFormError(null)
     setIsFormOpen(true)
   }
@@ -243,14 +247,16 @@ export default function AdminUsersPage() {
             status: formStatus,
             assignedLocationId: formLocationId || undefined,
             assignedLocationName: locName,
-            permissions: formPermissions
+            permissions: formPermissions,
+            ...(formPassword.trim() ? { password: formPassword.trim() } : {})
           },
           actorInfo
         )
         toast.success('Operator updated successfully')
       } else {
-        await createAdminUser({
+        const createResult = await createAdminUser({
           email: formEmail,
+          password: formPassword.trim() || undefined,
           displayName: formDisplayName,
           phoneNumber: formPhone,
           role: formRole,
@@ -261,7 +267,14 @@ export default function AdminUsersPage() {
           createdById: actorInfo.id,
           createdByEmail: actorInfo.email
         })
-        toast.success('New operator created successfully')
+
+        if (createResult.temporaryPassword) {
+          toast.success(`Operator created! Initial password: ${createResult.temporaryPassword}`, {
+            duration: 10000
+          })
+        } else {
+          toast.success('New operator created successfully')
+        }
       }
 
       setIsFormOpen(false)
@@ -337,11 +350,10 @@ export default function AdminUsersPage() {
             setActiveTab('directory')
             setIsFormOpen(false)
           }}
-          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'directory'
+          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'directory'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
-          }`}
+            }`}
         >
           <Users size={16} />
           Staff & Operators ({users.length})
@@ -351,11 +363,10 @@ export default function AdminUsersPage() {
             setActiveTab('audit')
             setIsFormOpen(false)
           }}
-          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'audit'
+          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'audit'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
-          }`}
+            }`}
         >
           <History size={16} />
           Audit Trail & Activity Log ({auditLogs.length})
@@ -376,11 +387,10 @@ export default function AdminUsersPage() {
                   <button
                     key={r}
                     onClick={() => setSelectedRoleFilter(r)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
-                      isActive
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${isActive
                         ? 'bg-black text-white border border-black shadow-xs'
                         : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
-                    }`}
+                      }`}
                   >
                     {label}
                   </button>
@@ -425,7 +435,7 @@ export default function AdminUsersPage() {
 
                 <form onSubmit={handleSaveUser} className="space-y-6">
                   {/* Basic Details */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                         Full Name <span className="text-red-500">*</span>
@@ -457,6 +467,32 @@ export default function AdminUsersPage() {
 
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                        {editingUserId ? 'Reset Password (Optional)' : 'Initial Password (Optional)'}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder={editingUserId ? 'Leave blank to keep existing' : 'Auto-generated if blank'}
+                        value={formPassword}
+                        onChange={(e) => setFormPassword(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                        Phone Number (Optional)
+                      </label>
+                      <input
+                        type="tel"
+                        placeholder="e.g. +91 98765 43210"
+                        value={formPhone}
+                        onChange={(e) => setFormPhone(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2 lg:col-span-2">
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                         Assigned Location Scope
                       </label>
                       <CustomSelect
@@ -483,11 +519,10 @@ export default function AdminUsersPage() {
                               key={roleKey}
                               type="button"
                               onClick={() => handleSelectRolePreset(roleKey)}
-                              className={`p-3 text-left rounded-lg border text-xs transition-[border-color,background-color,transform] duration-150 active:scale-[0.97] ${
-                                isSelected
+                              className={`p-3 text-left rounded-lg border text-xs transition-[border-color,background-color,transform] duration-150 active:scale-[0.97] ${isSelected
                                   ? 'border-black bg-gray-50 ring-1 ring-black'
                                   : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
-                              }`}
+                                }`}
                             >
                               <div className="font-semibold text-black">{info.label}</div>
                               <div className="text-[11px] text-gray-400 mt-1 line-clamp-2">{info.description}</div>
@@ -522,11 +557,10 @@ export default function AdminUsersPage() {
                               key={act}
                               type="button"
                               onClick={() => togglePermission('products', act)}
-                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${
-                                formPermissions.products[act]
+                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.products[act]
                                   ? 'bg-black text-white border-black'
                                   : 'bg-white text-gray-500 border-gray-200 hover:text-black'
-                              }`}
+                                }`}
                             >
                               {act}
                             </button>
@@ -537,7 +571,7 @@ export default function AdminUsersPage() {
                       {/* Purchases */}
                       <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold text-xs text-black">Purchases (Restock)</span>
+                          <span className="font-semibold text-xs text-black">Purchases</span>
                           <span className="text-[10px] text-gray-400 uppercase tracking-wider">Inflow</span>
                         </div>
                         <div className="grid grid-cols-3 gap-2">
@@ -546,11 +580,10 @@ export default function AdminUsersPage() {
                               key={act}
                               type="button"
                               onClick={() => togglePermission('purchases', act)}
-                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${
-                                formPermissions.purchases[act]
+                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.purchases[act]
                                   ? 'bg-black text-white border-black'
                                   : 'bg-white text-gray-500 border-gray-200 hover:text-black'
-                              }`}
+                                }`}
                             >
                               {act === 'delete' ? 'reverse' : act}
                             </button>
@@ -570,11 +603,10 @@ export default function AdminUsersPage() {
                               key={act}
                               type="button"
                               onClick={() => togglePermission('movements', act)}
-                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${
-                                formPermissions.movements[act]
+                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.movements[act]
                                   ? 'bg-black text-white border-black'
                                   : 'bg-white text-gray-500 border-gray-200 hover:text-black'
-                              }`}
+                                }`}
                             >
                               {act === 'delete' ? 'reverse' : act}
                             </button>
@@ -594,11 +626,10 @@ export default function AdminUsersPage() {
                               key={act}
                               type="button"
                               onClick={() => togglePermission('sales', act)}
-                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${
-                                formPermissions.sales[act]
+                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.sales[act]
                                   ? 'bg-black text-white border-black'
                                   : 'bg-white text-gray-500 border-gray-200 hover:text-black'
-                              }`}
+                                }`}
                             >
                               {act === 'delete' ? 'void' : act}
                             </button>
@@ -618,11 +649,10 @@ export default function AdminUsersPage() {
                               key={act}
                               type="button"
                               onClick={() => togglePermission('returns', act)}
-                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${
-                                formPermissions.returns[act]
+                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.returns[act]
                                   ? 'bg-black text-white border-black'
                                   : 'bg-white text-gray-500 border-gray-200 hover:text-black'
-                              }`}
+                                }`}
                             >
                               {act === 'delete' ? 'reverse' : act}
                             </button>
@@ -642,11 +672,10 @@ export default function AdminUsersPage() {
                               key={act}
                               type="button"
                               onClick={() => togglePermission('reports', act)}
-                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${
-                                formPermissions.reports[act]
+                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.reports[act]
                                   ? 'bg-black text-white border-black'
                                   : 'bg-white text-gray-500 border-gray-200 hover:text-black'
-                              }`}
+                                }`}
                             >
                               {act}
                             </button>
@@ -664,22 +693,20 @@ export default function AdminUsersPage() {
                           <button
                             type="button"
                             onClick={() => togglePermission('archive', 'zeroBalance')}
-                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${
-                              formPermissions.archive.zeroBalance
+                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.archive.zeroBalance
                                 ? 'bg-black text-white border-black'
                                 : 'bg-white text-gray-500 border-gray-200 hover:text-black'
-                            }`}
+                              }`}
                           >
                             Zero Balance
                           </button>
                           <button
                             type="button"
                             onClick={() => togglePermission('users', 'edit')}
-                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${
-                              formPermissions.users.edit
+                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.users.edit
                                 ? 'bg-black text-white border-black'
                                 : 'bg-white text-gray-500 border-gray-200 hover:text-black'
-                            }`}
+                              }`}
                           >
                             Manage Users
                           </button>
@@ -803,16 +830,14 @@ export default function AdminUsersPage() {
 
                           <td className="px-6 py-4">
                             <span
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold ${
-                                user.status === 'active'
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold ${user.status === 'active'
                                   ? 'bg-black text-white'
                                   : 'bg-white text-gray-500 border border-gray-200'
-                              }`}
+                                }`}
                             >
                               <span
-                                className={`w-1.5 h-1.5 rounded-full ${
-                                  user.status === 'active' ? 'bg-white' : 'bg-gray-400'
-                                }`}
+                                className={`w-1.5 h-1.5 rounded-full ${user.status === 'active' ? 'bg-white' : 'bg-gray-400'
+                                  }`}
                               />
                               {user.status === 'active' ? 'Active' : 'Suspended'}
                             </span>
@@ -882,11 +907,10 @@ export default function AdminUsersPage() {
                 <button
                   key={ent}
                   onClick={() => setAuditEntityFilter(ent)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
-                    auditEntityFilter === ent
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${auditEntityFilter === ent
                       ? 'bg-black text-white border border-black shadow-xs'
                       : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
-                  }`}
+                    }`}
                 >
                   {ent}
                 </button>

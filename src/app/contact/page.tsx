@@ -145,6 +145,31 @@ function ContactForm() {
         </div>
       </div>
 
+      {/* Hidden honeypot field to trap spam bots without affecting legitimate users */}
+      <div
+        aria-hidden="true"
+        style={{
+          opacity: 0,
+          position: 'absolute',
+          top: 0,
+          left: '-9999px',
+          height: 0,
+          width: 0,
+          zIndex: -1,
+          overflow: 'hidden',
+          pointerEvents: 'none'
+        }}
+      >
+        <label htmlFor="website">Leave this field blank</label>
+        <input
+          type="text"
+          id="website"
+          autoComplete="off"
+          tabIndex={-1}
+          {...register('website')}
+        />
+      </div>
+
       <div className="flex flex-col">
         <label htmlFor="message" className="text-sm font-medium text-black mb-2">Message *</label>
         <textarea

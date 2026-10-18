@@ -1,22 +1,32 @@
 import { app } from '@/lib/firebase/config';
+import { auth } from '@/lib/firebase/auth';
 import {
   getFirestore,
   collection,
   getDocs,
-  getDoc,
   doc,
   addDoc,
   setDoc,
   deleteDoc,
-  serverTimestamp,
-  query,
-  orderBy
+  serverTimestamp
 } from 'firebase/firestore/lite';
-import { Location, Product, Transaction, TransactionType, ProductCategory, MetalType, AuditActionType, AuditLogEntry } from '@/lib/types';
+import { Location, Product, Transaction, TransactionType, ProductCategory, MetalType } from '@/lib/types';
 import { withTimeout } from './utils';
-import { recordAuditLog } from './audit.service';
 
 const db = getFirestore(app);
+
+// Helper to get authenticated bearer token
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('Authentication required');
+  }
+  const token = await currentUser.getIdToken();
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`
+  };
+}
 
 // ==========================================
 // LOCATIONS
@@ -108,6 +118,9 @@ export async function getProducts(): Promise<Product[]> {
   });
 }
 
+/**
+ * Add a new product via server API (enforces permissions and prevents direct stock spoofing).
+ */
 export async function addProduct(data: {
   name: string;
   category: ProductCategory;
@@ -119,71 +132,25 @@ export async function addProduct(data: {
   initialLocationId?: string;
   initialLocationName?: string;
 }): Promise<string> {
-  const isIdol = data.category === 'Idols';
-  let weight = Number(data.weight);
-  if (!isIdol) {
-    if (isNaN(weight) || weight <= 0) {
-      throw new Error('Product weight is mandatory and must be greater than 0 grams.');
-    }
-  } else {
-    // For idols, weight is variable per piece and entered during repair or purchase
-    if (isNaN(weight) || weight < 0) {
-      weight = 0;
-    }
-  }
-
-  const stockByLocation: Record<string, number> = {};
-  let totalStock = 0;
-
-  const initQty = isIdol ? Math.min(1, Number(data.initialStock) || 0) : Number(data.initialStock) || 0;
-
-  if (initQty > 0 && data.initialLocationId) {
-    stockByLocation[data.initialLocationId] = initQty;
-    totalStock = initQty;
-  }
-
-  const docRef = await addDoc(collection(db, 'products'), {
-    name: data.name.trim(),
-    category: data.category,
-    metal: data.metal,
-    sku: data.sku.trim().toUpperCase(),
-    stock: totalStock,
-    stockByLocation,
-    weight,
-    purity: data.purity.trim(),
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/products', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(data)
   });
 
-  // If initial stock was given, record an initial purchase / opening stock transaction
-  if (initQty > 0 && data.initialLocationId && data.initialLocationName) {
-    await addDoc(collection(db, 'transactions'), {
-      type: 'purchase',
-      productId: docRef.id,
-      productName: data.name.trim(),
-      category: data.category,
-      metal: data.metal,
-      quantity: initQty,
-      price: 0,
-      locationId: data.initialLocationId,
-      locationName: data.initialLocationName,
-      date: new Date().toISOString().split('T')[0],
-      notes: 'Initial opening stock',
-      createdAt: serverTimestamp(),
-    });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to add product (${res.status})`);
   }
 
-  await recordAuditLog({
-    action: 'create',
-    entityType: 'product',
-    entityId: docRef.id,
-    entityName: data.name.trim(),
-    description: `Added product "${data.name.trim()}" (${data.metal} · ${data.category} · ${weight}g · SKU: ${data.sku.trim().toUpperCase()}) with ${totalStock} opening units`
-  });
-
-  return docRef.id;
+  const resData = await res.json();
+  return resData.id;
 }
 
+/**
+ * Update an existing product via server API.
+ */
 export async function updateProduct(id: string, data: {
   name: string;
   category: ProductCategory;
@@ -192,53 +159,37 @@ export async function updateProduct(id: string, data: {
   weight: number;
   purity: string;
 }): Promise<void> {
-  const isIdol = data.category === 'Idols';
-  let weight = Number(data.weight);
-  if (!isIdol) {
-    if (isNaN(weight) || weight <= 0) {
-      throw new Error('Product weight is mandatory and must be greater than 0 grams.');
-    }
-  } else {
-    if (isNaN(weight) || weight < 0) {
-      weight = 0;
-    }
-  }
-
-  await setDoc(doc(db, 'products', id), {
-    name: data.name.trim(),
-    category: data.category,
-    metal: data.metal,
-    sku: data.sku.trim().toUpperCase(),
-    weight,
-    purity: data.purity.trim(),
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
-
-  await recordAuditLog({
-    action: 'update',
-    entityType: 'product',
-    entityId: id,
-    entityName: data.name.trim(),
-    description: `Updated product "${data.name.trim()}" (${data.sku.trim().toUpperCase()} · ${weight}g · ${data.purity.trim()})`
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/products', {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ id, ...data })
   });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to update product (${res.status})`);
+  }
 }
 
+/**
+ * Delete a product via server API.
+ */
 export async function deleteProduct(id: string): Promise<void> {
-  const pSnap = await getDoc(doc(db, 'products', id));
-  const pData = pSnap.exists() ? pSnap.data() : null;
-  await deleteDoc(doc(db, 'products', id));
-
-  await recordAuditLog({
-    action: 'delete',
-    entityType: 'product',
-    entityId: id,
-    entityName: pData?.name || id,
-    description: `Deleted product "${pData?.name || id}" from catalog`
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/admin/products?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers
   });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to delete product (${res.status})`);
+  }
 }
 
 // ==========================================
-// TRANSACTIONS & STOCK LOGIC
+// TRANSACTIONS & STOCK LOGIC (SERVER-PROCESSED)
 // ==========================================
 
 export async function getTransactions(): Promise<Transaction[]> {
@@ -276,312 +227,58 @@ export interface RecordTransactionParams {
   date: string; // YYYY-MM-DD
 }
 
+/**
+ * Record a transaction (purchase, sale, return, transfer, adjustment, repair, melt)
+ * via server API with ACID atomic stock validation and verification.
+ */
 export async function recordTransaction(params: RecordTransactionParams): Promise<string> {
-  const productRef = doc(db, 'products', params.productId);
-  const productSnap = await getDoc(productRef);
-  if (!productSnap.exists()) {
-    throw new Error('Product not found');
-  }
-
-  const productData = productSnap.data() as Product;
-  const currentTotal = Number(productData.stock || 0);
-  const currentLocMap: Record<string, number> = { ...(productData.stockByLocation || {}) };
-  const sourceLocStock = Number(currentLocMap[params.locationId] || 0);
-  const qty = Number(params.quantity || 0);
-
-  let newTotal = currentTotal;
-
-  switch (params.type) {
-    case 'purchase': {
-      const isIdol = productData.category === 'Idols';
-      if (isIdol && qty !== 1) {
-        throw new Error('Idols are unique individual pieces and must be purchased 1 unit at a time.');
-      }
-      if (qty <= 0) throw new Error('Quantity must be greater than 0');
-      currentLocMap[params.locationId] = sourceLocStock + qty;
-      newTotal = currentTotal + qty;
-      break;
-    }
-
-    case 'sale': {
-      if (qty <= 0) throw new Error('Quantity must be greater than 0');
-      if (sourceLocStock < qty) {
-        throw new Error(`Insufficient stock at ${params.locationName}. Available: ${sourceLocStock}, requested: ${qty}`);
-      }
-      currentLocMap[params.locationId] = sourceLocStock - qty;
-      newTotal = currentTotal - qty;
-      break;
-    }
-
-    case 'return': {
-      if (qty <= 0) throw new Error('Quantity must be greater than 0');
-      currentLocMap[params.locationId] = sourceLocStock + qty;
-      newTotal = currentTotal + qty;
-      break;
-    }
-
-    case 'transfer': {
-      if (qty <= 0) throw new Error('Quantity must be greater than 0');
-      if (!params.toLocationId || params.toLocationId === params.locationId) {
-        throw new Error('Please select a distinct destination location');
-      }
-      if (sourceLocStock < qty) {
-        throw new Error(`Insufficient stock at source (${params.locationName}). Available: ${sourceLocStock}, requested: ${qty}`);
-      }
-      const destLocStock = Number(currentLocMap[params.toLocationId] || 0);
-      currentLocMap[params.locationId] = sourceLocStock - qty;
-      currentLocMap[params.toLocationId] = destLocStock + qty;
-      // Total stock unchanged
-      break;
-    }
-
-    case 'adjustment': {
-      if (qty === 0) throw new Error('Quantity adjustment cannot be 0');
-      if (sourceLocStock + qty < 0) {
-        throw new Error(`Stock at ${params.locationName} cannot be less than 0. Available: ${sourceLocStock}, adjustment: ${qty}`);
-      }
-      currentLocMap[params.locationId] = sourceLocStock + qty;
-      newTotal = currentTotal + qty;
-      break;
-    }
-
-    case 'melt': {
-      if (qty <= 0) throw new Error('Quantity must be greater than 0');
-      if (sourceLocStock < qty) {
-        throw new Error(`Insufficient stock at ${params.locationName}. Available: ${sourceLocStock}, requested: ${qty}`);
-      }
-      currentLocMap[params.locationId] = sourceLocStock - qty;
-      newTotal = currentTotal - qty;
-      break;
-    }
-
-    case 'repair': {
-      // Modifies the weight of the product (mainly for idols)
-      if (params.newWeight === undefined || params.newWeight === null || isNaN(params.newWeight) || params.newWeight <= 0) {
-        throw new Error('Please enter a valid new weight for the repaired item');
-      }
-      // Weight is updated on the product; stock quantity remains unaffected
-      break;
-    }
-
-    default:
-      throw new Error(`Unknown transaction type: ${params.type}`);
-  }
-
-  // 1. Write transaction document
-  const transactionPayload: Record<string, unknown> = {
-    type: params.type,
-    productId: params.productId,
-    productName: params.productName,
-    category: params.category,
-    metal: params.metal || productData.metal || 'Gold',
-    quantity: qty,
-    locationId: params.locationId,
-    locationName: params.locationName,
-    date: params.date,
-    notes: params.notes?.trim() || '',
-    createdAt: serverTimestamp(),
-  };
-
-  if (params.price !== undefined && !isNaN(params.price)) {
-    transactionPayload.price = Number(params.price);
-  }
-  if (params.toLocationId) {
-    transactionPayload.toLocationId = params.toLocationId;
-    transactionPayload.toLocationName = params.toLocationName || '';
-  }
-  if (params.customerName) {
-    transactionPayload.customerName = params.customerName.trim();
-  }
-  if (params.type === 'repair') {
-    const oldW = Number(params.previousWeight !== undefined ? params.previousWeight : productData.weight || 0);
-    const newW = Number(params.newWeight);
-    transactionPayload.previousWeight = oldW;
-    transactionPayload.newWeight = newW;
-    transactionPayload.weightChange = Number((newW - oldW).toFixed(2));
-  }
-  if (params.type === 'melt' && params.recoveredWeight !== undefined) {
-    transactionPayload.recoveredWeight = Number(params.recoveredWeight);
-  }
-
-  const txRef = await addDoc(collection(db, 'transactions'), transactionPayload);
-
-  // 2. Update product document
-  const productUpdatePayload: Record<string, unknown> = {
-    stock: newTotal,
-    stockByLocation: currentLocMap,
-    updatedAt: serverTimestamp(),
-  };
-
-  if (params.type === 'repair' && params.newWeight) {
-    productUpdatePayload.weight = Number(params.newWeight);
-  }
-
-  await setDoc(productRef, productUpdatePayload, { merge: true });
-
-  // 3. Record Audit Log
-  let auditAction: AuditActionType = 'create';
-  let auditEntity: AuditLogEntry['entityType'] = 'movement';
-  let desc = `Recorded ${params.type} for ${params.productName}`;
-
-  if (params.type === 'transfer') {
-    auditAction = 'transfer';
-    auditEntity = 'movement';
-    desc = `Transferred ${qty} unit${qty === 1 ? '' : 's'} of "${params.productName}" from ${params.locationName} to ${params.toLocationName || 'destination'}`;
-  } else if (params.type === 'adjustment') {
-    auditAction = 'adjustment';
-    auditEntity = 'movement';
-    desc = `Stock audit adjustment of ${qty > 0 ? '+' : ''}${qty} unit${Math.abs(qty) === 1 ? '' : 's'} for "${params.productName}" at ${params.locationName}`;
-  } else if (params.type === 'repair') {
-    auditAction = 'repair';
-    auditEntity = 'movement';
-    desc = `Repaired "${params.productName}" at ${params.locationName}: weight updated to ${params.newWeight}g`;
-  } else if (params.type === 'melt') {
-    auditAction = 'melt';
-    auditEntity = 'movement';
-    desc = `Melted ${qty} unit${qty === 1 ? '' : 's'} of "${params.productName}" at ${params.locationName} (Recovered: ${params.recoveredWeight || 0}g pure metal)`;
-  } else if (params.type === 'purchase') {
-    auditAction = 'create';
-    auditEntity = 'purchase';
-    desc = `Recorded purchase of ${qty} unit${qty === 1 ? '' : 's'} of "${params.productName}" at ${params.locationName}`;
-  } else if (params.type === 'sale') {
-    auditAction = 'create';
-    auditEntity = 'sale';
-    desc = `Recorded sale of ${qty} unit${qty === 1 ? '' : 's'} of "${params.productName}" at ${params.locationName}${params.customerName ? ` to ${params.customerName}` : ''}`;
-  } else if (params.type === 'return') {
-    auditAction = 'create';
-    auditEntity = 'return';
-    desc = `Restocked return of ${qty} unit${qty === 1 ? '' : 's'} of "${params.productName}" at ${params.locationName}`;
-  }
-
-  await recordAuditLog({
-    action: auditAction,
-    entityType: auditEntity,
-    entityId: txRef.id,
-    entityName: params.productName,
-    locationId: params.locationId,
-    locationName: params.locationName,
-    description: desc,
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/transactions', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(params)
   });
 
-  return txRef.id;
-}
-
-export async function deleteTransaction(tx: Transaction): Promise<void> {
-  const productRef = doc(db, 'products', tx.productId);
-  const productSnap = await getDoc(productRef);
-
-  if (productSnap.exists()) {
-    const productData = productSnap.data() as Product;
-    const currentTotal = Number(productData.stock || 0);
-    const currentLocMap: Record<string, number> = { ...(productData.stockByLocation || {}) };
-    const qty = Number(tx.quantity || 0);
-
-    let newTotal = currentTotal;
-
-    // Reverse the transaction's effect
-    switch (tx.type) {
-      case 'purchase': {
-        const locStock = Number(currentLocMap[tx.locationId] || 0);
-        currentLocMap[tx.locationId] = Math.max(0, locStock - qty);
-        newTotal = Math.max(0, currentTotal - qty);
-        break;
-      }
-
-      case 'sale': {
-        const locStock = Number(currentLocMap[tx.locationId] || 0);
-        currentLocMap[tx.locationId] = locStock + qty;
-        newTotal = currentTotal + qty;
-        break;
-      }
-
-      case 'return': {
-        const locStock = Number(currentLocMap[tx.locationId] || 0);
-        currentLocMap[tx.locationId] = Math.max(0, locStock - qty);
-        newTotal = Math.max(0, currentTotal - qty);
-        break;
-      }
-
-      case 'transfer': {
-        if (tx.toLocationId) {
-          const fromStock = Number(currentLocMap[tx.locationId] || 0);
-          const toStock = Number(currentLocMap[tx.toLocationId] || 0);
-          currentLocMap[tx.locationId] = fromStock + qty;
-          currentLocMap[tx.toLocationId] = Math.max(0, toStock - qty);
-        }
-        break;
-      }
-
-      case 'adjustment': {
-        const locStock = Number(currentLocMap[tx.locationId] || 0);
-        currentLocMap[tx.locationId] = Math.max(0, locStock - qty);
-        newTotal = Math.max(0, currentTotal - qty);
-        break;
-      }
-
-      case 'melt': {
-        const locStock = Number(currentLocMap[tx.locationId] || 0);
-        currentLocMap[tx.locationId] = locStock + qty;
-        newTotal = currentTotal + qty;
-        break;
-      }
-
-      case 'repair': {
-        if (tx.previousWeight !== undefined) {
-          await setDoc(productRef, {
-            weight: tx.previousWeight,
-            updatedAt: serverTimestamp(),
-          }, { merge: true });
-        }
-        break;
-      }
-    }
-
-    if (tx.type !== 'repair') {
-      await setDoc(productRef, {
-        stock: newTotal,
-        stockByLocation: currentLocMap,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-    }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to record transaction (${res.status})`);
   }
 
-  // Delete the transaction doc
-  await deleteDoc(doc(db, 'transactions', tx.id));
-
-  await recordAuditLog({
-    action: 'reverse',
-    entityType: tx.type === 'purchase' ? 'purchase' : tx.type === 'sale' ? 'sale' : 'movement',
-    entityId: tx.id,
-    entityName: tx.productName,
-    locationId: tx.locationId,
-    locationName: tx.locationName,
-    description: `Reversed and deleted ${tx.type} record for "${tx.productName}" (${tx.quantity} unit${tx.quantity === 1 ? '' : 's'} at ${tx.locationName})`
-  });
+  const resData = await res.json();
+  return resData.id;
 }
 
 /**
- * Erases all transaction history (purchases, sales, transfers, returns, repairs, melts)
- * across all products, while strictly retaining current stock quantities and locations untouched.
+ * Reverse and delete a transaction via server API with atomic stock reversal.
  */
-export async function clearTransactionHistory(): Promise<number> {
-  const querySnapshot = await withTimeout(getDocs(collection(db, 'transactions')));
-  if (querySnapshot.empty) return 0;
-
-  const count = querySnapshot.docs.length;
-  const batchSize = 50;
-  for (let i = 0; i < querySnapshot.docs.length; i += batchSize) {
-    const chunk = querySnapshot.docs.slice(i, i + batchSize);
-    await Promise.all(chunk.map((d) => deleteDoc(d.ref)));
-  }
-
-  await recordAuditLog({
-    action: 'zero_balance',
-    entityType: 'archive',
-    entityId: 'master_zero_balance',
-    entityName: 'All Transaction History',
-    description: `Master Zero Balance executed: erased ${count} historical transaction records from cloud database`
+export async function deleteTransaction(tx: Transaction): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/admin/transactions?id=${encodeURIComponent(tx.id)}`, {
+    method: 'DELETE',
+    headers
   });
 
-  return count;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to reverse transaction (${res.status})`);
+  }
+}
+
+/**
+ * Erases all transaction history (Master Zero-Balance) via server API.
+ */
+export async function clearTransactionHistory(): Promise<number> {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/transactions', {
+    method: 'PUT',
+    headers
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to clear transactions (${res.status})`);
+  }
+
+  const resData = await res.json();
+  return resData.count || 0;
 }

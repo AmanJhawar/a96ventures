@@ -35,6 +35,7 @@ export default function AdminLogin() {
       const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password)
       
       // Verify they are in the admins collection
+      // TREAT MISSING PROFILE AS AN ERROR: Never fail open or grant access without profile document
       const { doc, getDoc } = await import('firebase/firestore/lite')
       const { db } = await import('@/lib/firebase/config')
       const adminDoc = await getDoc(doc(db, 'admins', userCredential.user.uid))
@@ -42,10 +43,44 @@ export default function AdminLogin() {
       if (!adminDoc.exists()) {
         const { signOut } = await import('firebase/auth')
         await signOut(auth)
-        setError('Unauthorized account. You do not have admin privileges.')
-      } else {
-        router.push('/admin')
+        setError('Admin Profile Not Found: No administrator profile document exists for this account. Access is strictly denied.')
+        return
       }
+
+      const adminData = adminDoc.data()
+      if (!adminData) {
+        const { signOut } = await import('firebase/auth')
+        await signOut(auth)
+        setError('Admin Profile Error: Administrator profile record is empty. Access is strictly denied.')
+        return
+      }
+
+      if (adminData.status === 'suspended') {
+        const { signOut } = await import('firebase/auth')
+        await signOut(auth)
+        setError('Your operator account has been suspended. Please contact a super admin.')
+        return
+      }
+
+
+      // Check if user has custom claims, otherwise sync with server
+      const tokenResult = await userCredential.user.getIdTokenResult()
+      if (!tokenResult.claims.role) {
+        try {
+          await fetch('/api/admin/auth/sync', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${tokenResult.token}`
+            }
+          })
+          await userCredential.user.getIdTokenResult(true) // Force fresh token with claims
+        } catch (syncErr) {
+          console.warn('Sync claims warning:', syncErr)
+        }
+      }
+
+      router.push('/admin')
     } catch (err) {
       console.error(err)
       setError('Invalid email or password.')

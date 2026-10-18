@@ -1,58 +1,112 @@
 /**
  * admin-verify.ts
  * 
- * Edge-compatible Firebase admin token verification using the Firestore REST API.
- * This avoids bundling firebase-admin (which requires native Node.js modules)
- * into the Edge/Cloudflare runtime.
+ * Cryptographically verifies Firebase ID tokens using Firebase Admin SDK (verifyIdToken),
+ * strictly asserting the signature against Google's public x509 certs, along with
+ * hard-coded checks for project ID, audience, issuer, and expiration.
  */
 
+import { adminAuth, adminDb, FIREBASE_PROJECT_ID } from '@/lib/firebase/admin'
+import { DecodedIdToken } from 'firebase-admin/auth'
+
+// HARD-CODED PROJECT ID: Enforces absolute immunity against cross-project token leakage
+export const HARDCODED_PROJECT_ID = 'a96ventures-979e6'
+export const EXPECTED_ISSUER = `https://securetoken.google.com/${HARDCODED_PROJECT_ID}`
+
 export type VerifyResult =
-  | { ok: true; uid: string; projectId: string }
+  | { ok: true; uid: string; projectId: string; token: DecodedIdToken }
   | { ok: false; status: 401 | 403; message: string }
 
 /**
- * Verifies a Firebase ID token and checks the user is in the /admins collection.
- * Uses the Firestore REST API directly — no firebase-admin required.
+ * Verifies a Firebase ID token:
+ * 1. Checks Authorization header formatting.
+ * 2. Cryptographically verifies token signature via Firebase Admin SDK with Google's public certs.
+ * 3. Asserts Audience matches HARDCODED_PROJECT_ID ('a96ventures-979e6').
+ * 4. Asserts Issuer matches EXPECTED_ISSUER ('https://securetoken.google.com/a96ventures-979e6').
+ * 5. Asserts token expiration timestamp.
+ * 6. Checks /admins/{uid} collection to confirm active admin status.
  */
 export async function verifyAdminToken(authHeader: string | null): Promise<VerifyResult> {
   if (!authHeader?.startsWith('Bearer ')) {
     return { ok: false, status: 401, message: 'Unauthorized: Missing token' }
   }
 
-  const token = authHeader.split('Bearer ')[1]
+  const token = authHeader.split('Bearer ')[1]?.trim()
+  if (!token) {
+    return { ok: false, status: 401, message: 'Unauthorized: Empty token' }
+  }
 
   try {
-    // Decode JWT payload (base64url encoded)
-    const payloadBase64 = token.split('.')[1]
-    let base64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/')
-    const pad = base64.length % 4
-    if (pad) base64 += '='.repeat(4 - pad)
+    // 1. Cryptographically verify signature using Google's public certs
+    const decoded = await adminAuth.verifyIdToken(token)
 
-    const payload = JSON.parse(atob(base64))
-    const uid: string = payload.user_id
-    const projectId: string = payload.aud
-
-    if (!uid || !projectId) {
-      return { ok: false, status: 401, message: 'Unauthorized: Invalid token payload' }
+    // 2. Strict Hard-coded Audience Validation
+    if (decoded.aud !== HARDCODED_PROJECT_ID) {
+      return {
+        ok: false,
+        status: 403,
+        message: `Forbidden: Token audience mismatch (expected ${HARDCODED_PROJECT_ID}, got ${decoded.aud})`
+      }
     }
 
-    // Verify token validity AND admin status in one request.
-    // Firestore security rules allow users to read only their own /admins/{uid} document.
-    // A forged/expired token → 401/403 from Firebase. A non-admin user → 404.
-    const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/admins/${uid}`
-    const res = await fetch(firestoreUrl, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-
-    if (res.status === 404) {
-      return { ok: false, status: 403, message: 'Forbidden: Admin access required' }
-    }
-    if (!res.ok) {
-      return { ok: false, status: 401, message: `Unauthorized: Token verification failed (${res.status})` }
+    // 3. Strict Hard-coded Issuer Validation
+    if (decoded.iss !== EXPECTED_ISSUER) {
+      return {
+        ok: false,
+        status: 403,
+        message: `Forbidden: Token issuer mismatch (expected ${EXPECTED_ISSUER}, got ${decoded.iss})`
+      }
     }
 
-    return { ok: true, uid, projectId }
-  } catch {
-    return { ok: false, status: 401, message: 'Unauthorized: Invalid token' }
+    // 4. Strict Expiry Validation
+    if (decoded.exp && Date.now() / 1000 > decoded.exp) {
+      return { ok: false, status: 401, message: 'Unauthorized: Token expired' }
+    }
+
+    // 5. Verify User Profile & Active Status in Firestore
+    // TREAT MISSING PROFILE AS AN ERROR: Never fail open without admin profile document
+    const adminDoc = await adminDb.collection('admins').doc(decoded.uid).get()
+    if (!adminDoc.exists) {
+      return { ok: false, status: 403, message: 'Forbidden: Admin profile not found' }
+    }
+
+    const adminData = adminDoc.data()
+    if (!adminData) {
+      return { ok: false, status: 403, message: 'Forbidden: Admin profile is empty' }
+    }
+
+    const status = adminData.status || 'active'
+    if (status === 'suspended') {
+      return { ok: false, status: 403, message: 'Forbidden: Admin account is suspended' }
+    }
+
+    return {
+      ok: true,
+      uid: decoded.uid,
+      projectId: HARDCODED_PROJECT_ID,
+      token: decoded
+    }
+  } catch (err: unknown) {
+    const error = err as { code?: string; message?: string }
+    console.error('verifyAdminToken failed signature/claims validation:', error)
+
+    if (error.code === 'auth/id-token-expired') {
+      return { ok: false, status: 401, message: 'Unauthorized: Token expired' }
+    }
+    if (error.code === 'auth/id-token-revoked') {
+      return { ok: false, status: 401, message: 'Unauthorized: Token has been revoked' }
+    }
+    if (error.code === 'auth/user-disabled') {
+      return { ok: false, status: 403, message: 'Forbidden: User account is disabled' }
+    }
+    if (error.code === 'auth/argument-error' || error.code === 'auth/invalid-id-token') {
+      return { ok: false, status: 401, message: 'Unauthorized: Invalid token signature or format' }
+    }
+
+    return {
+      ok: false,
+      status: 401,
+      message: error.message ? `Unauthorized: ${error.message}` : 'Unauthorized: Invalid token'
+    }
   }
 }

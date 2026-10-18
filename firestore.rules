@@ -2,21 +2,42 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Function to check if the user is the authorized admin
-    function isAdmin() {
-      return request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    // Core authentication check
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Active status check via Firebase Custom Claims (default empty string, fail closed)
+    function isActive() {
+      return isAuthenticated() && 
+        request.auth.token.get('status', '') == 'active';
+    }
+
+    // Role check via Firebase Custom Claims
+    function isSuperAdmin() {
+      return isActive() && 
+        request.auth.token.get('role', '') == 'super_admin';
+    }
+
+    // Granular permission check via Firebase Custom Claims
+    function hasPermission(module, action) {
+      return isSuperAdmin() || (
+        isActive() &&
+        request.auth.token.get('permissions', {}).get(module, {}).get(action, false) == true
+      );
     }
 
     // Function to validate inquiry submissions and block bloated payloads
     function isValidInquiry() {
       let data = request.resource.data;
       return data.keys().hasAll(['firstName', 'lastName', 'countryCode', 'mobile', 'message', 'inquiryType', 'status', 'createdAt'])
+        && data.keys().hasOnly(['firstName', 'lastName', 'countryCode', 'mobile', 'message', 'inquiryType', 'status', 'createdAt', 'middleName', 'email', 'company', 'gstinPan'])
         && data.firstName is string && data.firstName.size() > 0 && data.firstName.size() < 100
         && data.lastName is string && data.lastName.size() > 0 && data.lastName.size() < 100
         && data.countryCode is string && data.countryCode.size() > 0 && data.countryCode.size() < 10
         && data.mobile is string && data.mobile.size() >= 7 && data.mobile.size() <= 15
         && data.message is string && data.message.size() > 0 && data.message.size() < 5000
-        && data.inquiryType is string
+        && data.inquiryType is string && data.inquiryType.size() > 0 && data.inquiryType.size() <= 50
         && data.status == 'unread'
         && data.createdAt == request.time
         && (!('middleName' in data) || (data.middleName is string && data.middleName.size() < 100))
@@ -25,52 +46,81 @@ service cloud.firestore {
         && (!('gstinPan' in data) || (data.gstinPan is string && data.gstinPan.size() < 20));
     }
 
-    // Admins Collection
+    // Admins Collection - strictly managed by Firebase Admin SDK on the server
     match /admins/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if false; // Only admin SDK or console can write to admins
+      // Authenticated users can read their own profile; operators with users.view or super admins can read all
+      allow read: if isAuthenticated() && (request.auth.uid == uid || isSuperAdmin() || hasPermission('users', 'view'));
+      allow write: if false; // All mutations must go through server API with Firebase Admin SDK
     }
 
-    // Publicly readable collections (Admin write only)
+    // Publicly readable marketing collections (Granular admin write only)
     match /team/{document=**} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if hasPermission('team', 'add');
+      allow update: if hasPermission('team', 'edit');
+      allow delete: if hasPermission('team', 'delete');
     }
     match /brands/{document=**} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if hasPermission('brands', 'add');
+      allow update: if hasPermission('brands', 'edit');
+      allow delete: if hasPermission('brands', 'delete');
     }
     match /portfolio/{document=**} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if hasPermission('portfolio', 'add');
+      allow update: if hasPermission('portfolio', 'edit');
+      allow delete: if hasPermission('portfolio', 'delete');
     }
     match /insights/{document=**} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSuperAdmin();
     }
     match /settings/{document=**} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSuperAdmin();
     }
 
-    // Secure PII Collection (Public create only with validation, Admin read/write)
+    // Secure PII Inquiries Collection (Public create only with validation, Granular admin read/write)
     match /inquiries/{inquiryId} {
       allow create: if isValidInquiry();
-      allow read, update, delete: if isAdmin();
+      allow read: if hasPermission('inquiries', 'view');
+      allow update: if hasPermission('inquiries', 'edit');
+      allow delete: if hasPermission('inquiries', 'delete');
     }
 
-    // Inventory, Sales & Locations (Admin only)
+    // Locations (Granular admin permission required)
     match /locations/{document=**} {
-      allow read, write: if isAdmin();
-    }
-    match /products/{document=**} {
-      allow read, write: if isAdmin();
-    }
-    match /transactions/{document=**} {
-      allow read, write: if isAdmin();
+      allow read: if hasPermission('locations', 'view');
+      allow create: if hasPermission('locations', 'add');
+      allow update: if hasPermission('locations', 'edit');
+      allow delete: if hasPermission('locations', 'delete');
     }
 
-    // Default deny for anything else
+    // Products & Inventory:
+    // Read: Requires 'products.view' via custom claims
+    // Write: STRICTLY DENIED for client SDKs. All stock & catalog modifications MUST go through server API!
+    match /products/{document=**} {
+      allow read: if hasPermission('products', 'view');
+      allow write: if false; // Enforce server-side execution for stock and price integrity
+    }
+
+    // Transactions (Sales, Purchases, Movements):
+    // Read: Requires relevant module view permission via custom claims
+    // Write: STRICTLY DENIED for client SDKs. All financial and stock transactions MUST go through server API!
+    match /transactions/{document=**} {
+      allow read: if hasPermission('sales', 'view') || hasPermission('purchases', 'view') || hasPermission('movements', 'view');
+      allow write: if false; // Enforce server-side execution with ACID atomic transactions
+    }
+
+    // Audit Logs: Immutable Append-Only Trail
+    match /audit_logs/{logId} {
+      allow read: if isActive() && (isSuperAdmin() || hasPermission('users', 'view'));
+      allow create: if isActive();
+      allow update, delete: if false;
+    }
+
+    // Absolute default deny for any other collections or paths
     match /{document=**} {
       allow read, write: if false;
     }

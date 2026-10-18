@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useMemo } from 'react'
 import { AdminUser, UserPermissions } from '@/lib/types'
-import { SUPER_ADMIN_PERMISSIONS } from '@/lib/constants/permissions'
+import { EMPTY_PERMISSIONS, SUPER_ADMIN_PERMISSIONS } from '@/lib/constants/permissions'
 
 interface PermissionsContextValue {
   adminUser: AdminUser | null
@@ -16,12 +16,13 @@ interface PermissionsContextValue {
   }
 }
 
+// Strict Default Deny: Unauthenticated or uninitialized contexts have zero privileges
 const PermissionsContext = createContext<PermissionsContextValue>({
   adminUser: null,
-  permissions: SUPER_ADMIN_PERMISSIONS,
-  isSuperAdmin: true,
-  hasPermission: () => true,
-  operatorIdentity: { id: 'super_admin', name: 'Super Admin', email: 'admin@a96ventures.com' }
+  permissions: EMPTY_PERMISSIONS,
+  isSuperAdmin: false,
+  hasPermission: () => false,
+  operatorIdentity: { id: '', name: 'Unauthorized', email: '' }
 })
 
 export function PermissionsProvider({
@@ -31,30 +32,39 @@ export function PermissionsProvider({
   children: React.ReactNode
   adminUser: AdminUser | null
 }) {
-  const isSuperAdmin = adminUser?.role === 'super_admin' || !adminUser
+  // Root admin profile (super_admin or legacy admin) retains full super admin privileges
+  const isSuperAdmin = Boolean(
+    adminUser &&
+    adminUser.status === 'active' &&
+    (adminUser.role === 'super_admin' || (adminUser.role as string) === 'admin' || !adminUser.role)
+  )
 
   const permissions = useMemo(() => {
-    if (!adminUser) return SUPER_ADMIN_PERMISSIONS
-    if (adminUser.role === 'super_admin') return SUPER_ADMIN_PERMISSIONS
-    return adminUser.permissions || SUPER_ADMIN_PERMISSIONS
-  }, [adminUser])
+    if (!adminUser || adminUser.status !== 'active') return EMPTY_PERMISSIONS
+    if (isSuperAdmin) return SUPER_ADMIN_PERMISSIONS
+    return adminUser.permissions || EMPTY_PERMISSIONS
+  }, [adminUser, isSuperAdmin])
 
   const operatorIdentity = useMemo(() => {
     return {
-      id: adminUser?.id || 'admin',
-      name: adminUser?.displayName || 'Admin',
-      email: adminUser?.email || 'admin@a96ventures.com'
+      id: adminUser?.id || '',
+      name: adminUser?.displayName || 'Anonymous Operator',
+      email: adminUser?.email || ''
     }
   }, [adminUser])
 
   const hasPermission = useMemo(() => {
     return (module: keyof UserPermissions, action: string): boolean => {
+      // Default deny for inactive or null users
+      if (!adminUser || adminUser.status !== 'active') return false
+      // Super admin has full access across all operations
       if (isSuperAdmin) return true
+
       const modulePerms = permissions[module] as Record<string, boolean> | undefined
       if (!modulePerms) return false
       return Boolean(modulePerms[action])
     }
-  }, [isSuperAdmin, permissions])
+  }, [adminUser, isSuperAdmin, permissions])
 
   const value = useMemo(
     () => ({

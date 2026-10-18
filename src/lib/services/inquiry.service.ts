@@ -75,9 +75,24 @@ export async function submitInquiry(data: {
   message: string;
   inquiryType: string;
 }) {
+  const allowedFields = {
+    firstName: data.firstName,
+    middleName: data.middleName,
+    lastName: data.lastName,
+    countryCode: data.countryCode,
+    mobile: data.mobile,
+    email: data.email,
+    company: data.company,
+    gstinPan: data.gstinPan,
+    message: data.message,
+    inquiryType: data.inquiryType,
+    status: 'unread' as const,
+    createdAt: serverTimestamp()
+  };
+
   const payload = Object.fromEntries(
-    Object.entries({ ...data, status: 'unread', createdAt: serverTimestamp() })
-      .filter(([, v]) => v !== undefined && v !== '')
+    Object.entries(allowedFields).filter(([, v]) => v !== undefined && v !== '')
   );
+
   return await withTimeout(addDoc(collection(db, INQUIRIES_COLLECTION), payload));
 }
