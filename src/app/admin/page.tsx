@@ -3,8 +3,11 @@
 import { Warehouse, ShoppingCart, MapPin, BarChart3, Users, Briefcase, Bookmark, MessageSquare, ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
 import { StaggerContainer, FadeInUp } from '@/components/motion-transitions'
+import { usePermissions } from '@/lib/context/PermissionsContext'
 
 export default function AdminDashboard() {
+  const { hasPermission, isSuperAdmin } = usePermissions()
+
   const cards = [
     { name: 'Inventory', href: '/admin/inventory', icon: Warehouse, description: 'Manage products catalog, purchases, transfers, repairs, and melts.' },
     { name: 'Sales', href: '/admin/sales', icon: ShoppingCart, description: 'Record customer sales and manage returns across locations.' },
@@ -17,6 +20,26 @@ export default function AdminDashboard() {
     { name: 'Portfolio', href: '/admin/portfolio', icon: Briefcase, description: 'Update your investment portfolio.' },
   ]
 
+  const accessibleCards = cards.filter((card) => {
+    if (isSuperAdmin) return true
+    if (card.href === '/admin/users') return false
+    if (card.href === '/admin/inventory') {
+      return (
+        hasPermission('products', 'view') ||
+        hasPermission('purchases', 'view') ||
+        hasPermission('movements', 'view')
+      )
+    }
+    if (card.href === '/admin/sales') return hasPermission('sales', 'view') || hasPermission('returns', 'view')
+    if (card.href === '/admin/locations') return hasPermission('locations', 'view')
+    if (card.href === '/admin/reports') return hasPermission('reports', 'view')
+    if (card.href === '/admin/inquiries') return hasPermission('inquiries', 'view')
+    if (card.href === '/admin/team') return hasPermission('team', 'view')
+    if (card.href === '/admin/brands') return hasPermission('brands', 'view')
+    if (card.href === '/admin/portfolio') return hasPermission('portfolio', 'view')
+    return true
+  })
+
   return (
     <div>
       <div className="mb-6">
@@ -25,7 +48,7 @@ export default function AdminDashboard() {
       </div>
 
       <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" staggerDelay={0.05}>
-        {cards.map((card) => {
+        {accessibleCards.map((card) => {
           const Icon = card.icon
           return (
             <FadeInUp key={card.name} yOffset={8}>

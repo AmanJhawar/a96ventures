@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import {
   ROLE_PRESETS,
   SUPER_ADMIN_PERMISSIONS,
@@ -32,8 +33,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: caller.error }, { status: caller.status })
     }
 
-    if (!hasPermission(caller, 'users', 'view')) {
-      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to view users' }, { status: 403 })
+    if (!caller.isSuperAdmin) {
+      return NextResponse.json({ error: 'Forbidden: Only Super Admins can view and manage users' }, { status: 403 })
     }
 
     const snap = await adminDb.collection('admins').get()
@@ -88,8 +89,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: caller.error }, { status: caller.status })
     }
 
-    if (!hasPermission(caller, 'users', 'add')) {
-      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to create users' }, { status: 403 })
+    if (!caller.isSuperAdmin) {
+      return NextResponse.json({ error: 'Forbidden: Only Super Admins can create users' }, { status: 403 })
     }
 
     const body = await req.json()
@@ -170,18 +171,36 @@ export async function POST(req: NextRequest) {
     // 3. Create document in Firestore /admins/{uid}
     await adminDb.collection('admins').doc(userRecord.uid).set(adminDocData)
 
-    // 4. Record Audit Log Entry
+    // 4. Email a set-password link to the new user
+    let emailSent = false
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDmKFzBNpXXy_rNvRtdgKhv9wDGax2QEKI'
+      const emailRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestType: 'PASSWORD_RESET',
+          email: cleanEmail
+        })
+      })
+      emailSent = emailRes.ok
+    } catch (emailErr) {
+      console.warn('Notice: Failed to email set-password link:', emailErr)
+    }
+
+    // 5. Record Audit Log Entry with server timestamp
     await adminDb.collection('audit_logs').add({
       userId: caller.callerUid,
-      userName: caller.callerData.displayName,
-      userEmail: caller.callerData.email,
+      userName: caller.callerName,
+      userEmail: caller.callerEmail,
       action: 'create',
       entityType: 'user',
       entityId: userRecord.uid,
       entityName: cleanName,
-      description: `Created user account "${cleanName}" (${cleanEmail}) with role "${userRole}"`,
+      description: `Created user account "${cleanName}" (${cleanEmail}) with role "${userRole}" and sent password setup link`,
       diffs: [],
-      timestamp: now
+      timestamp: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp()
     })
 
     return NextResponse.json({
@@ -190,6 +209,7 @@ export async function POST(req: NextRequest) {
         id: userRecord.uid,
         ...adminDocData
       },
+      emailSent,
       temporaryPassword: password ? undefined : cleanPassword
     })
   } catch (err: unknown) {
@@ -211,8 +231,8 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: caller.error }, { status: caller.status })
     }
 
-    if (!hasPermission(caller, 'users', 'edit')) {
-      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to edit users' }, { status: 403 })
+    if (!caller.isSuperAdmin) {
+      return NextResponse.json({ error: 'Forbidden: Only Super Admins can modify users' }, { status: 403 })
     }
 
     const body = await req.json()
@@ -249,13 +269,13 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden: Only Super Admins can promote to Super Admin' }, { status: 403 })
     }
 
-    // Prevent self-lockout: caller cannot suspend or demote themselves
+    // Prevent self-lockout or editing own role: caller cannot change their role or suspend themselves
     if (id === caller.callerUid) {
       if (status && status !== 'active') {
         return NextResponse.json({ error: 'You cannot suspend your own account' }, { status: 400 })
       }
-      if (caller.isSuperAdmin && role && role !== 'super_admin') {
-        return NextResponse.json({ error: 'You cannot remove your own Super Admin role' }, { status: 400 })
+      if (role !== undefined && role !== currentData.role) {
+        return NextResponse.json({ error: 'You cannot edit your own role' }, { status: 400 })
       }
     }
 
@@ -320,21 +340,41 @@ export async function PUT(req: NextRequest) {
 
     await adminDb.collection('admins').doc(id).update(firestoreUpdates)
 
-    // 4. Record Audit Log
+    // 4. Record Audit Log with server timestamp
     await adminDb.collection('audit_logs').add({
       userId: caller.callerUid,
-      userName: caller.callerData.displayName,
-      userEmail: caller.callerData.email,
+      userName: caller.callerName,
+      userEmail: caller.callerEmail,
       action: 'update',
       entityType: 'user',
       entityId: id,
       entityName: firestoreUpdates.displayName || currentData.displayName || id,
       description: `Updated user "${firestoreUpdates.displayName || currentData.displayName || id}" (Role: ${updatedRole}, Status: ${updatedStatus})`,
       diffs: [],
-      timestamp: now
+      timestamp: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp()
     })
 
-    return NextResponse.json({ success: true })
+    // 5. Optionally email password reset link
+    let emailSent = false
+    if (body.sendPasswordResetEmail && currentData.email) {
+      try {
+        const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDmKFzBNpXXy_rNvRtdgKhv9wDGax2QEKI'
+        const emailRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestType: 'PASSWORD_RESET',
+            email: currentData.email
+          })
+        })
+        emailSent = emailRes.ok
+      } catch (emailErr) {
+        console.warn('Notice: Failed to email reset password link:', emailErr)
+      }
+    }
+
+    return NextResponse.json({ success: true, emailSent })
   } catch (err: unknown) {
     console.error('PUT /api/admin/users error:', err)
     const msg = err instanceof Error ? err.message : 'Failed to update user'
@@ -354,8 +394,8 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: caller.error }, { status: caller.status })
     }
 
-    if (!hasPermission(caller, 'users', 'delete')) {
-      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to delete users' }, { status: 403 })
+    if (!caller.isSuperAdmin) {
+      return NextResponse.json({ error: 'Forbidden: Only Super Admins can delete users' }, { status: 403 })
     }
 
     const { searchParams } = new URL(req.url)
@@ -407,19 +447,19 @@ export async function DELETE(req: NextRequest) {
     // 2. Delete from Firestore
     await adminDb.collection('admins').doc(id).delete()
 
-    // 3. Record Audit Log
-    const now = new Date().toISOString()
+    // 3. Record Audit Log with server timestamp
     await adminDb.collection('audit_logs').add({
       userId: caller.callerUid,
-      userName: caller.callerData.displayName,
-      userEmail: caller.callerData.email,
+      userName: caller.callerName,
+      userEmail: caller.callerEmail,
       action: 'delete',
       entityType: 'user',
       entityId: id,
       entityName: targetData.displayName || targetData.email || id,
       description: `Deleted user account "${targetData.displayName || targetData.email || id}"`,
       diffs: [],
-      timestamp: now
+      timestamp: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp()
     })
 
     return NextResponse.json({ success: true })

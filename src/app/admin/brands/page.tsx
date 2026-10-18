@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { collection, addDoc, setDoc, deleteDoc, doc, getDocs, getFirestore } from 'firebase/firestore/lite'
 import { app } from '@/lib/firebase/config'
 import { Brand } from '@/lib/types'
-import { Trash2, Plus, Bookmark, Edit2 } from 'lucide-react'
+import { Trash2, Plus, Bookmark, Edit2, Lock } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
@@ -14,6 +14,8 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { usePermissions } from '@/lib/context/PermissionsContext'
+import { toast } from 'sonner'
+import { recordAuditLog } from '@/lib/services/audit.service'
 
 const db = getFirestore(app)
 
@@ -27,7 +29,7 @@ const brandSchema = z.object({
 type BrandValues = z.infer<typeof brandSchema>
 
 export default function AdminBrands() {
-  const { hasPermission } = usePermissions()
+  const { hasPermission, isSuperAdmin } = usePermissions()
   const [brands, setBrands] = useState<Brand[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -70,11 +72,22 @@ export default function AdminBrands() {
 
   const executeDelete = async () => {
     if (!deleteId) return
+    const targetBrand = brands.find(t => t.id === deleteId)
     try {
       await deleteDoc(doc(db, 'brands', String(deleteId)))
       setBrands(brands.filter(t => t.id !== deleteId))
-    } catch (err) {
+      await recordAuditLog({
+        action: 'delete',
+        entityType: 'brand',
+        entityId: String(deleteId),
+        entityName: targetBrand?.name || String(deleteId),
+        description: `Deleted brand partnership "${targetBrand?.name || deleteId}"`
+      }).catch((auditErr) => console.warn('Audit error:', auditErr))
+      toast.success('Brand partnership deleted successfully')
+    } catch (err: unknown) {
       console.error("Error deleting", err)
+      const msg = err instanceof Error ? err.message : 'Failed to delete brand'
+      toast.error(msg)
     } finally {
       setDeleteId(null)
     }
@@ -102,13 +115,33 @@ export default function AdminBrands() {
       if (editingId) {
         await setDoc(doc(db, 'brands', editingId), data)
         setBrands(brands.map(b => b.id === editingId ? { id: editingId, ...data } as Brand : b))
+        await recordAuditLog({
+          action: 'update',
+          entityType: 'brand',
+          entityId: editingId,
+          entityName: data.name,
+          description: `Updated brand partnership "${data.name}" (${data.sector})`,
+          metadata: { sector: data.sector }
+        }).catch((auditErr) => console.warn('Audit error:', auditErr))
+        toast.success('Brand partnership updated successfully')
       } else {
         const docRef = await addDoc(collection(db, 'brands'), data)
         setBrands([...brands, { id: docRef.id, ...data } as Brand])
+        await recordAuditLog({
+          action: 'create',
+          entityType: 'brand',
+          entityId: docRef.id,
+          entityName: data.name,
+          description: `Created brand partnership "${data.name}" (${data.sector})`,
+          metadata: { sector: data.sector }
+        }).catch((auditErr) => console.warn('Audit error:', auditErr))
+        toast.success('Brand partnership created successfully')
       }
       handleCancel()
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error saving", err)
+      const msg = err instanceof Error ? err.message : 'Failed to save brand'
+      toast.error(msg)
     }
   }
 
@@ -119,6 +152,20 @@ export default function AdminBrands() {
   }
 
   const shouldReduceMotion = useReducedMotion()
+
+  if (!isSuperAdmin && !hasPermission('brands', 'view')) {
+    return (
+      <div className="w-full py-20 flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4 text-black">
+          <Lock size={22} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-black mb-2">Access Restricted</h2>
+        <p className="text-sm text-gray-500 max-w-md">
+          You do not have permission to view brand partnerships.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div>

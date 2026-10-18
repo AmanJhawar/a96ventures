@@ -48,8 +48,8 @@ service cloud.firestore {
 
     // Admins Collection - strictly managed by Firebase Admin SDK on the server
     match /admins/{uid} {
-      // Authenticated users can read their own profile; operators with users.view or super admins can read all
-      allow read: if isAuthenticated() && (request.auth.uid == uid || isSuperAdmin() || hasPermission('users', 'view'));
+      // Authenticated users can read only their own profile; nobody can write from client SDK
+      allow read: if isAuthenticated() && request.auth.uid == uid;
       allow write: if false; // All mutations must go through server API with Firebase Admin SDK
     }
 
@@ -89,12 +89,10 @@ service cloud.firestore {
       allow delete: if hasPermission('inquiries', 'delete');
     }
 
-    // Locations (Granular admin permission required)
+    // Locations (Granular admin permission required to read; mutations via server API with audit logs)
     match /locations/{document=**} {
       allow read: if hasPermission('locations', 'view');
-      allow create: if hasPermission('locations', 'add');
-      allow update: if hasPermission('locations', 'edit');
-      allow delete: if hasPermission('locations', 'delete');
+      allow write: if false; // All location modifications must go through server API with audit logs!
     }
 
     // Products & Inventory:
@@ -113,11 +111,14 @@ service cloud.firestore {
       allow write: if false; // Enforce server-side execution with ACID atomic transactions
     }
 
-    // Audit Logs: Immutable Append-Only Trail
+    // Audit Logs: Create only with verified auth UID and server timestamp; never update; delete only for Zero Balance
     match /audit_logs/{logId} {
-      allow read: if isActive() && (isSuperAdmin() || hasPermission('users', 'view'));
-      allow create: if isActive();
-      allow update, delete: if false;
+      allow read: if isAuthenticated() && (isSuperAdmin() || hasPermission('users', 'view'));
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.timestamp == request.time;
+      allow update: if false;
+      allow delete: if hasPermission('archive', 'zeroBalance');
     }
 
     // Absolute default deny for any other collections or paths

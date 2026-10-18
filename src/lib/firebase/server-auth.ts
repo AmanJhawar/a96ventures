@@ -11,6 +11,8 @@ export const EXPECTED_ISSUER = `https://securetoken.google.com/${HARDCODED_PROJE
 
 export interface AuthenticatedCaller {
   callerUid: string
+  callerName: string
+  callerEmail: string
   callerData: {
     email: string
     displayName: string
@@ -84,7 +86,10 @@ export async function getAuthenticatedCaller(req: NextRequest): Promise<AuthResu
         ? 'super_admin'
         : callerData.role
 
-    const isSuperAdmin = role === 'super_admin'
+    const isSuperAdmin =
+      role === 'super_admin' ||
+      decoded.role === 'super_admin' ||
+      decoded.role === 'admin'
 
     // DEFAULT TO NO ACCESS: If permissions field is missing, default strictly to EMPTY_PERMISSIONS
     // (Only an explicit active super_admin receives SUPER_ADMIN_PERMISSIONS)
@@ -92,14 +97,29 @@ export async function getAuthenticatedCaller(req: NextRequest): Promise<AuthResu
       ? SUPER_ADMIN_PERMISSIONS
       : (callerData.permissions || EMPTY_PERMISSIONS)
 
+    // Derive verified user identity directly from verified token and admin profile
+    const tokenEmail =
+      (typeof decoded.email === 'string' && decoded.email.trim()) ||
+      (callerData.email ? String(callerData.email).trim() : '') ||
+      ''
+    const tokenName =
+      (typeof decoded.name === 'string' && decoded.name.trim()) ||
+      (typeof decoded.displayName === 'string' && decoded.displayName.trim()) ||
+      (callerData.displayName && String(callerData.displayName).trim()) ||
+      (callerData.name && String(callerData.name).trim()) ||
+      (tokenEmail ? tokenEmail.split('@')[0] : '') ||
+      'Admin'
+
     return {
       ok: true,
       caller: {
         callerUid,
+        callerName: tokenName,
+        callerEmail: tokenEmail,
         callerData: {
           ...callerData,
-          email: callerData.email || (decoded.email as string) || '',
-          displayName: callerData.displayName || callerData.name || (decoded.name as string) || 'User',
+          email: tokenEmail,
+          displayName: tokenName,
           role: callerData.role,
           status: callerData.status || 'active'
         },

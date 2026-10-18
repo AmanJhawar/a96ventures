@@ -599,6 +599,20 @@ export default function AdminSales() {
     }
   }
 
+  if (!isSuperAdmin && !hasPermission('sales', 'view') && !hasPermission('returns', 'view')) {
+    return (
+      <div className="w-full py-20 flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4 text-black">
+          <Lock size={22} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-black mb-2">Access Restricted</h2>
+        <p className="text-sm text-gray-500 max-w-md">
+          You do not have permission to view sales or returns records.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div>
       {/* Header */}
@@ -683,34 +697,38 @@ export default function AdminSales() {
 
       {/* Tabs */}
       <div className="flex items-center border-b border-gray-200 mb-6">
-        <button
-          onClick={() => {
-            setActiveTab('sales')
-            setIsSaleFormOpen(false)
-            setIsReturnFormOpen(false)
-          }}
-          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'sales'
-            ? 'border-black text-black'
-            : 'border-transparent text-gray-500 hover:text-black'
-            }`}
-        >
-          <ShoppingCart size={16} />
-          Sales ({salesList.length})
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('returns')
-            setIsSaleFormOpen(false)
-            setIsReturnFormOpen(false)
-          }}
-          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'returns'
-            ? 'border-black text-black'
-            : 'border-transparent text-gray-500 hover:text-black'
-            }`}
-        >
-          <RotateCcw size={16} />
-          Returns & Restock ({returnsList.length})
-        </button>
+        {(isSuperAdmin || hasPermission('sales', 'view')) && (
+          <button
+            onClick={() => {
+              setActiveTab('sales')
+              setIsSaleFormOpen(false)
+              setIsReturnFormOpen(false)
+            }}
+            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'sales'
+              ? 'border-black text-black'
+              : 'border-transparent text-gray-500 hover:text-black'
+              }`}
+          >
+            <ShoppingCart size={16} />
+            Sales ({salesList.length})
+          </button>
+        )}
+        {(isSuperAdmin || hasPermission('returns', 'view')) && (
+          <button
+            onClick={() => {
+              setActiveTab('returns')
+              setIsSaleFormOpen(false)
+              setIsReturnFormOpen(false)
+            }}
+            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'returns'
+              ? 'border-black text-black'
+              : 'border-transparent text-gray-500 hover:text-black'
+              }`}
+          >
+            <RotateCcw size={16} />
+            Returns & Restock ({returnsList.length})
+          </button>
+        )}
       </div>
 
       {/* Date Range Filter Bar */}

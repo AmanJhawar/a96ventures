@@ -20,7 +20,10 @@ import {
   MapPin,
   Lock,
   Unlock,
-  AlertTriangle
+  AlertTriangle,
+  Mail,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { AdminUser, UserRole, UserStatus, UserPermissions, AuditLogEntry, Location } from '@/lib/types'
 import {
@@ -28,7 +31,8 @@ import {
   createAdminUser,
   updateAdminUser,
   deleteAdminUser,
-  updateUserStatus
+  updateUserStatus,
+  sendPasswordResetEmail
 } from '@/lib/services/users.service'
 import { getAuditLogs } from '@/lib/services/audit.service'
 import { getLocations } from '@/lib/services/inventory.service'
@@ -72,6 +76,7 @@ export default function AdminUsersPage() {
   // Form Drawer State
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
+  const isEditingSelf = Boolean(editingUserId && currentLoggedUser?.id && editingUserId === currentLoggedUser.id)
   const [formDisplayName, setFormDisplayName] = useState('')
   const [formEmail, setFormEmail] = useState('')
   const [formPhone, setFormPhone] = useState('')
@@ -89,10 +94,14 @@ export default function AdminUsersPage() {
 
   // Load All Data
   const loadData = async () => {
+    if (!isSuperAdmin) {
+      setLoading(false)
+      return
+    }
     try {
       const [uList, aList, locList] = await Promise.all([
         getAdminUsers(),
-        getAuditLogs({ limitCount: 200 }),
+        getAuditLogs({ limitCount: 500 }),
         getLocations()
       ])
       setUsers(uList)
@@ -100,7 +109,8 @@ export default function AdminUsersPage() {
       setLocations(locList)
     } catch (err) {
       console.error('Failed to load users data:', err)
-      toast.error('Unable to load users data')
+      const msg = err instanceof Error ? err.message : 'Unable to load users data'
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -108,9 +118,14 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     let ignore = false
+    if (!isSuperAdmin) {
+      setLoading(false)
+      return
+    }
+
     Promise.all([
       getAdminUsers(),
-      getAuditLogs({ limitCount: 200 }),
+      getAuditLogs({ limitCount: 500 }),
       getLocations()
     ])
       .then(([uList, aList, locList]) => {
@@ -124,14 +139,15 @@ export default function AdminUsersPage() {
       .catch((err) => {
         if (!ignore) {
           console.error('Failed to load users data:', err)
-          toast.error('Unable to load users data')
+          const msg = err instanceof Error ? err.message : 'Unable to load users data'
+          toast.error(msg)
           setLoading(false)
         }
       })
     return () => {
       ignore = true
     }
-  }, [])
+  }, [isSuperAdmin])
 
   // Location Map
   const locationMap = useMemo(() => {
@@ -169,6 +185,20 @@ export default function AdminUsersPage() {
     })
   }, [auditLogs, auditSearch, auditEntityFilter, auditActionFilter])
 
+  // Audit Logs Pagination State
+  const [auditPage, setAuditPage] = useState(1)
+  const auditPageSize = 25
+  const totalAuditPages = Math.ceil(filteredAuditLogs.length / auditPageSize) || 1
+  const paginatedAuditLogs = useMemo(() => {
+    const start = (auditPage - 1) * auditPageSize
+    return filteredAuditLogs.slice(start, start + auditPageSize)
+  }, [filteredAuditLogs, auditPage, auditPageSize])
+
+  // Reset page when search or filters change
+  useEffect(() => {
+    setAuditPage(1)
+  }, [auditSearch, auditEntityFilter, auditActionFilter])
+
   // Handle Opening Form for Add
   const handleOpenAdd = () => {
     setEditingUserId(null)
@@ -201,6 +231,10 @@ export default function AdminUsersPage() {
 
   // Preset Selection Handler
   const handleSelectRolePreset = (role: UserRole) => {
+    if (isEditingSelf) {
+      toast.error('You cannot change your own role')
+      return
+    }
     setFormRole(role)
     if (role === 'super_admin') {
       setFormPermissions(SUPER_ADMIN_PERMISSIONS)
@@ -215,6 +249,10 @@ export default function AdminUsersPage() {
 
   // Generic Granular Permission Toggle
   const togglePermission = (module: keyof UserPermissions, actionKey: string) => {
+    if (isEditingSelf) {
+      toast.error('You cannot modify your own permissions')
+      return
+    }
     setFormRole('custom') // Mark as custom if manually toggled
     setFormPermissions((prev) => {
       const currentModule = { ...((prev[module] as Record<string, boolean>) || {}) }
@@ -249,6 +287,14 @@ export default function AdminUsersPage() {
       return
     }
 
+    if (isEditingSelf && editingUserId) {
+      const originalSelf = users.find((u) => u.id === editingUserId)
+      if (originalSelf && formRole !== originalSelf.role) {
+        setFormError('You cannot edit your own role')
+        return
+      }
+    }
+
     setFormSubmitting(true)
     setFormError(null)
 
@@ -260,16 +306,20 @@ export default function AdminUsersPage() {
       }
 
       if (editingUserId) {
+        const originalUser = users.find((u) => u.id === editingUserId)
+        const payloadRole = isEditingSelf ? (originalUser?.role || formRole) : formRole
+        const payloadPermissions = isEditingSelf ? (originalUser?.permissions || formPermissions) : formPermissions
+
         await updateAdminUser(
           editingUserId,
           {
             displayName: formDisplayName,
             phoneNumber: formPhone,
-            role: formRole,
+            role: payloadRole,
             status: formStatus,
             assignedLocationId: formLocationId || undefined,
             assignedLocationName: locName,
-            permissions: formPermissions,
+            permissions: payloadPermissions,
             ...(formPassword.trim() ? { password: formPassword.trim() } : {})
           },
           actorInfo
@@ -321,7 +371,9 @@ export default function AdminUsersPage() {
         }
         setUsers((prev) => [newUser, ...prev])
 
-        if (createResult.temporaryPassword) {
+        if (createResult.emailSent) {
+          toast.success(`User created! Set-password link emailed to ${formEmail}`)
+        } else if (createResult.temporaryPassword) {
           toast.success(`User created! Initial password: ${createResult.temporaryPassword}`, {
             duration: 10000
           })
@@ -375,6 +427,20 @@ export default function AdminUsersPage() {
     }
   }
 
+  if (!loading && !isSuperAdmin) {
+    return (
+      <div className="w-full py-16 flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4 text-gray-500">
+          <Lock size={24} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-black mb-2">Access Restricted</h2>
+        <p className="text-sm text-gray-500 max-w-md">
+          User management is restricted to Super Admins only.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="w-full">
       {/* Header */}
@@ -386,13 +452,15 @@ export default function AdminUsersPage() {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97] shrink-0"
-        >
-          <Plus size={14} />
-          Add User
-        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={handleOpenAdd}
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97] shrink-0"
+          >
+            <Plus size={14} />
+            Add User
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -523,11 +591,31 @@ export default function AdminUsersPage() {
                       </label>
                       <input
                         type="text"
-                        placeholder={editingUserId ? 'Leave blank to keep existing' : 'Auto-generated if blank'}
+                        placeholder={editingUserId ? 'Leave blank to keep existing' : 'Auto-generated & emailed'}
                         value={formPassword}
                         onChange={(e) => setFormPassword(e.target.value)}
                         className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
                       />
+                      {editingUserId && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!editingUserId) return
+                            try {
+                              toast.loading(`Sending set-password email to ${formEmail}...`, { id: 'form-reset-email' })
+                              await sendPasswordResetEmail(editingUserId)
+                              toast.success(`Set-password link emailed to ${formEmail}`, { id: 'form-reset-email' })
+                            } catch (err: unknown) {
+                              const msg = err instanceof Error ? err.message : 'Failed to send email'
+                              toast.error(msg, { id: 'form-reset-email' })
+                            }
+                          }}
+                          className="mt-1.5 text-xs text-gray-500 hover:text-black font-semibold flex items-center gap-1 transition-colors"
+                        >
+                          <Mail size={12} />
+                          Email set-password link to user
+                        </button>
+                      )}
                     </div>
 
                     <div>
@@ -561,7 +649,13 @@ export default function AdminUsersPage() {
                     <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
                       Role Preset (Auto-configures permission flags below)
                     </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {isEditingSelf && (
+                      <div className="mb-3 p-3 bg-gray-50 border border-gray-200 text-gray-800 text-xs rounded-lg flex items-center gap-2">
+                        <AlertCircle size={14} className="text-gray-500 shrink-0" />
+                        <span>You are editing your own profile. Your role and permissions are locked and cannot be edited.</span>
+                      </div>
+                    )}
+                    <div className={`grid grid-cols-2 sm:grid-cols-5 gap-2 ${isEditingSelf ? 'opacity-50 pointer-events-none' : ''}`}>
                       {(['super_admin', 'store_manager', 'sales_cashier', 'vault_custodian', 'custom'] as UserRole[]).map(
                         (roleKey) => {
                           const info = ROLE_LABELS[roleKey]
@@ -570,6 +664,7 @@ export default function AdminUsersPage() {
                             <button
                               key={roleKey}
                               type="button"
+                              disabled={isEditingSelf}
                               onClick={() => handleSelectRolePreset(roleKey)}
                               className={`p-3 text-left rounded-lg border text-xs transition-[border-color,background-color,transform] duration-150 active:scale-[0.97] ${isSelected
                                   ? 'border-black bg-gray-50 ring-1 ring-black'
@@ -586,7 +681,7 @@ export default function AdminUsersPage() {
                   </div>
 
                   {/* Granular Permission Matrix */}
-                  <div className="space-y-4 pt-2 border-t border-gray-100">
+                  <div className={`space-y-4 pt-2 border-t border-gray-100 ${isEditingSelf ? 'opacity-50 pointer-events-none' : ''}`}>
                     <div className="flex items-center justify-between">
                       <h3 className="text-xs font-bold uppercase tracking-wider text-black">
                         Granular Action Permissions
@@ -820,7 +915,7 @@ export default function AdminUsersPage() {
                       <th className="px-6 py-3.5">Location Scope</th>
                       <th className="px-6 py-3.5">Permissions Summary</th>
                       <th className="px-6 py-3.5">Status</th>
-                      <th className="px-6 py-3.5 text-right">Actions</th>
+                      {isSuperAdmin && <th className="px-6 py-3.5 text-right">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -895,37 +990,56 @@ export default function AdminUsersPage() {
                             </span>
                           </td>
 
-                          <td className="px-6 py-4 text-right">
-                            <div className="inline-flex items-center gap-1.5">
-                              <button
-                                onClick={() => handleOpenEdit(user)}
-                                title="Edit permissions and profile"
-                                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                              >
-                                <Edit2 size={15} />
-                              </button>
+                          {isSuperAdmin && (
+                            <td className="px-6 py-4 text-right">
+                              <div className="inline-flex items-center gap-1.5">
+                                <button
+                                  onClick={() => handleOpenEdit(user)}
+                                  title="Edit permissions and profile"
+                                  className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                >
+                                  <Edit2 size={15} />
+                                </button>
 
-                              {!isCurrentUser && (
-                                <>
-                                  <button
-                                    onClick={() => setStatusTarget(user)}
-                                    title={user.status === 'active' ? 'Suspend account' : 'Reactivate account'}
-                                    className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                                  >
-                                    {user.status === 'active' ? <Lock size={15} /> : <Unlock size={15} />}
-                                  </button>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      toast.loading(`Sending password link to ${user.email}...`, { id: `reset-${user.id}` })
+                                      await sendPasswordResetEmail(user.id)
+                                      toast.success(`Set-password link emailed to ${user.email}`, { id: `reset-${user.id}` })
+                                    } catch (err: unknown) {
+                                      const msg = err instanceof Error ? err.message : 'Failed to send password link'
+                                      toast.error(msg, { id: `reset-${user.id}` })
+                                    }
+                                  }}
+                                  title="Email set-password link"
+                                  className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                >
+                                  <Mail size={15} />
+                                </button>
 
-                                  <button
-                                    onClick={() => setDeleteTarget(user)}
-                                    title="Delete account"
-                                    className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
+                                {!isCurrentUser && (
+                                  <>
+                                    <button
+                                      onClick={() => setStatusTarget(user)}
+                                      title={user.status === 'active' ? 'Suspend account' : 'Reactivate account'}
+                                      className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                    >
+                                      {user.status === 'active' ? <Lock size={15} /> : <Unlock size={15} />}
+                                    </button>
+
+                                    <button
+                                      onClick={() => setDeleteTarget(user)}
+                                      title="Delete account"
+                                      className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       )
                     })}
@@ -982,7 +1096,7 @@ export default function AdminUsersPage() {
             />
           ) : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm divide-y divide-gray-100">
-              {filteredAuditLogs.map((log) => {
+              {paginatedAuditLogs.map((log) => {
                 const dateObj = new Date(log.timestamp)
                 const dateStr = dateObj.toLocaleDateString()
                 const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -1017,6 +1131,45 @@ export default function AdminUsersPage() {
                   </div>
                 )
               })}
+
+              {filteredAuditLogs.length > auditPageSize && (
+                <div className="px-6 py-3.5 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                  <span>
+                    Showing{' '}
+                    <strong className="text-black font-semibold">
+                      {(auditPage - 1) * auditPageSize + 1}
+                    </strong>{' '}
+                    to{' '}
+                    <strong className="text-black font-semibold">
+                      {Math.min(auditPage * auditPageSize, filteredAuditLogs.length)}
+                    </strong>{' '}
+                    of{' '}
+                    <strong className="text-black font-semibold">
+                      {filteredAuditLogs.length}
+                    </strong>{' '}
+                    entries
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+                      disabled={auditPage <= 1}
+                      className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="font-medium text-black">
+                      Page {auditPage} of {totalAuditPages}
+                    </span>
+                    <button
+                      onClick={() => setAuditPage((p) => Math.min(totalAuditPages, p + 1))}
+                      disabled={auditPage >= totalAuditPages}
+                      className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -17,24 +17,19 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
  * Fetch all admin users via the server Admin API.
  */
 export async function getAdminUsers(): Promise<AdminUser[]> {
-  try {
-    const headers = await getAuthHeaders()
-    const res = await fetch('/api/admin/users', {
-      method: 'GET',
-      headers
-    })
+  const headers = await getAuthHeaders()
+  const res = await fetch('/api/admin/users', {
+    method: 'GET',
+    headers
+  })
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}))
-      throw new Error(errData.error || `Failed to fetch users (${res.status})`)
-    }
-
-    const data = await res.json()
-    return data.users || []
-  } catch (err) {
-    console.error('Failed to get admin users:', err)
-    return []
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}))
+    throw new Error(errData.error || `Failed to fetch users (${res.status})`)
   }
+
+  const data = await res.json()
+  return data.users || []
 }
 
 export interface CreateAdminUserParams {
@@ -54,11 +49,12 @@ export interface CreateAdminUserParams {
 export interface CreateUserResult {
   id: string
   temporaryPassword?: string
+  emailSent?: boolean
 }
 
 /**
  * Create a new admin user profile through Firebase Admin on the server.
- * Returns the newly created user ID and any temporary password generated.
+ * Returns the newly created user ID and confirmation of password link email.
  */
 export async function createAdminUser(params: CreateAdminUserParams): Promise<CreateUserResult> {
   const headers = await getAuthHeaders()
@@ -76,8 +72,29 @@ export async function createAdminUser(params: CreateAdminUserParams): Promise<Cr
   const data = await res.json()
   return {
     id: data.user?.id || data.id,
-    temporaryPassword: data.temporaryPassword
+    temporaryPassword: data.temporaryPassword,
+    emailSent: data.emailSent
   }
+}
+
+/**
+ * Trigger sending a password setup / reset email link to a user.
+ */
+export async function sendPasswordResetEmail(id: string): Promise<boolean> {
+  const headers = await getAuthHeaders()
+  const res = await fetch('/api/admin/users', {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ id, sendPasswordResetEmail: true })
+  })
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}))
+    throw new Error(errData.error || `Failed to send reset email (${res.status})`)
+  }
+
+  const data = await res.json()
+  return Boolean(data.emailSent)
 }
 
 /**

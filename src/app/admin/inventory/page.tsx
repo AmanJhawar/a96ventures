@@ -94,7 +94,35 @@ export default function AdminInventory() {
   const { hasPermission, adminUser, isSuperAdmin } = usePermissions()
   const userAssignedLocationId = adminUser?.assignedLocationId
   const isLocationLocked = Boolean(!isSuperAdmin && userAssignedLocationId)
+
+  // Granular view permissions for inventory tabs
+  const allowedTabs = useMemo<InventoryTab[]>(() => {
+    const tabs: InventoryTab[] = []
+    if (hasPermission('products', 'view')) tabs.push('products')
+    if (hasPermission('purchases', 'view')) tabs.push('purchases')
+    if (hasPermission('movements', 'view')) tabs.push('movements')
+    return tabs
+  }, [hasPermission])
+
+  // Movement types the user has permission to record
+  const allowedMovementTypes = useMemo<MovementSubtype[]>(() => {
+    const types: MovementSubtype[] = []
+    if (hasPermission('movements', 'transfer')) types.push('transfer')
+    if (hasPermission('movements', 'adjustment')) types.push('adjustment')
+    if (hasPermission('movements', 'repair')) types.push('repair')
+    if (hasPermission('movements', 'melt')) types.push('melt')
+    return types
+  }, [hasPermission])
+
   const [activeTab, setActiveTab] = useState<InventoryTab>('products')
+
+  // Automatically keep activeTab on an allowed tab
+  useEffect(() => {
+    if (allowedTabs.length > 0 && !allowedTabs.includes(activeTab)) {
+      setActiveTab(allowedTabs[0])
+    }
+  }, [allowedTabs, activeTab])
+
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All')
   const [selectedBrand, setSelectedBrand] = useState<string>('All')
   const [selectedMetal, setSelectedMetal] = useState<MetalType | 'All'>('All')
@@ -1005,8 +1033,11 @@ export default function AdminInventory() {
   }
 
   // Handlers for Movements
-  const handleOpenMovement = (type: MovementSubtype = 'transfer') => {
-    setMovementType(type)
+  const handleOpenMovement = (type?: MovementSubtype) => {
+    const targetType = type && allowedMovementTypes.includes(type)
+      ? type
+      : (allowedMovementTypes[0] || 'transfer')
+    setMovementType(targetType)
     setMovementProductId(products[0]?.id || '')
     const defaultSource = userAssignedLocationId || locations[0]?.id || ''
     setMovementLocationId(defaultSource)
@@ -1026,6 +1057,10 @@ export default function AdminInventory() {
 
   const handleSaveMovement = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!allowedMovementTypes.includes(movementType)) {
+      setMovementError('You do not have permission to record this movement type')
+      return
+    }
     const prod = products.find((p) => p.id === movementProductId)
     if (!prod) {
       setMovementError('Please select a product')
@@ -1363,12 +1398,9 @@ export default function AdminInventory() {
 
           {!archivedSession &&
             activeTab === 'movements' &&
-            (hasPermission('movements', 'transfer') ||
-              hasPermission('movements', 'adjustment') ||
-              hasPermission('movements', 'repair') ||
-              hasPermission('movements', 'melt')) && (
+            allowedMovementTypes.length > 0 && (
               <button
-                onClick={() => handleOpenMovement('transfer')}
+                onClick={() => handleOpenMovement(allowedMovementTypes[0])}
                 disabled={products.length === 0 || locations.length === 0}
                 className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 disabled:opacity-40 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97]"
               >
@@ -1410,51 +1442,57 @@ export default function AdminInventory() {
 
       {/* Tabs */}
       <div className="flex items-center border-b border-gray-200 mb-6 overflow-x-auto">
-        <button
-          onClick={() => {
-            setActiveTab('products')
-            setIsProductFormOpen(false)
-            setIsPurchaseFormOpen(false)
-            setIsMovementFormOpen(false)
-          }}
-          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'products'
-            ? 'border-black text-black'
-            : 'border-transparent text-gray-500 hover:text-black'
-            }`}
-        >
-          <Package size={16} />
-          Products Catalog ({products.length})
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('purchases')
-            setIsProductFormOpen(false)
-            setIsPurchaseFormOpen(false)
-            setIsMovementFormOpen(false)
-          }}
-          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'purchases'
-            ? 'border-black text-black'
-            : 'border-transparent text-gray-500 hover:text-black'
-            }`}
-        >
-          <ShoppingBag size={16} />
-          Purchases ({displayTransactions.filter((t) => t.type === 'purchase').length})
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('movements')
-            setIsProductFormOpen(false)
-            setIsPurchaseFormOpen(false)
-            setIsMovementFormOpen(false)
-          }}
-          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'movements'
-            ? 'border-black text-black'
-            : 'border-transparent text-gray-500 hover:text-black'
-            }`}
-        >
-          <Layers size={16} />
-          Stock Movements ({filteredMovements.length})
-        </button>
+        {allowedTabs.includes('products') && (
+          <button
+            onClick={() => {
+              setActiveTab('products')
+              setIsProductFormOpen(false)
+              setIsPurchaseFormOpen(false)
+              setIsMovementFormOpen(false)
+            }}
+            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'products'
+              ? 'border-black text-black'
+              : 'border-transparent text-gray-500 hover:text-black'
+              }`}
+          >
+            <Package size={16} />
+            Products Catalog ({products.length})
+          </button>
+        )}
+        {allowedTabs.includes('purchases') && (
+          <button
+            onClick={() => {
+              setActiveTab('purchases')
+              setIsProductFormOpen(false)
+              setIsPurchaseFormOpen(false)
+              setIsMovementFormOpen(false)
+            }}
+            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'purchases'
+              ? 'border-black text-black'
+              : 'border-transparent text-gray-500 hover:text-black'
+              }`}
+          >
+            <ShoppingBag size={16} />
+            Purchases ({displayTransactions.filter((t) => t.type === 'purchase').length})
+          </button>
+        )}
+        {allowedTabs.includes('movements') && (
+          <button
+            onClick={() => {
+              setActiveTab('movements')
+              setIsProductFormOpen(false)
+              setIsPurchaseFormOpen(false)
+              setIsMovementFormOpen(false)
+            }}
+            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'movements'
+              ? 'border-black text-black'
+              : 'border-transparent text-gray-500 hover:text-black'
+              }`}
+          >
+            <Layers size={16} />
+            Stock Movements ({filteredMovements.length})
+          </button>
+        )}
       </div>
 
       {/* Date Range Filter Bar for Purchases and Movements */}
@@ -2251,9 +2289,9 @@ export default function AdminInventory() {
               </button>
             </div>
 
-            {/* Segmented Control for Movement Type */}
+            {/* Segmented Control for Movement Type - Only show movement types user may record */}
             <div className="flex items-center p-1 bg-gray-100 rounded-lg mb-5 max-w-md">
-              {(['transfer', 'adjustment', 'repair', 'melt'] as MovementSubtype[]).map((type) => {
+              {allowedMovementTypes.map((type) => {
                 const labelMap: Record<MovementSubtype, string> = {
                   transfer: 'Transfer',
                   adjustment: 'Audit / Adjust',
@@ -2645,7 +2683,17 @@ export default function AdminInventory() {
         <div className="flex justify-center items-center py-24">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
         </div>
-      ) : activeTab === 'products' ? (
+      ) : allowedTabs.length === 0 ? (
+        <div className="w-full py-16 flex flex-col items-center justify-center text-center">
+          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4 text-gray-500">
+            <Lock size={24} />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-black mb-2">Access Restricted</h2>
+          <p className="text-sm text-gray-500 max-w-md">
+            You do not have permission to view products, purchases, or movements.
+          </p>
+        </div>
+      ) : activeTab === 'products' && allowedTabs.includes('products') ? (
         processedProducts.length === 0 ? (
           <EmptyState
             title="No products in this filter"
@@ -2843,7 +2891,7 @@ export default function AdminInventory() {
             </div>
           </div>
         )
-      ) : activeTab === 'purchases' ? (
+      ) : activeTab === 'purchases' && allowedTabs.includes('purchases') ? (
         filteredPurchases.length === 0 ? (
           <EmptyState
             title="No purchases recorded"
@@ -2987,7 +3035,7 @@ export default function AdminInventory() {
             )}
           </div>
         )
-      ) : (
+      ) : activeTab === 'movements' && allowedTabs.includes('movements') ? (
         filteredMovements.length === 0 ? (
           <EmptyState
             title="No stock movements recorded"
@@ -2997,12 +3045,9 @@ export default function AdminInventory() {
                 : 'Stock movements track transfers between stores, physical count audits, idol weight repairs, and scrap melts.'
             }
             action={
-              (hasPermission('movements', 'transfer') ||
-                hasPermission('movements', 'adjustment') ||
-                hasPermission('movements', 'repair') ||
-                hasPermission('movements', 'melt')) ? (
+              allowedMovementTypes.length > 0 ? (
                 <button
-                  onClick={() => handleOpenMovement('transfer')}
+                  onClick={() => handleOpenMovement(allowedMovementTypes[0])}
                   disabled={products.length === 0 || locations.length === 0}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-40 transition-[background-color,transform] duration-150 active:scale-[0.97]"
                 >
@@ -3192,7 +3237,7 @@ export default function AdminInventory() {
             )}
           </div>
         )
-      )}
+      ) : null}
 
       {/* Product Archive Modal */}
       <ConfirmModal

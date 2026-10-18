@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase/admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import { getAuthenticatedCaller, hasModulePermission } from '@/lib/firebase/server-auth'
 import { ProductCategory, MetalType } from '@/lib/types'
 import { gramsToMg, mgToGrams, calculateAverageWeight } from '@/lib/utils/weight'
@@ -143,8 +144,8 @@ export async function POST(req: NextRequest) {
       weightMg,
       purity: cleanPurity,
       isArchived: false,
-      createdAt: nowIso,
-      updatedAt: nowIso
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
     }
 
     if (isIdol && validPieceWeights.length > 0) {
@@ -174,9 +175,11 @@ export async function POST(req: NextRequest) {
         notes: isIdol && validPieceWeights.length > 0
           ? `Opening stock with ${validPieceWeights.length} idol pieces: ${validPieceWeights.join(', ')}g`
           : 'Initial opening stock',
-        createdAt: nowIso,
+        createdAt: FieldValue.serverTimestamp(),
+        timestamp: FieldValue.serverTimestamp(),
         operatorId: caller.callerUid,
-        operatorEmail: caller.callerData.email
+        operatorName: caller.callerName,
+        operatorEmail: caller.callerEmail
       }
       if (isIdol && validPieceWeights.length > 0) {
         txDocData.pieceWeights = validPieceWeights
@@ -184,18 +187,19 @@ export async function POST(req: NextRequest) {
       batch.set(txDocRef, txDocData)
     }
 
-    // Append Audit Log atomically
+    // Append Audit Log atomically with server timestamp
     const auditDocRef = adminDb.collection('audit_logs').doc()
     batch.set(auditDocRef, {
       userId: caller.callerUid,
-      userName: caller.callerData.displayName,
-      userEmail: caller.callerData.email,
+      userName: caller.callerName,
+      userEmail: caller.callerEmail,
       action: 'create',
       entityType: 'product',
       entityId: productDocRef.id,
       entityName: cleanName,
       description: `Added product "${cleanName}" (${cleanMetal} · ${cleanCategory} · Brand: ${cleanBrand} · ${numWeight}g · SKU: ${cleanSku}) with ${totalStock} opening units`,
-      timestamp: nowIso
+      timestamp: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp()
     })
 
     await batch.commit()
@@ -311,7 +315,7 @@ export async function PUT(req: NextRequest) {
       weight: numWeight,
       weightMg,
       purity: cleanPurity,
-      updatedAt: nowIso
+      updatedAt: FieldValue.serverTimestamp()
     }
 
     if (isIdol && validPieceWeights.length > 0) {
@@ -321,17 +325,18 @@ export async function PUT(req: NextRequest) {
 
     await productDocRef.update(updatePayload)
 
-    // Append Audit Log
+    // Append Audit Log with server timestamp
     await adminDb.collection('audit_logs').add({
       userId: caller.callerUid,
-      userName: caller.callerData.displayName,
-      userEmail: caller.callerData.email,
+      userName: caller.callerName,
+      userEmail: caller.callerEmail,
       action: 'update',
       entityType: 'product',
       entityId: id,
       entityName: cleanName,
       description: `Updated product "${cleanName}" (${cleanSku} · Brand: ${cleanBrand} · ${numWeight}g · ${cleanPurity})`,
-      timestamp: nowIso
+      timestamp: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp()
     })
 
     return NextResponse.json({ success: true })
@@ -373,21 +378,23 @@ export async function DELETE(req: NextRequest) {
     // Archive instead of delete: keeps stock ledger and historical transactions intact
     await productDocRef.update({
       isArchived: true,
-      archivedAt: nowIso,
+      archivedAt: FieldValue.serverTimestamp(),
       archivedBy: caller.callerUid,
-      archivedByEmail: caller.callerData.email
+      archivedByName: caller.callerName,
+      archivedByEmail: caller.callerEmail
     })
 
     await adminDb.collection('audit_logs').add({
       userId: caller.callerUid,
-      userName: caller.callerData.displayName,
-      userEmail: caller.callerData.email,
+      userName: caller.callerName,
+      userEmail: caller.callerEmail,
       action: 'archive',
       entityType: 'product',
       entityId: id,
       entityName: pData.name || id,
       description: `Archived product "${pData.name || id}" (${pData.sku || ''}) with ${stock} unit(s) of stock`,
-      timestamp: nowIso
+      timestamp: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp()
     })
 
     return NextResponse.json({ success: true, archived: true })

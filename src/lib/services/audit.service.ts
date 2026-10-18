@@ -1,4 +1,5 @@
 import { app } from '@/lib/firebase/config'
+import { auth } from '@/lib/firebase/auth'
 import {
   getFirestore,
   collection,
@@ -6,9 +7,7 @@ import {
   addDoc,
   serverTimestamp,
   query,
-  orderBy,
-  limit,
-  where
+  limit
 } from 'firebase/firestore/lite'
 import { AuditLogEntry, AuditActionType } from '@/lib/types'
 import { withTimeout } from './utils'
@@ -31,16 +30,49 @@ export interface RecordAuditParams {
   metadata?: Record<string, unknown>
 }
 
+function toIsoString(ts: unknown): string {
+  if (!ts) return new Date().toISOString()
+  if (typeof ts === 'string') return ts
+  if (typeof ts === 'object' && ts !== null) {
+    if ('toDate' in ts && typeof (ts as { toDate: () => Date }).toDate === 'function') {
+      return (ts as { toDate: () => Date }).toDate().toISOString()
+    }
+    if ('_seconds' in ts) {
+      return new Date((ts as { _seconds: number })._seconds * 1000).toISOString()
+    }
+  }
+  return new Date().toISOString()
+}
+
 /**
- * Record an immutable audit log entry in Firestore.
- * Automatically injects ISO timestamp and server timestamp.
+ * Record an immutable audit log entry via server code (or client fallback).
+ * Server route uses Firebase Admin SDK with elevated privileges.
  */
 export async function recordAuditLog(params: RecordAuditParams): Promise<string> {
   try {
+    const currentUser = auth.currentUser
+    if (currentUser) {
+      const token = await currentUser.getIdToken()
+      const res = await fetch('/api/admin/audit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(params)
+      })
+      if (res.ok) {
+        const data = await res.json()
+        return data.id || ''
+      }
+    }
+
+    // Client fallback if offline or pre-auth
+    const verifiedName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split('@')[0] : 'Admin')
     const docRef = await addDoc(collection(db, AUDIT_COLLECTION), {
-      userId: params.userId || 'system',
-      userName: params.userName || 'System User',
-      userEmail: params.userEmail || 'admin@a96ventures.com',
+      userId: currentUser?.uid || params.userId || 'admin',
+      userName: verifiedName,
+      userEmail: currentUser?.email || params.userEmail || 'admin@a96ventures.com',
       action: params.action,
       entityType: params.entityType,
       entityId: params.entityId,
@@ -50,12 +82,11 @@ export async function recordAuditLog(params: RecordAuditParams): Promise<string>
       description: params.description,
       diffs: params.diffs || [],
       metadata: params.metadata || {},
-      timestamp: new Date().toISOString(),
+      timestamp: serverTimestamp(),
       createdAt: serverTimestamp()
     })
     return docRef.id
   } catch (err) {
-    // Non-blocking fallback: never fail user operations due to audit failure, but log to console
     console.error('Failed to write audit log:', err)
     return ''
   }
@@ -66,17 +97,39 @@ export interface GetAuditLogsFilter {
   entityType?: string
   action?: string
   limitCount?: number
+  page?: number
 }
 
 /**
- * Fetch audit logs sorted by timestamp descending.
+ * Fetch audit logs via server code or client query.
  */
 export async function getAuditLogs(filters?: GetAuditLogsFilter): Promise<AuditLogEntry[]> {
   try {
+    const currentUser = auth.currentUser
+    if (currentUser) {
+      const token = await currentUser.getIdToken()
+      const params = new URLSearchParams()
+      if (filters?.limitCount) params.set('limit', String(filters.limitCount))
+      if (filters?.page) params.set('page', String(filters.page))
+      if (filters?.userId && filters.userId !== 'all') params.set('userId', filters.userId)
+      if (filters?.entityType && filters.entityType !== 'all') params.set('entityType', filters.entityType)
+      if (filters?.action && filters.action !== 'all') params.set('action', filters.action)
+
+      const res = await fetch(`/api/admin/audit?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.logs) return data.logs
+      }
+    }
+
     const maxItems = filters?.limitCount || 200
     const colRef = collection(db, AUDIT_COLLECTION)
 
-    // Using client-side filter sorting to prevent complex index requirement errors in Firestore
     const querySnapshot = await withTimeout(
       getDocs(query(colRef, limit(maxItems)))
     )
@@ -87,7 +140,7 @@ export async function getAuditLogs(filters?: GetAuditLogsFilter): Promise<AuditL
       items.push({
         id: docSnap.id,
         userId: data.userId || '',
-        userName: data.userName || 'Unknown User',
+        userName: data.userName || (data.userEmail ? String(data.userEmail).split('@')[0] : 'Admin User'),
         userEmail: data.userEmail || '',
         action: data.action || 'update',
         entityType: data.entityType || 'product',
@@ -97,7 +150,7 @@ export async function getAuditLogs(filters?: GetAuditLogsFilter): Promise<AuditL
         locationName: data.locationName,
         description: data.description || '',
         diffs: data.diffs || [],
-        timestamp: data.timestamp || new Date().toISOString(),
+        timestamp: toIsoString(data.timestamp || data.createdAt),
         metadata: data.metadata
       })
     })
@@ -114,7 +167,6 @@ export async function getAuditLogs(filters?: GetAuditLogsFilter): Promise<AuditL
       filtered = filtered.filter((i) => i.action === filters.action)
     }
 
-    // Sort descending by timestamp
     return filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
   } catch (err) {
     console.error('Failed to get audit logs:', err)

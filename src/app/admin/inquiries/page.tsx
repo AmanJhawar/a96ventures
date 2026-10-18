@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react'
-import { Trash2, MessageSquare, ChevronDown } from 'lucide-react'
+import { Trash2, MessageSquare, ChevronDown, Lock } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { getInquiriesPage, deleteInquiry, updateInquiryStatus } from '@/lib/services/inquiry.service'
@@ -91,7 +91,7 @@ function StatusDropdown({
 const ITEMS_PER_PAGE = 10;
 
 export default function AdminInquiries() {
-  const { hasPermission, userIdentity } = usePermissions()
+  const { hasPermission, isSuperAdmin, userIdentity } = usePermissions()
   const [inquiries, setInquiries] = useState<Inquiry[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -169,6 +169,20 @@ export default function AdminInquiries() {
       })
     }
     return 'Unknown'
+  }
+
+  if (!isSuperAdmin && !hasPermission('inquiries', 'view')) {
+    return (
+      <div className="w-full py-20 flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4 text-black">
+          <Lock size={22} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-black mb-2">Access Restricted</h2>
+        <p className="text-sm text-gray-500 max-w-md">
+          You do not have permission to view customer inquiries.
+        </p>
+      </div>
+    )
   }
 
   return (

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase/admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import { getAuthenticatedCaller, hasModulePermission } from '@/lib/firebase/server-auth'
 import { Product, TransactionType, ProductCategory, MetalType } from '@/lib/types'
 import { gramsToMg, mgToGrams } from '@/lib/utils/weight'
@@ -275,7 +276,6 @@ export async function POST(req: NextRequest) {
 
       // Write Transaction document
       const txRef = adminDb.collection('transactions').doc()
-      const nowIso = new Date().toISOString()
       const txPayload: Record<string, unknown> = {
         type,
         productId,
@@ -288,9 +288,11 @@ export async function POST(req: NextRequest) {
         locationName,
         date: date || getTodayIST(),
         notes: notes ? String(notes).trim() : '',
-        createdAt: nowIso,
+        createdAt: FieldValue.serverTimestamp(),
+        timestamp: FieldValue.serverTimestamp(),
         operatorId: caller.callerUid,
-        operatorEmail: caller.callerData.email
+        operatorName: caller.callerName,
+        operatorEmail: caller.callerEmail
       }
 
       if (price !== undefined && !isNaN(Number(price))) {
@@ -413,7 +415,7 @@ export async function POST(req: NextRequest) {
       const productUpdates: Record<string, unknown> = {
         stock: newTotal,
         stockByLocation: currentLocMap,
-        updatedAt: nowIso
+        updatedAt: FieldValue.serverTimestamp()
       }
       if (type === 'repair' && newWeight) {
         const nWMg = gramsToMg(newWeight)
@@ -441,20 +443,39 @@ export async function POST(req: NextRequest) {
 
       t.update(productRef, productUpdates)
 
-      // Append immutable audit log
+      // Construct detailed audit narrative for this inventory action
+      let auditDesc = `Recorded ${type} of ${qty} unit(s) of "${productName || productData.name}" at ${locationName}`
+      if (type === 'sale') {
+        auditDesc = `Recorded sale of ${qty} unit(s) of "${productName || productData.name}" at ${locationName}${customerName ? ` to ${customerName}` : ''}${price ? ` for ₹${price.toLocaleString('en-IN')}` : ''}`
+      } else if (type === 'purchase') {
+        auditDesc = `Recorded purchase of ${qty} unit(s) of "${productName || productData.name}" at ${locationName}${price ? ` for ₹${price.toLocaleString('en-IN')}` : ''}`
+      } else if (type === 'transfer') {
+        auditDesc = `Transferred ${qty} unit(s) of "${productName || productData.name}" from ${locationName} to ${toLocationName || toLocationId}`
+      } else if (type === 'return') {
+        auditDesc = `Recorded return of ${qty} unit(s) of "${productName || productData.name}" to ${locationName}`
+      } else if (type === 'adjustment') {
+        auditDesc = `Stock count adjustment for "${productName || productData.name}" at ${locationName}: ${qty > 0 ? `+${qty}` : qty} unit(s)`
+      } else if (type === 'repair') {
+        auditDesc = `Repaired "${productName || productData.name}" at ${locationName}: weight adjusted from ${previousWeight || productData.weight}g to ${newWeight}g`
+      } else if (type === 'melt') {
+        auditDesc = `Melted ${qty} unit(s) of "${productName || productData.name}" at ${locationName}${recoveredWeight ? `, recovered ${recoveredWeight}g` : ''}`
+      }
+
+      // Append immutable audit log with server timestamp
       const auditRef = adminDb.collection('audit_logs').doc()
       t.set(auditRef, {
         userId: caller.callerUid,
-        userName: caller.callerData.displayName,
-        userEmail: caller.callerData.email,
+        userName: caller.callerName,
+        userEmail: caller.callerEmail,
         action: type === 'transfer' ? 'transfer' : type === 'adjustment' ? 'adjustment' : type === 'repair' ? 'repair' : type === 'melt' ? 'melt' : 'create',
         entityType: type === 'purchase' ? 'purchase' : type === 'sale' ? 'sale' : 'movement',
         entityId: txRef.id,
         entityName: productName || productData.name,
         locationId,
         locationName,
-        description: `Server-verified ${type}: ${qty} unit(s) of "${productName || productData.name}" at ${locationName}`,
-        timestamp: nowIso
+        description: auditDesc,
+        timestamp: FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp()
       })
 
       return { id: txRef.id, payload: txPayload }
@@ -743,9 +764,10 @@ export async function DELETE(req: NextRequest) {
       const reversingTxRef = adminDb.collection('transactions').doc()
       t.update(txDocRef, {
         isReversed: true,
-        reversedAt: nowIso,
+        reversedAt: FieldValue.serverTimestamp(),
         reversedBy: caller.callerUid,
-        reversedByEmail: caller.callerData.email,
+        reversedByName: caller.callerName,
+        reversedByEmail: caller.callerEmail,
         reversalTransactionId: reversingTxRef.id
       })
 
@@ -757,20 +779,22 @@ export async function DELETE(req: NextRequest) {
         category: tx.category,
         metal: tx.metal || 'Gold',
         date: todayDate,
-        createdAt: nowIso,
+        createdAt: FieldValue.serverTimestamp(),
+        timestamp: FieldValue.serverTimestamp(),
         operatorId: caller.callerUid,
-        operatorEmail: caller.callerData.email,
+        operatorName: caller.callerName,
+        operatorEmail: caller.callerEmail,
         isReversal: true,
         reversalOf: txId
       }
       t.set(reversingTxRef, reversingEntryDoc)
 
-      // 3. Record audit log for the reversal
+      // 3. Record audit log for the reversal with server timestamp
       const auditRef = adminDb.collection('audit_logs').doc()
       t.set(auditRef, {
         userId: caller.callerUid,
-        userName: caller.callerData.displayName || caller.callerData.email || 'Admin',
-        userEmail: caller.callerData.email,
+        userName: caller.callerName,
+        userEmail: caller.callerEmail,
         action: 'reverse',
         entityType: txType === 'purchase' ? 'purchase' : txType === 'sale' ? 'sale' : 'movement',
         entityId: txId,
@@ -783,7 +807,8 @@ export async function DELETE(req: NextRequest) {
           reversalTransactionId: reversingTxRef.id,
           reversalType: reversingPayload.type
         },
-        timestamp: nowIso
+        timestamp: FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp()
       })
       return { reversedId: txId, reversingId: reversingTxRef.id, reversingEntry: { id: reversingTxRef.id, ...reversingEntryDoc } }
     })
@@ -856,9 +881,11 @@ export async function PUT(req: NextRequest) {
                   locationName: 'Rollover Opening Balance',
                   date: getTodayIST(),
                   notes: 'Rollover opening balance post Master Zero-Balance',
-                  createdAt: nowIso,
+                  createdAt: FieldValue.serverTimestamp(),
+                  timestamp: FieldValue.serverTimestamp(),
                   operatorId: caller.callerUid,
-                  operatorEmail: caller.callerData.email
+                  operatorName: caller.callerName,
+                  operatorEmail: caller.callerEmail
                 }
               })
             }
@@ -890,17 +917,18 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    // 4. Record single clean post-reset audit log entry for the new baseline
+    // 4. Record single clean post-reset audit log entry for the new baseline with server timestamp
     await adminDb.collection('audit_logs').add({
       userId: caller.callerUid,
-      userName: caller.callerData.displayName || caller.callerData.email || 'Admin',
-      userEmail: caller.callerData.email,
+      userName: caller.callerName,
+      userEmail: caller.callerEmail,
       action: 'zero_balance',
       entityType: 'archive',
       entityId: 'master_zero_balance',
       entityName: 'System Reset',
       description: `Master Zero-Balance executed: purged ${count} transaction(s) and scrubbed ${auditCount} audit log entry/entries. System ledger and activity log reset to a clean slate.`,
-      timestamp: nowIso
+      timestamp: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp()
     })
 
     return NextResponse.json({ success: true, count, auditCount })

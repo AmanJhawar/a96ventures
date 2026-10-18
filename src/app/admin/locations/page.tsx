@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { MapPin, Plus, Trash2, Edit2, AlertCircle, X, Check } from 'lucide-react'
+import { MapPin, Plus, Trash2, Edit2, AlertCircle, X, Check, Lock } from 'lucide-react'
 import { Location } from '@/lib/types'
 import { getLocations, addLocation, updateLocation, deleteLocation, getProducts } from '@/lib/services/inventory.service'
 import { ConfirmModal } from '@/components/confirm-modal'
@@ -11,7 +11,8 @@ import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 
 export default function AdminLocations() {
-  const { hasPermission } = usePermissions()
+  const { hasPermission, isSuperAdmin } = usePermissions()
+  const shouldReduceMotion = useReducedMotion()
   const [locations, setLocations] = useState<Location[]>([])
   const [stockCounts, setStockCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -143,7 +144,19 @@ export default function AdminLocations() {
     }
   }
 
-  const shouldReduceMotion = useReducedMotion()
+  if (!isSuperAdmin && !hasPermission('locations', 'view')) {
+    return (
+      <div className="w-full py-20 flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4 text-black">
+          <Lock size={22} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-black mb-2">Access Restricted</h2>
+        <p className="text-sm text-gray-500 max-w-md">
+          You do not have permission to view inventory locations.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div>

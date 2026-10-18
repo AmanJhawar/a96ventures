@@ -39,6 +39,17 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 // ==========================================
 
 export async function getLocations(): Promise<Location[]> {
+  try {
+    const headers = await getAuthHeaders();
+    const res = await fetch('/api/admin/locations', { method: 'GET', headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.locations)) return data.locations;
+    }
+  } catch {
+    // Fall back to client query if offline or pre-auth
+  }
+
   const querySnapshot = await getDocs(collection(db, 'locations'));
   const items: Location[] = [];
   querySnapshot.forEach((docSnap: { data: () => Record<string, unknown>; id: string }) => {
@@ -48,30 +59,47 @@ export async function getLocations(): Promise<Location[]> {
 }
 
 export async function addLocation(data: { name: string; description?: string }): Promise<string> {
-  const docRef = await addDoc(collection(db, 'locations'), {
-    name: data.name.trim(),
-    description: data.description?.trim() || '',
-    createdAt: serverTimestamp(),
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/locations', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(data)
   });
-  return docRef.id;
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to add location (${res.status})`);
+  }
+
+  const resData = await res.json();
+  return resData.id;
 }
 
 export async function updateLocation(id: string, data: { name: string; description?: string }): Promise<void> {
-  await setDoc(doc(db, 'locations', id), {
-    name: data.name.trim(),
-    description: data.description?.trim() || '',
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/locations', {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ id, ...data })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to update location (${res.status})`);
+  }
 }
 
 export async function deleteLocation(id: string): Promise<void> {
-  // Check if any product has stock in this location
-  const products = await getProducts();
-  const hasStock = products.some((p) => (p.stockByLocation?.[id] || 0) > 0);
-  if (hasStock) {
-    throw new Error('Cannot delete this location because products currently hold stock here. Transfer or adjust stock first.');
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/admin/locations?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to delete location (${res.status})`);
   }
-  await deleteDoc(doc(db, 'locations', id));
 }
 
 // ==========================================

@@ -11,7 +11,8 @@ import {
   ShoppingBag,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Lock
 } from 'lucide-react'
 import { Product, Location, Transaction, ProductCategory, MetalType } from '@/lib/types'
 import { getProducts, getLocations, getTransactions } from '@/lib/services/inventory.service'
@@ -61,7 +62,7 @@ interface ProductSalesStat {
 }
 
 export default function AdminReportsPage() {
-  const { hasPermission } = usePermissions()
+  const { hasPermission, isSuperAdmin } = usePermissions()
   const [activeTab, setActiveTab] = useState<ReportTab>('top_selling')
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All')
   const [selectedMetal, setSelectedMetal] = useState<MetalType | 'All'>('All')
@@ -396,6 +397,20 @@ export default function AdminReportsPage() {
       `a96-stock-summary-${getTodayIST()}`,
       headers,
       rows
+    )
+  }
+
+  if (!isSuperAdmin && !hasPermission('reports', 'view')) {
+    return (
+      <div className="w-full py-20 flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4 text-black">
+          <Lock size={22} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-black mb-2">Access Restricted</h2>
+        <p className="text-sm text-gray-500 max-w-md">
+          You do not have permission to view reports and analytics.
+        </p>
+      </div>
     )
   }
 

@@ -196,7 +196,7 @@ export interface AuditLogEntry {
   userName: string;
   userEmail: string;
   action: AuditActionType;
-  entityType: 'product' | 'purchase' | 'sale' | 'return' | 'movement' | 'inquiry' | 'location' | 'user' | 'archive' | 'brand' | 'team';
+  entityType: 'product' | 'purchase' | 'sale' | 'return' | 'movement' | 'inquiry' | 'location' | 'user' | 'archive' | 'brand' | 'team' | 'portfolio';
   entityId: string;
   entityName?: string;
   locationId?: string;

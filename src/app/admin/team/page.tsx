@@ -7,7 +7,7 @@ import { app } from '@/lib/firebase/config'
 const db = getFirestore(app)
 import { TeamMember } from '@/lib/types'
 import { getOptimizedUrl } from '@/lib/utils'
-import { Trash2, Plus, Users, Edit2 } from 'lucide-react'
+import { Trash2, Plus, Users, Edit2, Lock } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
@@ -16,6 +16,8 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { usePermissions } from '@/lib/context/PermissionsContext'
+import { toast } from 'sonner'
+import { recordAuditLog } from '@/lib/services/audit.service'
 
 const teamSchema = z.object({
   name: z.string().min(1, 'Full name is required'),
@@ -29,7 +31,7 @@ const teamSchema = z.object({
 type TeamValues = z.infer<typeof teamSchema>
 
 export default function AdminTeam() {
-  const { hasPermission } = usePermissions()
+  const { hasPermission, isSuperAdmin } = usePermissions()
   const [team, setTeam] = useState<(TeamMember & { id: string })[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -72,11 +74,22 @@ export default function AdminTeam() {
 
   const executeDelete = async () => {
     if (!deleteId) return
+    const targetMember = team.find(t => t.id === deleteId)
     try {
       await deleteDoc(doc(db, 'team', deleteId))
       setTeam(team.filter(t => t.id !== deleteId))
-    } catch (err) {
+      await recordAuditLog({
+        action: 'delete',
+        entityType: 'team',
+        entityId: deleteId,
+        entityName: targetMember?.name || deleteId,
+        description: `Removed team member "${targetMember?.name || deleteId}"`
+      }).catch((auditErr) => console.warn('Audit error:', auditErr))
+      toast.success('Team member removed successfully')
+    } catch (err: unknown) {
       console.error("Error deleting", err)
+      const msg = err instanceof Error ? err.message : 'Failed to delete team member'
+      toast.error(msg)
     } finally {
       setDeleteId(null)
     }
@@ -121,17 +134,51 @@ export default function AdminTeam() {
       if (editingId) {
         await setDoc(doc(db, 'team', editingId), parsedData)
         setTeam(team.map(t => t.id === editingId ? { id: editingId, ...parsedData } as (TeamMember & { id: string }) : t))
+        await recordAuditLog({
+          action: 'update',
+          entityType: 'team',
+          entityId: editingId,
+          entityName: data.name,
+          description: `Updated team member profile "${data.name}" (${data.role})`,
+          metadata: { role: data.role }
+        }).catch((auditErr) => console.warn('Audit error:', auditErr))
+        toast.success('Team member updated successfully')
       } else {
         const docRef = await addDoc(collection(db, 'team'), parsedData)
         setTeam([...team, { id: docRef.id, ...parsedData } as (TeamMember & { id: string })])
+        await recordAuditLog({
+          action: 'create',
+          entityType: 'team',
+          entityId: docRef.id,
+          entityName: data.name,
+          description: `Added team member "${data.name}" (${data.role})`,
+          metadata: { role: data.role }
+        }).catch((auditErr) => console.warn('Audit error:', auditErr))
+        toast.success('Team member added successfully')
       }
       handleCancel()
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error saving", err)
+      const msg = err instanceof Error ? err.message : 'Failed to save team member'
+      toast.error(msg)
     }
   }
 
   const shouldReduceMotion = useReducedMotion()
+
+  if (!isSuperAdmin && !hasPermission('team', 'view')) {
+    return (
+      <div className="w-full py-20 flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4 text-black">
+          <Lock size={22} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-black mb-2">Access Restricted</h2>
+        <p className="text-sm text-gray-500 max-w-md">
+          You do not have permission to view team members.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div>

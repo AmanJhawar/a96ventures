@@ -5,12 +5,13 @@ import { useRouter, usePathname } from 'next/navigation'
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase/auth'
 import Link from 'next/link'
-import { LogOut, LayoutDashboard, Users, Briefcase, Bookmark, MessageSquare, Menu, X, ShoppingCart, Warehouse, MapPin, BarChart3, ShieldCheck } from 'lucide-react'
+import { LogOut, LayoutDashboard, Users, Briefcase, Bookmark, MessageSquare, Menu, X, ShoppingCart, Warehouse, MapPin, BarChart3, ShieldCheck, Lock, Shield } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
 import { AdminUser, UserPermissions, UserRole } from '@/lib/types'
 import { PermissionsProvider, usePermissions } from '@/lib/context/PermissionsContext'
 import { SUPER_ADMIN_PERMISSIONS, EMPTY_PERMISSIONS } from '@/lib/constants/permissions'
+import { TwoFactorModal } from '@/components/two-factor-modal'
 
 interface NavItemConfig {
   name: string
@@ -33,25 +34,101 @@ const navItems: NavItemConfig[] = [
   { name: 'Portfolio', href: '/admin/portfolio', icon: Briefcase, module: 'portfolio', action: 'view' },
 ]
 
+function AdminPageGate({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  const { isSuperAdmin, hasPermission, adminUser } = usePermissions()
+
+  // Super admins have unrestricted access
+  if (isSuperAdmin) {
+    return <>{children}</>
+  }
+
+  // Determine required view permission based on pathname
+  let hasAccess = true
+  let requiredSection = ''
+
+  if (pathname === '/admin/users' || pathname.startsWith('/admin/users/')) {
+    hasAccess = false // Only super admins
+    requiredSection = 'Users & Access management (Super Admin exclusive)'
+  } else if (pathname === '/admin/reports' || pathname.startsWith('/admin/reports/')) {
+    hasAccess = hasPermission('reports', 'view')
+    requiredSection = 'Reports & Analytics'
+  } else if (pathname === '/admin/inventory' || pathname.startsWith('/admin/inventory/')) {
+    hasAccess =
+      hasPermission('products', 'view') ||
+      hasPermission('purchases', 'view') ||
+      hasPermission('movements', 'view')
+    requiredSection = 'Inventory, Catalog & Movements'
+  } else if (pathname === '/admin/sales' || pathname.startsWith('/admin/sales/')) {
+    hasAccess = hasPermission('sales', 'view') || hasPermission('returns', 'view')
+    requiredSection = 'Sales & Returns'
+  } else if (pathname === '/admin/locations' || pathname.startsWith('/admin/locations/')) {
+    hasAccess = hasPermission('locations', 'view')
+    requiredSection = 'Locations Management'
+  } else if (pathname === '/admin/inquiries' || pathname.startsWith('/admin/inquiries/')) {
+    hasAccess = hasPermission('inquiries', 'view')
+    requiredSection = 'Customer Inquiries'
+  } else if (pathname === '/admin/team' || pathname.startsWith('/admin/team/')) {
+    hasAccess = hasPermission('team', 'view')
+    requiredSection = 'Team Management'
+  } else if (pathname === '/admin/brands' || pathname.startsWith('/admin/brands/')) {
+    hasAccess = hasPermission('brands', 'view')
+    requiredSection = 'Brand Partners'
+  } else if (pathname === '/admin/portfolio' || pathname.startsWith('/admin/portfolio/')) {
+    hasAccess = hasPermission('portfolio', 'view')
+    requiredSection = 'Portfolio Management'
+  }
+
+  if (!hasAccess) {
+    return (
+      <div className="w-full py-20 flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4 text-black">
+          <Lock size={22} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-black mb-2">Access Denied</h2>
+        <p className="text-sm text-gray-500 max-w-md mb-6">
+          Your account ({adminUser?.role?.replace('_', ' ') || 'Staff'}) does not have permission to view {requiredSection}.
+        </p>
+        <Link
+          href="/admin"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-xs font-semibold hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+        >
+          Return to Dashboard
+        </Link>
+      </div>
+    )
+  }
+
+  return <>{children}</>
+}
+
 function SidebarContent({
   setIsMobileMenuOpen,
-  adminUser
+  adminUser,
+  onOpenTwoFactor
 }: {
   setIsMobileMenuOpen: (v: boolean) => void
   adminUser: AdminUser | null
+  onOpenTwoFactor?: () => void
 }) {
   const pathname = usePathname()
   const router = useRouter()
   const { hasPermission, isSuperAdmin } = usePermissions()
 
-  // Show all sections for administrators. Only filter for explicitly restricted users.
-  const isRestrictedUser = adminUser && adminUser.role !== 'super_admin' && !isSuperAdmin
-  const accessibleNavItems = isRestrictedUser
-    ? navItems.filter((item) => {
-        if (!item.module) return true
-        return hasPermission(item.module, item.action || 'view')
-      })
-    : navItems
+  // Gate menu items strictly on their view permissions
+  const accessibleNavItems = navItems.filter((item) => {
+    if (isSuperAdmin) return true
+    if (item.href === '/admin/users') return false
+    if (item.href === '/admin/inventory') {
+      return (
+        hasPermission('products', 'view') ||
+        hasPermission('purchases', 'view') ||
+        hasPermission('movements', 'view')
+      )
+    }
+    if (!item.module) return true
+    return hasPermission(item.module, item.action || 'view')
+  })
 
   return (
     <>
@@ -91,6 +168,15 @@ function SidebarContent({
             <div className="text-[11px] text-gray-500 capitalize">{adminUser.role.replace('_', ' ')}</div>
           </div>
         )}
+        {onOpenTwoFactor && (
+          <button
+            onClick={onOpenTwoFactor}
+            className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
+          >
+            <Shield size={16} />
+            Two-Step Login (MFA)
+          </button>
+        )}
         <button
           onClick={() => {
             signOut(auth)
@@ -112,10 +198,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [profileError, setProfileError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isTwoFactorOpen, setIsTwoFactorOpen] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const shouldReduceMotion = useReducedMotion()
 
+  // Subscribe to auth state once on mount without re-subscribing on every route change
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
@@ -216,7 +304,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         setUser(null)
         setAdminUser(null)
         setProfileError(null)
-        if (pathname !== '/admin/login') {
+        if (typeof window !== 'undefined' && window.location.pathname !== '/admin/login') {
           router.push('/admin/login')
         }
       }
@@ -224,7 +312,47 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     })
 
     return () => unsubscribe()
-  }, [router, pathname])
+  }, [router])
+
+  // Idle session timeout (15 minutes of inactivity for staff handling cash/stock)
+  useEffect(() => {
+    if (!user) return
+
+    const IDLE_TIMEOUT_MS = 15 * 60 * 1000
+    let timeoutId: NodeJS.Timeout
+
+    const handleTimeout = async () => {
+      try {
+        await signOut(auth)
+      } catch (err) {
+        console.error('Error signing out after idle timeout:', err)
+      }
+      router.push('/admin/login?reason=idle')
+    }
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(handleTimeout, IDLE_TIMEOUT_MS)
+    }
+
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart']
+    const onActivity = () => {
+      resetTimer()
+    }
+
+    resetTimer()
+
+    activityEvents.forEach((event) => {
+      window.addEventListener(event, onActivity, { passive: true })
+    })
+
+    return () => {
+      clearTimeout(timeoutId)
+      activityEvents.forEach((event) => {
+        window.removeEventListener(event, onActivity)
+      })
+    }
+  }, [user, router])
 
   // Close mobile menu on route change
   const [prevPathname, setPrevPathname] = useState(pathname)
@@ -301,7 +429,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Desktop Sidebar */}
         <aside className="w-64 bg-white border-r border-gray-200 flex flex-col hidden md:flex sticky top-0 h-screen shrink-0">
-          <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} adminUser={adminUser} />
+          <SidebarContent
+            setIsMobileMenuOpen={setIsMobileMenuOpen}
+            adminUser={adminUser}
+            onOpenTwoFactor={() => setIsTwoFactorOpen(true)}
+          />
         </aside>
 
         {/* Mobile Sidebar Overlay */}
@@ -323,7 +455,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 className="relative w-64 bg-white h-full flex flex-col z-10"
                 onClick={e => e.stopPropagation()}
               >
-                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} adminUser={adminUser} />
+                <SidebarContent
+                  setIsMobileMenuOpen={setIsMobileMenuOpen}
+                  adminUser={adminUser}
+                  onOpenTwoFactor={() => setIsTwoFactorOpen(true)}
+                />
               </motion.aside>
             </div>
           )}
@@ -332,9 +468,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Main Content */}
         <main className="flex-1 p-6 md:p-12 overflow-y-auto min-h-screen">
           <div className={pathname.startsWith('/admin/inventory') || pathname.startsWith('/admin/sales') || pathname.startsWith('/admin/reports') || pathname.startsWith('/admin/users') ? 'w-full max-w-7xl mx-auto' : 'max-w-6xl mx-auto'}>
-            {children}
+            <AdminPageGate>
+              {children}
+            </AdminPageGate>
           </div>
         </main>
+
+        {/* Two-Step Verification (MFA) Modal */}
+        <TwoFactorModal
+          isOpen={isTwoFactorOpen}
+          onClose={() => setIsTwoFactorOpen(false)}
+          user={user}
+        />
       </div>
     </PermissionsProvider>
   )

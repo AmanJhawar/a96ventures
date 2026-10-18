@@ -5,7 +5,7 @@ import { collection, setDoc, deleteDoc, doc, getDocs, getFirestore } from 'fireb
 import { app } from '@/lib/firebase/config'
 const db = getFirestore(app)
 import { PortfolioCompany } from '@/lib/types'
-import { Trash2, Plus, Briefcase, Edit2 } from 'lucide-react'
+import { Trash2, Plus, Briefcase, Edit2, Lock } from 'lucide-react'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
@@ -13,6 +13,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { usePermissions } from '@/lib/context/PermissionsContext'
+import { toast } from 'sonner'
+import { recordAuditLog } from '@/lib/services/audit.service'
 
 const portfolioSchema = z.object({
   id: z.string().min(1, 'URL Key (ID) is required').regex(/^[a-z0-9-]+$/, 'Only lowercase letters, numbers, and hyphens'),
@@ -25,7 +27,7 @@ const portfolioSchema = z.object({
 type PortfolioValues = z.infer<typeof portfolioSchema>
 
 export default function AdminPortfolio() {
-  const { hasPermission } = usePermissions()
+  const { hasPermission, isSuperAdmin } = usePermissions()
   const [companies, setCompanies] = useState<(PortfolioCompany & { id: string })[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -68,6 +70,7 @@ export default function AdminPortfolio() {
 
   const executeDelete = async () => {
     if (!deleteId) return
+    const targetCompany = companies.find(c => c.id === deleteId)
     try {
       await deleteDoc(doc(db, 'portfolio', deleteId))
       
@@ -76,8 +79,18 @@ export default function AdminPortfolio() {
       fetch(`/api/revalidate?path=${encodeURIComponent(`/portfolio/${deleteId}`)}`).catch(err => console.error(err))
       
       setCompanies(companies.filter(c => c.id !== deleteId))
-    } catch (err) {
+      await recordAuditLog({
+        action: 'delete',
+        entityType: 'portfolio',
+        entityId: deleteId,
+        entityName: targetCompany?.name || deleteId,
+        description: `Deleted portfolio company "${targetCompany?.name || deleteId}"`
+      }).catch((auditErr) => console.warn('Audit error:', auditErr))
+      toast.success('Portfolio company deleted successfully')
+    } catch (err: unknown) {
       console.error("Error deleting", err)
+      const msg = err instanceof Error ? err.message : 'Failed to delete portfolio company'
+      toast.error(msg)
     } finally {
       setDeleteId(null)
     }
@@ -122,16 +135,50 @@ export default function AdminPortfolio() {
 
       if (editingId) {
         setCompanies(companies.map(c => c.id === editingId ? { id: docId, ...saveData } as (PortfolioCompany & { id: string }) : c))
+        await recordAuditLog({
+          action: 'update',
+          entityType: 'portfolio',
+          entityId: docId,
+          entityName: data.name,
+          description: `Updated portfolio company "${data.name}" (${data.stage || data.sector})`,
+          metadata: { sector: data.sector, stage: data.stage }
+        }).catch((auditErr) => console.warn('Audit error:', auditErr))
+        toast.success('Portfolio company updated successfully')
       } else {
         setCompanies([...companies, { id: docId, ...saveData } as (PortfolioCompany & { id: string })])
+        await recordAuditLog({
+          action: 'create',
+          entityType: 'portfolio',
+          entityId: docId,
+          entityName: data.name,
+          description: `Added portfolio company "${data.name}" (${data.stage || data.sector})`,
+          metadata: { sector: data.sector, stage: data.stage }
+        }).catch((auditErr) => console.warn('Audit error:', auditErr))
+        toast.success('Portfolio company created successfully')
       }
       handleCancel()
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error saving", err)
+      const msg = err instanceof Error ? err.message : 'Failed to save portfolio company'
+      toast.error(msg)
     }
   }
 
   const shouldReduceMotion = useReducedMotion()
+
+  if (!isSuperAdmin && !hasPermission('portfolio', 'view')) {
+    return (
+      <div className="w-full py-20 flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4 text-black">
+          <Lock size={22} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-black mb-2">Access Restricted</h2>
+        <p className="text-sm text-gray-500 max-w-md">
+          You do not have permission to view venture portfolio companies.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div>
