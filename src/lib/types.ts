@@ -41,7 +41,9 @@ export interface Inquiry {
 
 export type MetalType = 'Gold' | 'Silver';
 
-export type ProductCategory = 'MMTC PAMP' | 'Idols' | 'Bullions';
+export type ProductCategory = 'Bullions' | 'Idols' | 'MMTC PAMP';
+
+export type ProductBrand = 'MMTC PAMP' | 'Local';
 
 export type TransactionType = 'purchase' | 'sale' | 'return' | 'transfer' | 'adjustment' | 'repair' | 'melt';
 
@@ -56,12 +58,22 @@ export interface Product {
   id: string;
   name: string;
   category: ProductCategory;
+  brand?: string;
   metal: MetalType;
   sku: string;
   stock: number;
   stockByLocation: Record<string, number>;
-  weight: number; // in grams (mandatory)
+  weight: number; // in grams (display / API)
+  weightMg?: number; // storage in integer milligrams (1g = 1000mg)
+  pieceWeights?: number[]; // For Idols: individual piece weights in stock in grams (3 decimals)
+  pieceWeightsMg?: number[]; // For Idols: individual piece weights in integer milligrams
+  pieceWeightsByLocation?: Record<string, number[]>; // For Idols: piece weights per location in grams
+  pieceWeightsByLocationMg?: Record<string, number[]>; // For Idols: piece weights per location in integer milligrams
   purity: string; // e.g. "999", "999.9"
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
+  archivedByEmail?: string;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
@@ -72,6 +84,7 @@ export interface Transaction {
   productId: string;
   productName: string;
   category: ProductCategory;
+  brand?: string;
   metal?: MetalType;
   quantity: number;
   price?: number; // per unit (for purchase, sale, return)
@@ -81,12 +94,27 @@ export interface Transaction {
   toLocationName?: string; // for transfer
   customerName?: string; // for sale, return
   notes?: string;
-  previousWeight?: number; // for repair
-  newWeight?: number; // for repair
-  weightChange?: number; // for repair (+/-)
+  previousWeight?: number; // for repair (in grams)
+  previousWeightMg?: number; // for repair (in whole milligrams)
+  newWeight?: number; // for repair (in grams)
+  newWeightMg?: number; // for repair (in whole milligrams)
+  weightChange?: number; // for repair delta (+/- in grams)
+  weightChangeMg?: number; // for repair delta (+/- in whole milligrams)
   recoveredWeight?: number; // for melt (in grams)
+  recoveredWeightMg?: number; // for melt (in whole milligrams)
+  pieceWeights?: number[]; // For idol purchases/adjustments: individual piece weights added (in grams)
+  pieceWeightsMg?: number[]; // For idol purchases/adjustments: individual piece weights added (in milligrams)
+  pieceWeight?: number; // For idol sale/transfer/melt/repair: specific piece weight involved (in grams)
+  pieceWeightMg?: number; // For idol sale/transfer/melt/repair: specific piece weight involved (in milligrams)
   date: string; // YYYY-MM-DD
   createdAt?: unknown;
+  isReversed?: boolean;
+  reversedAt?: string;
+  reversedBy?: string;
+  reversedByEmail?: string;
+  reversalTransactionId?: string;
+  isReversal?: boolean;
+  reversalOf?: string; // Points to the original transaction ID this reverses
 }
 
 // ==========================================

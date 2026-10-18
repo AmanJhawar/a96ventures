@@ -40,7 +40,7 @@ export async function recordAuditLog(params: RecordAuditParams): Promise<string>
     const docRef = await withTimeout(
       addDoc(collection(db, AUDIT_COLLECTION), {
         userId: params.userId || 'system',
-        userName: params.userName || 'System Operator',
+        userName: params.userName || 'System User',
         userEmail: params.userEmail || 'admin@a96ventures.com',
         action: params.action,
         entityType: params.entityType,

@@ -9,6 +9,11 @@ interface PermissionsContextValue {
   permissions: UserPermissions
   isSuperAdmin: boolean
   hasPermission: (module: keyof UserPermissions, action: string) => boolean
+  userIdentity: {
+    id: string
+    name: string
+    email: string
+  }
   operatorIdentity: {
     id: string
     name: string
@@ -22,6 +27,7 @@ const PermissionsContext = createContext<PermissionsContextValue>({
   permissions: EMPTY_PERMISSIONS,
   isSuperAdmin: false,
   hasPermission: () => false,
+  userIdentity: { id: '', name: 'Unauthorized', email: '' },
   operatorIdentity: { id: '', name: 'Unauthorized', email: '' }
 })
 
@@ -45,10 +51,10 @@ export function PermissionsProvider({
     return adminUser.permissions || EMPTY_PERMISSIONS
   }, [adminUser, isSuperAdmin])
 
-  const operatorIdentity = useMemo(() => {
+  const userIdentity = useMemo(() => {
     return {
       id: adminUser?.id || '',
-      name: adminUser?.displayName || 'Anonymous Operator',
+      name: adminUser?.displayName || 'Anonymous User',
       email: adminUser?.email || ''
     }
   }, [adminUser])
@@ -72,9 +78,10 @@ export function PermissionsProvider({
       permissions,
       isSuperAdmin,
       hasPermission,
-      operatorIdentity
+      userIdentity,
+      operatorIdentity: userIdentity
     }),
-    [adminUser, permissions, isSuperAdmin, hasPermission, operatorIdentity]
+    [adminUser, permissions, isSuperAdmin, hasPermission, userIdentity]
   )
 
   return <PermissionsContext.Provider value={value}>{children}</PermissionsContext.Provider>

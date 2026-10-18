@@ -21,9 +21,10 @@ import {
   RotateCcw,
   Upload,
   Archive,
-  Download
+  Download,
+  Lock
 } from 'lucide-react'
-import { Product, Location, Transaction, ProductCategory, TransactionType, MetalType } from '@/lib/types'
+import { Product, Location, Transaction, ProductCategory, ProductBrand, TransactionType, MetalType } from '@/lib/types'
 import {
   getProducts,
   getLocations,
@@ -35,6 +36,7 @@ import {
   deleteTransaction,
   clearTransactionHistory
 } from '@/lib/services/inventory.service'
+import { getAuditLogs } from '@/lib/services/audit.service'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
 import CustomSelect, { SelectOption } from '@/components/custom-select'
@@ -43,14 +45,16 @@ import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
+import { formatWeight } from '@/lib/utils/weight'
+import { getTodayIST } from '@/lib/utils/date'
 
-const CATEGORIES: ProductCategory[] = ['MMTC PAMP', 'Idols', 'Bullions']
+const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
+const BULLION_BRANDS: ProductBrand[] = ['MMTC PAMP', 'Local']
 const METALS: MetalType[] = ['Gold', 'Silver']
 
-const PURITY_OPTIONS_BY_CATEGORY: Record<ProductCategory, string[]> = {
-  'MMTC PAMP': ['999.9', '999', '916'],
-  Idols: ['925'],
-  Bullions: ['916', '995', '999', '999.9']
+const PURITY_OPTIONS_BY_METAL: Record<MetalType, string[]> = {
+  Gold: ['999.9', '999', '995', '916', '750'],
+  Silver: ['999.9', '999', '925']
 }
 
 type InventoryTab = 'products' | 'purchases' | 'movements'
@@ -84,10 +88,14 @@ function getTimestampMs(ts: unknown): number {
 }
 
 export default function AdminInventory() {
-  const { hasPermission } = usePermissions()
+  const { hasPermission, adminUser, isSuperAdmin } = usePermissions()
+  const userAssignedLocationId = adminUser?.assignedLocationId
+  const isLocationLocked = Boolean(!isSuperAdmin && userAssignedLocationId)
   const [activeTab, setActiveTab] = useState<InventoryTab>('products')
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All')
+  const [selectedBrand, setSelectedBrand] = useState<string>('All')
   const [selectedMetal, setSelectedMetal] = useState<MetalType | 'All'>('All')
+  const [productStatusFilter, setProductStatusFilter] = useState<'active' | 'archived' | 'all'>('active')
   const [sortBy, setSortBy] = useState<SortField>('last_modified')
 
   // Data state
@@ -101,13 +109,16 @@ export default function AdminInventory() {
   const [isProductFormOpen, setIsProductFormOpen] = useState(false)
   const [editingProductId, setEditingProductId] = useState<string | null>(null)
   const [prodName, setProdName] = useState('')
-  const [prodCategory, setProdCategory] = useState<ProductCategory>('MMTC PAMP')
+  const [prodCategory, setProdCategory] = useState<ProductCategory>('Bullions')
+  const [prodBrand, setProdBrand] = useState<ProductBrand>('MMTC PAMP')
   const [prodMetal, setProdMetal] = useState<MetalType>('Gold')
   const [prodSku, setProdSku] = useState('')
   const [prodWeight, setProdWeight] = useState('')
   const [prodPurity, setProdPurity] = useState('999.9')
   const [prodInitialStock, setProdInitialStock] = useState('')
   const [prodInitialLocationId, setProdInitialLocationId] = useState('')
+  const [prodPieceWeights, setProdPieceWeights] = useState<number[]>([])
+  const [prodPieceInput, setProdPieceInput] = useState('')
   const [productFormSubmitting, setProductFormSubmitting] = useState(false)
   const [productFormError, setProductFormError] = useState<string | null>(null)
 
@@ -117,8 +128,10 @@ export default function AdminInventory() {
   const [purchaseLocationId, setPurchaseLocationId] = useState('')
   const [purchaseQty, setPurchaseQty] = useState('1')
   const [purchasePrice, setPurchasePrice] = useState('')
-  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [purchaseDate, setPurchaseDate] = useState(() => getTodayIST())
   const [purchaseNotes, setPurchaseNotes] = useState('')
+  const [purchasePieceWeights, setPurchasePieceWeights] = useState<number[]>([])
+  const [purchasePieceInput, setPurchasePieceInput] = useState('')
   const [purchaseSubmitting, setPurchaseSubmitting] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
@@ -130,13 +143,14 @@ export default function AdminInventory() {
   const [movementLocationId, setMovementLocationId] = useState('')
   const [movementToLocationId, setMovementToLocationId] = useState('')
   const [movementQty, setMovementQty] = useState('1')
-  const [movementDate, setMovementDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [movementDate, setMovementDate] = useState(() => getTodayIST())
   const [movementNotes, setMovementNotes] = useState('')
   // Repair-specific fields
   const [movementNewWeight, setMovementNewWeight] = useState('')
   const [movementRepairCharge, setMovementRepairCharge] = useState('')
   // Melt-specific fields
   const [movementRecoveredWeight, setMovementRecoveredWeight] = useState('')
+  const [movementPieceWeight, setMovementPieceWeight] = useState('')
   const [movementSubmitting, setMovementSubmitting] = useState(false)
   const [movementError, setMovementError] = useState<string | null>(null)
 
@@ -203,17 +217,25 @@ export default function AdminInventory() {
   }
 
   const handleZeroBalance = async () => {
+    if (archivedSession) {
+      toast.error('Master Zero Balance cannot be executed while viewing an offline archive')
+      return
+    }
     try {
       setZeroBalanceSubmitting(true)
 
-      // 1. Export archive JSON to user's computer before erasing from cloud
-      if (transactions.length > 0) {
+      // 1. Fetch current audit logs to include in the offline archive backup
+      const auditLogsSnapshot = await getAuditLogs({ limitCount: 5000 }).catch(() => [])
+
+      // 2. Export archive JSON to user's computer before erasing from cloud
+      if (transactions.length > 0 || auditLogsSnapshot.length > 0) {
         const archivePayload = {
           system: 'A96 Ventures Unified Inventory System',
-          type: 'Master Audit Archive (All History)',
-          version: '1.0',
+          type: 'Master Audit Archive (All History & Activity Trail)',
+          version: '1.1',
           exportedAt: new Date().toISOString(),
           totalTransactions: transactions.length,
+          totalAuditLogs: auditLogsSnapshot.length,
           breakdown: {
             sales: transactions.filter((t) => t.type === 'sale').length,
             purchases: transactions.filter((t) => t.type === 'purchase').length,
@@ -234,7 +256,8 @@ export default function AdminInventory() {
             purity: p.purity,
             stockByLocation: p.stockByLocation || {}
           })),
-          transactions: transactions
+          transactions: transactions,
+          auditLogs: auditLogsSnapshot
         }
         const blob = new Blob([JSON.stringify(archivePayload, null, 2)], { type: 'application/json' })
         const url = URL.createObjectURL(blob)
@@ -248,11 +271,11 @@ export default function AdminInventory() {
         URL.revokeObjectURL(url)
       }
 
-      // 2. Erase transaction documents from cloud database
-      const count = await clearTransactionHistory()
+      // 3. Erase transaction documents and scrub audit trail from cloud database
+      const { count, auditCount } = await clearTransactionHistory()
       setIsZeroBalanceModalOpen(false)
       toast.success('Zero balance complete', {
-        description: `Exported and cleared ${count} transactions across all history. Stock counts remain unchanged.`,
+        description: `Exported and cleared ${count} transaction(s) and scrubbed ${auditCount} audit log(s). Live stock counts remain rolled over and intact.`,
         duration: 5000
       })
       setArchivedSession(null)
@@ -301,22 +324,45 @@ export default function AdminInventory() {
     return CATEGORIES.map((c) => ({ value: c, label: c }))
   }, [])
 
+  const brandOptions: SelectOption[] = useMemo(() => {
+    return BULLION_BRANDS.map((b) => ({ value: b, label: b }))
+  }, [])
+
   const isIdolCategory = prodCategory === 'Idols'
 
+  // Tie purity strictly to Metal
   const purityOptions: SelectOption[] = useMemo(() => {
-    const list = PURITY_OPTIONS_BY_CATEGORY[prodCategory] || ['999.9', '999', '916']
+    const list = PURITY_OPTIONS_BY_METAL[prodMetal] || ['999.9', '999']
     return list.map((p) => ({ value: p, label: p }))
-  }, [prodCategory])
+  }, [prodMetal])
 
   const handleCategoryChange = (newCat: ProductCategory) => {
     setProdCategory(newCat)
-    const validPurities = PURITY_OPTIONS_BY_CATEGORY[newCat] || ['999.9']
-    if (!validPurities.includes(prodPurity)) {
-      setProdPurity(validPurities[0])
-    }
-    if (newCat === 'Idols') {
+    if (newCat === 'Bullions') {
+      if (!prodBrand || (prodBrand !== 'MMTC PAMP' && prodBrand !== 'Local')) {
+        setProdBrand('MMTC PAMP')
+      }
+      // If switching from idols, default to Gold 999.9 if currently silver 925
+      if (prodMetal === 'Silver' && prodPurity === '925') {
+        setProdMetal('Gold')
+        setProdPurity('999.9')
+      }
+    } else if (newCat === 'Idols') {
       setProdWeight('')
+      setProdBrand('Local')
+      // Idols default to Silver and 925 purity
       setProdMetal('Silver')
+      setProdPurity('925')
+    }
+  }
+
+  const handleMetalChange = (newMetal: MetalType) => {
+    setProdMetal(newMetal)
+    const validPurities = PURITY_OPTIONS_BY_METAL[newMetal] || ['999.9']
+    if (prodCategory === 'Idols' && newMetal === 'Silver') {
+      setProdPurity('925')
+    } else if (!validPurities.includes(prodPurity)) {
+      setProdPurity(validPurities[0])
     }
   }
 
@@ -325,12 +371,18 @@ export default function AdminInventory() {
   }, [locations])
 
   const productOptions: SelectOption[] = useMemo(() => {
-    return products.map((p) => ({
-      value: p.id,
-      label: p.name,
-      sublabel: `${p.metal} · ${p.category} · ${p.weight}g · ${p.sku}`,
-      badge: `${p.stock} in stock`
-    }))
+    return products
+      .filter((p) => !p.isArchived)
+      .map((p) => {
+        const weightLabel = p.category === 'Idols' && p.weight && p.weight > 0 ? `~${formatWeight(p.weight)} avg` : formatWeight(p.weight)
+        const brandLabel = p.brand ? ` · ${p.brand}` : ''
+        return {
+          value: p.id,
+          label: p.name,
+          sublabel: `${p.metal} · ${p.category}${brandLabel} · ${weightLabel} · ${p.sku}`,
+          badge: `${p.stock} in stock`
+        }
+      })
   }, [products])
 
   const sortOptions: SelectOption[] = [
@@ -348,8 +400,17 @@ export default function AdminInventory() {
   // Filtered & Sorted products
   const processedProducts = useMemo(() => {
     let list = products
+    if (productStatusFilter === 'active') {
+      list = list.filter((p) => !p.isArchived)
+    } else if (productStatusFilter === 'archived') {
+      list = list.filter((p) => p.isArchived)
+    }
+
     if (selectedCategory !== 'All') {
       list = list.filter((p) => p.category === selectedCategory)
+    }
+    if (selectedBrand !== 'All') {
+      list = list.filter((p) => p.brand === selectedBrand)
     }
     if (selectedMetal !== 'All') {
       list = list.filter((p) => p.metal === selectedMetal)
@@ -413,18 +474,18 @@ export default function AdminInventory() {
     return products.find((p) => p.id === purchaseProductId)
   }, [products, purchaseProductId])
 
-  // Check if purchase product is an Idol (locks purchase qty to 1)
+  // Check if purchase product is an Idol
   const isPurchaseProductAnIdol = useMemo(() => {
     if (!selectedPurchaseProduct) return false
     return selectedPurchaseProduct.category === 'Idols'
   }, [selectedPurchaseProduct])
 
-  // Auto-lock purchase qty to 1 if product is an Idol
+  // Sync purchase qty with piece count if product is an Idol
   useEffect(() => {
     if (isPurchaseProductAnIdol) {
-      setPurchaseQty('1')
+      setPurchaseQty(purchasePieceWeights.length > 0 ? String(purchasePieceWeights.length) : '1')
     }
-  }, [isPurchaseProductAnIdol])
+  }, [isPurchaseProductAnIdol, purchasePieceWeights.length])
 
   // Selected product in movement modal
   const selectedMovementProduct = useMemo(() => {
@@ -487,17 +548,100 @@ export default function AdminInventory() {
     }
   }, [movementType, selectedMovementProduct])
 
+  // Piece Weight Handlers for Product Catalog
+  const handleAddProdPieceWeight = (rawInput?: string) => {
+    const text = rawInput !== undefined ? rawInput : prodPieceInput
+    if (!text.trim()) return
+    const nums = text
+      .split(/[\s,]+/)
+      .map((s) => {
+        const val = parseFloat(s.trim())
+        return isNaN(val) ? NaN : Number(val.toFixed(3))
+      })
+      .filter((n) => !isNaN(n) && n > 0)
+    if (nums.length === 0) return
+    const updated = [...prodPieceWeights, ...nums]
+    setProdPieceWeights(updated)
+    setProdPieceInput('')
+    if (!editingProductId) {
+      setProdInitialStock(String(updated.length))
+    }
+  }
+
+  const handleRemoveProdPieceWeight = (index: number) => {
+    const updated = prodPieceWeights.filter((_, i) => i !== index)
+    setProdPieceWeights(updated)
+    if (!editingProductId) {
+      setProdInitialStock(String(updated.length))
+    }
+  }
+
+  // Piece Weight Handlers for Restock / Purchases
+  const handleAddPurchasePieceWeight = (rawInput?: string) => {
+    const text = rawInput !== undefined ? rawInput : purchasePieceInput
+    if (!text.trim()) return
+    const nums = text
+      .split(/[\s,]+/)
+      .map((s) => {
+        const val = parseFloat(s.trim())
+        return isNaN(val) ? NaN : Number(val.toFixed(3))
+      })
+      .filter((n) => !isNaN(n) && n > 0)
+    if (nums.length === 0) return
+    const updated = [...purchasePieceWeights, ...nums]
+    setPurchasePieceWeights(updated)
+    setPurchaseQty(String(updated.length))
+    setPurchasePieceInput('')
+  }
+
+  const handleRemovePurchasePieceWeight = (index: number) => {
+    const updated = purchasePieceWeights.filter((_, i) => i !== index)
+    setPurchasePieceWeights(updated)
+    setPurchaseQty(String(updated.length))
+  }
+
+  // Movement Idol Piece Selection
+  const isMovementProductAnIdol = useMemo(() => {
+    return selectedMovementProduct?.category === 'Idols'
+  }, [selectedMovementProduct])
+
+  const availableMovementPieces = useMemo(() => {
+    if (!selectedMovementProduct || !movementLocationId) return []
+    return selectedMovementProduct.pieceWeightsByLocation?.[movementLocationId] || []
+  }, [selectedMovementProduct, movementLocationId])
+
+  useEffect(() => {
+    if (isMovementProductAnIdol && availableMovementPieces.length > 0) {
+      if (!movementPieceWeight || !availableMovementPieces.includes(Number(movementPieceWeight))) {
+        setMovementPieceWeight(String(availableMovementPieces[0]))
+      }
+    } else if (isMovementProductAnIdol && availableMovementPieces.length === 0) {
+      setMovementPieceWeight('')
+    }
+  }, [isMovementProductAnIdol, availableMovementPieces, movementPieceWeight])
+
   // Handlers for Products
   const handleOpenAddProduct = () => {
     setEditingProductId(null)
     setProdName('')
-    setProdCategory('MMTC PAMP')
-    setProdMetal('Gold')
+    const isIdolsDefault = selectedCategory === 'Idols'
+    const initialCategory: ProductCategory = isIdolsDefault ? 'Idols' : 'Bullions'
+    setProdCategory(initialCategory)
+    if (isIdolsDefault) {
+      setProdBrand('Local')
+      setProdMetal('Silver')
+      setProdPurity('925')
+    } else {
+      setProdBrand('MMTC PAMP')
+      setProdMetal('Gold')
+      setProdPurity('999.9')
+    }
     setProdSku('')
     setProdWeight('')
-    setProdPurity('999.9')
     setProdInitialStock('')
-    setProdInitialLocationId(locations[0]?.id || '')
+    setProdInitialLocationId(userAssignedLocationId || locations[0]?.id || '')
+    setProdPieceWeights([])
+    setProdPieceInput('')
     setProductFormError(null)
     setIsProductFormOpen(true)
   }
@@ -505,13 +649,17 @@ export default function AdminInventory() {
   const handleEditProduct = (p: Product) => {
     setEditingProductId(p.id)
     setProdName(p.name)
-    setProdCategory(p.category)
+    const cat = (p.category === 'MMTC PAMP' ? 'Bullions' : p.category) as ProductCategory
+    setProdCategory(cat)
+    setProdBrand((p.brand as ProductBrand) || (p.category === 'MMTC PAMP' ? 'MMTC PAMP' : 'Local'))
     setProdMetal(p.metal || 'Gold')
     setProdSku(p.sku)
     setProdWeight(String(p.weight || ''))
-    setProdPurity(p.purity || '999.9')
+    setProdPurity(p.purity || (p.metal === 'Silver' ? '925' : '999.9'))
     setProdInitialStock('')
     setProdInitialLocationId('')
+    setProdPieceWeights(p.pieceWeights || [])
+    setProdPieceInput('')
     setProductFormError(null)
     setIsProductFormOpen(true)
   }
@@ -526,6 +674,17 @@ export default function AdminInventory() {
       setProductFormError('SKU code is required')
       return
     }
+
+    // Enforce unique SKU (case-insensitive across active products)
+    const cleanSku = prodSku.trim().toUpperCase()
+    const duplicateSku = products.find(
+      (p) => p.id !== editingProductId && !p.isArchived && p.sku.trim().toUpperCase() === cleanSku
+    )
+    if (duplicateSku) {
+      setProductFormError(`A product with SKU "${cleanSku}" already exists (${duplicateSku.name}). SKUs must be unique.`)
+      return
+    }
+
     const isIdol = prodCategory === 'Idols'
     let weightNum = Number(prodWeight)
     if (!isIdol) {
@@ -534,7 +693,9 @@ export default function AdminInventory() {
         return
       }
     } else {
-      if (isNaN(weightNum) || weightNum < 0) {
+      if (prodPieceWeights.length > 0) {
+        weightNum = Number((prodPieceWeights.reduce((a, b) => a + b, 0) / prodPieceWeights.length).toFixed(3))
+      } else {
         weightNum = 0
       }
     }
@@ -543,26 +704,33 @@ export default function AdminInventory() {
     setProductFormError(null)
 
     try {
+      const effectiveBrand = prodCategory === 'Bullions' ? prodBrand : 'Local'
       if (editingProductId) {
         await updateProduct(editingProductId, {
           name: prodName,
           category: prodCategory,
+          brand: effectiveBrand,
           metal: prodMetal,
-          sku: prodSku,
+          sku: cleanSku,
           weight: weightNum,
-          purity: prodPurity
+          purity: prodPurity,
+          pieceWeights: isIdol ? prodPieceWeights : undefined
         })
       } else {
-        const initLocName = locationMap.get(prodInitialLocationId) || ''
+        const effectiveInitLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : prodInitialLocationId
+        const initLocName = locationMap.get(effectiveInitLocId) || adminUser?.assignedLocationName || ''
+        const initStock = isIdol ? prodPieceWeights.length : (Number(prodInitialStock) || 0)
         await addProduct({
           name: prodName,
           category: prodCategory,
+          brand: effectiveBrand,
           metal: prodMetal,
-          sku: prodSku,
+          sku: cleanSku,
           weight: weightNum,
           purity: prodPurity,
-          initialStock: Number(prodInitialStock) || 0,
-          initialLocationId: prodInitialLocationId || undefined,
+          pieceWeights: isIdol ? prodPieceWeights : undefined,
+          initialStock: initStock,
+          initialLocationId: effectiveInitLocId || undefined,
           initialLocationName: initLocName || undefined
         })
       }
@@ -579,15 +747,22 @@ export default function AdminInventory() {
   }
 
   const executeDeleteProduct = async () => {
+    if (archivedSession) {
+      toast.error('Destructive actions are disabled in offline archive view')
+      return
+    }
     if (!deleteProductTarget) return
     try {
       await deleteProduct(deleteProductTarget.id)
-      toast.success('Product deleted')
+      toast.success(`Product "${deleteProductTarget.name}" archived`, {
+        description: 'Product hidden from active sales and stock movements. Ledger history preserved.'
+      })
       setDeleteProductTarget(null)
       await loadAll()
     } catch (err: unknown) {
       console.error(err)
-      toast.error('Failed to delete product')
+      const msg = err instanceof Error ? err.message : 'Failed to archive product'
+      toast.error(msg)
     }
   }
 
@@ -595,11 +770,13 @@ export default function AdminInventory() {
   const handleOpenAddPurchase = () => {
     const firstP = products[0]
     setPurchaseProductId(firstP?.id || '')
-    setPurchaseLocationId(locations[0]?.id || '')
+    setPurchaseLocationId(userAssignedLocationId || locations[0]?.id || '')
     setPurchaseQty('1')
     setPurchasePrice('')
-    setPurchaseDate(new Date().toISOString().split('T')[0])
+    setPurchaseDate(getTodayIST())
     setPurchaseNotes('')
+    setPurchasePieceWeights([])
+    setPurchasePieceInput('')
     setPurchaseError(null)
     setIsPurchaseFormOpen(true)
   }
@@ -611,13 +788,19 @@ export default function AdminInventory() {
       setPurchaseError('Please select a valid product')
       return
     }
-    if (!purchaseLocationId) {
+    const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : purchaseLocationId
+    if (!effectiveLocId) {
       setPurchaseError('Please select a location')
       return
     }
 
     const isIdol = prod.category === 'Idols'
-    const qty = isIdol ? 1 : Number(purchaseQty)
+    const qty = isIdol ? purchasePieceWeights.length : Number(purchaseQty)
+
+    if (isIdol && purchasePieceWeights.length === 0) {
+      setPurchaseError('Please enter at least one piece weight for this Idol purchase batch')
+      return
+    }
 
     if (isNaN(qty) || qty <= 0) {
       setPurchaseError('Quantity must be at least 1')
@@ -627,7 +810,7 @@ export default function AdminInventory() {
     setPurchaseSubmitting(true)
     setPurchaseError(null)
     try {
-      const locName = locationMap.get(purchaseLocationId) || ''
+      const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
       await recordTransaction({
         type: 'purchase',
         productId: prod.id,
@@ -635,8 +818,9 @@ export default function AdminInventory() {
         category: prod.category,
         metal: prod.metal,
         quantity: qty,
+        pieceWeights: isIdol ? purchasePieceWeights : undefined,
         price: purchasePrice ? Number(purchasePrice) : undefined,
-        locationId: purchaseLocationId,
+        locationId: effectiveLocId,
         locationName: locName,
         date: purchaseDate,
         notes: purchaseNotes
@@ -657,13 +841,16 @@ export default function AdminInventory() {
   const handleOpenMovement = (type: MovementSubtype = 'transfer') => {
     setMovementType(type)
     setMovementProductId(products[0]?.id || '')
-    setMovementLocationId(locations[0]?.id || '')
-    setMovementToLocationId(locations[1]?.id || '')
+    const defaultSource = userAssignedLocationId || locations[0]?.id || ''
+    setMovementLocationId(defaultSource)
+    const otherLoc = locations.find((l) => l.id !== defaultSource)?.id || locations[1]?.id || ''
+    setMovementToLocationId(otherLoc)
     setMovementQty('1')
-    setMovementDate(new Date().toISOString().split('T')[0])
+    setMovementDate(getTodayIST())
     setMovementNotes('')
     setMovementRepairCharge('')
     setMovementRecoveredWeight('')
+    setMovementPieceWeight('')
     const firstP = products[0]
     setMovementNewWeight(firstP ? String(firstP.weight || '') : '')
     setMovementError(null)
@@ -677,7 +864,8 @@ export default function AdminInventory() {
       setMovementError('Please select a product')
       return
     }
-    if (!movementLocationId) {
+    const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : movementLocationId
+    if (!effectiveLocId) {
       setMovementError('Please select a location')
       return
     }
@@ -686,7 +874,7 @@ export default function AdminInventory() {
     setMovementError(null)
 
     try {
-      const locName = locationMap.get(movementLocationId) || ''
+      const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
       const toLocName = movementToLocationId ? locationMap.get(movementToLocationId) : undefined
 
       if (movementType === 'repair') {
@@ -701,7 +889,7 @@ export default function AdminInventory() {
           productName: prod.name,
           category: prod.category,
           metal: prod.metal,
-          locationId: movementLocationId,
+          locationId: effectiveLocId,
           locationName: locName,
           previousWeight: oldW,
           newWeight: newW,
@@ -710,7 +898,11 @@ export default function AdminInventory() {
           notes: movementNotes
         })
       } else if (movementType === 'melt') {
-        const qty = Number(movementQty)
+        const isIdol = prod.category === 'Idols'
+        if (isIdol && !movementPieceWeight) {
+          throw new Error('Please select which specific piece weight to melt')
+        }
+        const qty = isIdol ? 1 : Number(movementQty)
         if (isNaN(qty) || qty <= 0) throw new Error('Quantity to melt must be > 0')
         await recordTransaction({
           type: 'melt',
@@ -719,16 +911,21 @@ export default function AdminInventory() {
           category: prod.category,
           metal: prod.metal,
           quantity: qty,
-          locationId: movementLocationId,
+          pieceWeight: isIdol ? Number(movementPieceWeight) : undefined,
+          locationId: effectiveLocId,
           locationName: locName,
           recoveredWeight: movementRecoveredWeight ? Number(movementRecoveredWeight) : undefined,
           date: movementDate,
           notes: movementNotes
         })
       } else if (movementType === 'transfer') {
-        const qty = Number(movementQty)
+        const isIdol = prod.category === 'Idols'
+        if (isIdol && !movementPieceWeight) {
+          throw new Error('Please select which specific piece weight to transfer')
+        }
+        const qty = isIdol ? 1 : Number(movementQty)
         if (isNaN(qty) || qty <= 0) throw new Error('Transfer quantity must be > 0')
-        if (movementLocationId === movementToLocationId) {
+        if (effectiveLocId === movementToLocationId) {
           throw new Error('Source and destination locations cannot be identical')
         }
         await recordTransaction({
@@ -738,7 +935,8 @@ export default function AdminInventory() {
           category: prod.category,
           metal: prod.metal,
           quantity: qty,
-          locationId: movementLocationId,
+          pieceWeight: isIdol ? Number(movementPieceWeight) : undefined,
+          locationId: effectiveLocId,
           locationName: locName,
           toLocationId: movementToLocationId,
           toLocationName: toLocName,
@@ -755,7 +953,7 @@ export default function AdminInventory() {
           category: prod.category,
           metal: prod.metal,
           quantity: qty,
-          locationId: movementLocationId,
+          locationId: effectiveLocId,
           locationName: locName,
           date: movementDate,
           notes: movementNotes
@@ -775,15 +973,20 @@ export default function AdminInventory() {
   }
 
   const executeDeleteTransaction = async () => {
+    if (archivedSession) {
+      toast.error('Destructive actions are disabled in offline archive view')
+      return
+    }
     if (!deleteTxTarget) return
     try {
       await deleteTransaction(deleteTxTarget)
-      toast.success('Movement reversed and deleted')
+      toast.success('Reversing entry posted successfully')
       setDeleteTxTarget(null)
       await loadAll()
     } catch (err: unknown) {
-      console.error('Failed to delete transaction', err)
-      toast.error('Failed to reverse movement')
+      console.error('Failed to reverse transaction', err)
+      const msg = err instanceof Error ? err.message : 'Failed to reverse transaction'
+      toast.error(msg)
     }
   }
 
@@ -834,10 +1037,10 @@ export default function AdminInventory() {
             </button>
           )}
 
-          {hasPermission('archive', 'zeroBalance') && (
+          {!archivedSession && hasPermission('archive', 'zeroBalance') && (
             <button
               onClick={() => setIsZeroBalanceModalOpen(true)}
-              title="Master Zero Balance: Export archive and clear all history (sales, purchases, movements) while keeping live stock"
+              title="Master Zero Balance: Export archive, clear all history and scrub audit trail while keeping live stock"
               className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
             >
               <RotateCcw size={14} />
@@ -845,7 +1048,7 @@ export default function AdminInventory() {
             </button>
           )}
 
-          {activeTab === 'products' && hasPermission('products', 'add') && (
+          {!archivedSession && activeTab === 'products' && hasPermission('products', 'add') && (
             <button
               onClick={handleOpenAddProduct}
               className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97]"
@@ -855,7 +1058,7 @@ export default function AdminInventory() {
             </button>
           )}
 
-          {activeTab === 'purchases' && hasPermission('purchases', 'add') && (
+          {!archivedSession && activeTab === 'purchases' && hasPermission('purchases', 'add') && (
             <button
               onClick={handleOpenAddPurchase}
               disabled={products.length === 0 || locations.length === 0}
@@ -866,7 +1069,8 @@ export default function AdminInventory() {
             </button>
           )}
 
-          {activeTab === 'movements' &&
+          {!archivedSession &&
+            activeTab === 'movements' &&
             (hasPermission('movements', 'transfer') ||
               hasPermission('movements', 'adjustment') ||
               hasPermission('movements', 'repair') ||
@@ -898,7 +1102,7 @@ export default function AdminInventory() {
                 </span>
               </div>
               <div className="text-xs text-gray-500">
-                {archivedSession.transactions.length} historical transactions from {new Date(archivedSession.exportedAt).toLocaleDateString()} · Loaded locally in browser memory (zero cloud sync)
+                {archivedSession.transactions.length} historical transactions from {new Date(archivedSession.exportedAt).toLocaleDateString()} · Read-only offline archive
               </div>
             </div>
           </div>
@@ -981,8 +1185,8 @@ export default function AdminInventory() {
                   key={mType}
                   onClick={() => setMovementTypeFilter(mType)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${isActive
-                      ? 'bg-black text-white border border-black shadow-xs'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                    ? 'bg-black text-white border border-black shadow-xs'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
                     }`}
                 >
                   {labelMap[mType]}
@@ -1045,6 +1249,55 @@ export default function AdminInventory() {
                 </button>
               ))}
             </div>
+
+            {/* Brand Filter */}
+            <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4">
+              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Brand:</span>
+              <button
+                onClick={() => setSelectedBrand('All')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedBrand === 'All'
+                  ? 'bg-black text-white border border-black shadow-xs'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                  }`}
+              >
+                All
+              </button>
+              {BULLION_BRANDS.map((b) => (
+                <button
+                  key={b}
+                  onClick={() => setSelectedBrand(b)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedBrand === b
+                    ? 'bg-black text-white border border-black shadow-xs'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                    }`}
+                >
+                  {b}
+                </button>
+              ))}
+            </div>
+
+            {/* Product Status (Active / Archived) */}
+            {activeTab === 'products' && (
+              <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4">
+                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Status:</span>
+                {(['active', 'archived', 'all'] as const).map((st) => {
+                  const labelMap = { active: 'Active Catalog', archived: 'Archived', all: 'All Products' }
+                  const isActive = productStatusFilter === st
+                  return (
+                    <button
+                      key={st}
+                      onClick={() => setProductStatusFilter(st)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${isActive
+                        ? 'bg-black text-white border border-black shadow-xs'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                        }`}
+                    >
+                      {labelMap[st]}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Sort Control on Products Tab */}
@@ -1122,12 +1375,32 @@ export default function AdminInventory() {
 
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Brand <span className="text-red-500">*</span>
+                  </label>
+                  {prodCategory === 'Bullions' ? (
+                    <CustomSelect
+                      value={prodBrand}
+                      onValueChange={(val) => setProdBrand(val as ProductBrand)}
+                      options={brandOptions}
+                    />
+                  ) : (
+                    <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 flex items-center justify-between">
+                      <span>Local</span>
+                      <span className="text-xs font-normal text-gray-400">Default</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                     Metal <span className="text-red-500">*</span>
                   </label>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setProdMetal('Gold')}
+                      onClick={() => handleMetalChange('Gold')}
                       className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color] duration-150 flex items-center justify-center ${prodMetal === 'Gold'
                         ? 'bg-black text-white shadow-sm'
                         : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -1137,7 +1410,7 @@ export default function AdminInventory() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setProdMetal('Silver')}
+                      onClick={() => handleMetalChange('Silver')}
                       className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color] duration-150 flex items-center justify-center ${prodMetal === 'Silver'
                         ? 'bg-black text-white shadow-sm'
                         : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -1147,9 +1420,7 @@ export default function AdminInventory() {
                     </button>
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                     SKU Code <span className="text-red-500">*</span>
@@ -1165,33 +1436,44 @@ export default function AdminInventory() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Weight (Grams) {isIdolCategory ? <span className="text-gray-400 font-normal lowercase">(variable)</span> : <span className="text-red-500">*</span>}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    placeholder={isIdolCategory ? "Disabled for idols" : "e.g. 10.00 (mandatory)"}
-                    value={isIdolCategory ? '' : prodWeight}
-                    disabled={isIdolCategory}
-                    onChange={(e) => setProdWeight(e.target.value)}
-                    className={`w-full px-3.5 py-2.5 border rounded-lg text-sm transition-[border-color] duration-150 ${isIdolCategory
-                      ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                      : 'bg-white border-gray-200 text-black placeholder-gray-400 focus:outline-none focus:border-black'
-                      }`}
-                    required={!isIdolCategory}
-                  />
-                  {isIdolCategory && (
-                    <p className="text-[11px] text-gray-400 mt-1">
-                      Disabled for idols as each piece has a unique weight.
-                    </p>
+                  {isIdolCategory ? (
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                        Average Weight
+                      </label>
+                      <div className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-black flex items-center justify-between">
+                        <span>
+                          {prodPieceWeights.length > 0
+                            ? `~${formatWeight(prodPieceWeights.reduce((a, b) => a + b, 0) / prodPieceWeights.length)} avg`
+                            : 'Variable'}
+                        </span>
+                        <span className="text-xs font-normal text-gray-500">
+                          {prodPieceWeights.length} pcs
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                        Weight (Grams) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="0.001"
+                        placeholder="e.g. 10.000 (mandatory)"
+                        value={prodWeight}
+                        onChange={(e) => setProdWeight(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 text-black placeholder-gray-400 focus:outline-none focus:border-black rounded-lg text-sm transition-[border-color] duration-150"
+                        required
+                      />
+                    </div>
                   )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Purity <span className="text-red-500">*</span>
+                    Purity ({prodMetal}) <span className="text-red-500">*</span>
                   </label>
                   <CustomSelect
                     value={prodPurity}
@@ -1202,6 +1484,83 @@ export default function AdminInventory() {
                 </div>
               </div>
 
+              {/* Idol Piece-Level Weight Registry */}
+              {isIdolCategory && (
+                <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wider text-gray-800">
+                        Piece-Level Weight Registry
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Each idol piece has a distinct weight. Enter individual piece weights (press Enter or Add).
+                      </p>
+                    </div>
+                    {prodPieceWeights.length > 0 && (
+                      <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-black text-white">
+                        {prodPieceWeights.length} piece{prodPieceWeights.length === 1 ? '' : 's'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. 48.250, 51.600, 49.825 (or comma-separated)"
+                      value={prodPieceInput}
+                      onChange={(e) => setProdPieceInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleAddProdPieceWeight()
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddProdPieceWeight()}
+                      className="px-4 py-2 bg-black text-white text-xs font-semibold rounded-lg hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                    >
+                      + Add Piece
+                    </button>
+                  </div>
+
+                  {prodPieceWeights.length > 0 ? (
+                    <div className="space-y-2 pt-1">
+                      <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-white rounded-lg border border-gray-200">
+                        {prodPieceWeights.map((w, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 hover:bg-gray-200/80 border border-gray-200 text-xs font-semibold text-gray-800 transition-[background-color] duration-100"
+                          >
+                            <span>#{idx + 1}: <strong>{formatWeight(w)}</strong></span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveProdPieceWeight(idx)}
+                              className="text-gray-400 hover:text-red-600 transition-colors duration-100 ml-0.5"
+                              title="Remove piece"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-gray-600 px-1 pt-1 border-t border-gray-200">
+                        <span>Total: <strong>{formatWeight(prodPieceWeights.reduce((a, b) => a + b, 0))}</strong></span>
+                        <span>Average: <strong>{formatWeight(prodPieceWeights.reduce((a, b) => a + b, 0) / prodPieceWeights.length)}</strong></span>
+                        <span>Quantity: <strong>{prodPieceWeights.length} pcs</strong></span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-3 bg-white/60 border border-dashed border-gray-200 rounded-lg text-xs text-gray-400">
+                      No individual pieces registered yet. Add weights above or restock via Purchases.
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Opening stock (Only on creation) */}
               {!editingProductId && (
                 <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
@@ -1211,25 +1570,42 @@ export default function AdminInventory() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">
-                        Initial Quantity {prodCategory === 'Idols' && '(Max 1 for Idols)'}
+                        Initial Quantity {prodCategory === 'Idols' && '(Derived from pieces above)'}
                       </label>
                       <input
                         type="number"
                         min="0"
-                        max={prodCategory === 'Idols' ? 1 : undefined}
+                        disabled={prodCategory === 'Idols'}
                         placeholder="0"
-                        value={prodInitialStock}
+                        value={prodCategory === 'Idols' ? String(prodPieceWeights.length) : prodInitialStock}
                         onChange={(e) => setProdInitialStock(e.target.value)}
-                        className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                        className={`w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${prodCategory === 'Idols' ? 'bg-gray-100 cursor-not-allowed font-semibold' : 'bg-white'}`}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Assign to Location</label>
-                      <CustomSelect
-                        value={prodInitialLocationId}
-                        onValueChange={setProdInitialLocationId}
-                        options={[{ value: '', label: 'Select location...' }, ...locationOptions]}
-                      />
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs text-gray-500">Assign to Location</label>
+                        {isLocationLocked && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
+                            <Lock className="w-2.5 h-2.5 text-gray-500" />
+                            Assigned Store
+                          </span>
+                        )}
+                      </div>
+                      {isLocationLocked ? (
+                        <div className="w-full px-3.5 py-2 bg-gray-100 border border-gray-200 rounded-lg text-sm text-black flex items-center justify-between">
+                          <span className="font-semibold text-black">
+                            {locationMap.get(prodInitialLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
+                          </span>
+                          <span className="text-xs text-gray-500">Default & Locked</span>
+                        </div>
+                      ) : (
+                        <CustomSelect
+                          value={prodInitialLocationId}
+                          onValueChange={setProdInitialLocationId}
+                          options={[{ value: '', label: 'Select location...' }, ...locationOptions]}
+                        />
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1299,17 +1675,111 @@ export default function AdminInventory() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Receiving Location <span className="text-red-500">*</span>
-                  </label>
-                  <CustomSelect
-                    value={purchaseLocationId}
-                    onValueChange={setPurchaseLocationId}
-                    options={locationOptions}
-                    placeholder="Select receiving location..."
-                  />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Receiving Location <span className="text-red-500">*</span>
+                    </label>
+                    {isLocationLocked && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                        <Lock className="w-3 h-3 text-gray-500" />
+                        Assigned Store
+                      </span>
+                    )}
+                  </div>
+                  {isLocationLocked ? (
+                    <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-black flex items-center justify-between">
+                      <span className="font-semibold text-black">
+                        {locationMap.get(purchaseLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
+                      </span>
+                      <span className="text-xs text-gray-500 font-medium">Default & Locked</span>
+                    </div>
+                  ) : (
+                    <CustomSelect
+                      value={purchaseLocationId}
+                      onValueChange={setPurchaseLocationId}
+                      options={locationOptions}
+                      placeholder="Select receiving location..."
+                    />
+                  )}
                 </div>
               </div>
+
+              {/* Idol Batch Piece Weights Registry */}
+              {isPurchaseProductAnIdol && (
+                <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wider text-gray-800">
+                        Piece Weights for this Purchase Batch
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Enter weights for each idol piece in this batch (e.g. 20 pieces with different weights). Press Enter or Add.
+                      </p>
+                    </div>
+                    {purchasePieceWeights.length > 0 && (
+                      <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-black text-white">
+                        {purchasePieceWeights.length} pcs
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. 48.250, 51.600, 49.825 (or paste comma/space separated)"
+                      value={purchasePieceInput}
+                      onChange={(e) => setPurchasePieceInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleAddPurchasePieceWeight()
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddPurchasePieceWeight()}
+                      className="px-4 py-2 bg-black text-white text-xs font-semibold rounded-lg hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                    >
+                      + Add Piece
+                    </button>
+                  </div>
+
+                  {purchasePieceWeights.length > 0 ? (
+                    <div className="space-y-2 pt-1">
+                      <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-white rounded-lg border border-gray-200">
+                        {purchasePieceWeights.map((w, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 hover:bg-gray-200/80 border border-gray-200 text-xs font-semibold text-gray-800 transition-[background-color] duration-100"
+                          >
+                            <span>#{idx + 1}: <strong>{formatWeight(w)}</strong></span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePurchasePieceWeight(idx)}
+                              className="text-gray-400 hover:text-red-600 transition-colors duration-100 ml-0.5"
+                              title="Remove piece"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-gray-600 px-1 pt-1 border-t border-gray-200">
+                        <span>Total: <strong>{formatWeight(purchasePieceWeights.reduce((a, b) => a + b, 0))}</strong></span>
+                        <span>Average: <strong>{formatWeight(purchasePieceWeights.reduce((a, b) => a + b, 0) / purchasePieceWeights.length)}</strong></span>
+                        <span>Batch Size: <strong>{purchasePieceWeights.length} pcs</strong></span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-3 bg-white/60 border border-dashed border-gray-200 rounded-lg text-xs text-gray-400">
+                      Add the weights of the idol pieces being purchased.
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -1319,16 +1789,15 @@ export default function AdminInventory() {
                     </label>
                     {isPurchaseProductAnIdol && (
                       <span className="text-[11px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
-                        Idols locked to 1
+                        {purchasePieceWeights.length} pieces
                       </span>
                     )}
                   </div>
                   <input
                     type="number"
                     min="1"
-                    max={isPurchaseProductAnIdol ? 1 : undefined}
                     disabled={isPurchaseProductAnIdol}
-                    value={isPurchaseProductAnIdol ? '1' : purchaseQty}
+                    value={isPurchaseProductAnIdol ? String(purchasePieceWeights.length) : purchaseQty}
                     onChange={(e) => setPurchaseQty(e.target.value)}
                     className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isPurchaseProductAnIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''
                       }`}
@@ -1336,7 +1805,7 @@ export default function AdminInventory() {
                   />
                   {isPurchaseProductAnIdol && (
                     <p className="text-[11px] text-gray-500 mt-1">
-                      Idols are unique pieces and purchased 1 unit at a time.
+                      Calculated automatically from registered piece weights above.
                     </p>
                   )}
                 </div>
@@ -1447,8 +1916,8 @@ export default function AdminInventory() {
                       setMovementError(null)
                     }}
                     className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${isActive
-                        ? 'bg-white text-black shadow-xs font-bold'
-                        : 'text-gray-500 hover:text-black'
+                      ? 'bg-white text-black shadow-xs font-bold'
+                      : 'text-gray-500 hover:text-black'
                       }`}
                   >
                     {labelMap[type]}
@@ -1479,21 +1948,73 @@ export default function AdminInventory() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    {movementType === 'transfer' ? 'Source Location *' : 'Location *'}
-                  </label>
-                  <CustomSelect
-                    value={movementLocationId}
-                    onValueChange={setMovementLocationId}
-                    options={movementLocationOptions}
-                    placeholder="Select location..."
-                  />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      {movementType === 'transfer' ? 'Source Location *' : 'Location *'}
+                    </label>
+                    {isLocationLocked && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                        <Lock className="w-3 h-3 text-gray-500" />
+                        Assigned Store
+                      </span>
+                    )}
+                  </div>
+                  {isLocationLocked ? (
+                    <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-black flex items-center justify-between">
+                      <span className="font-semibold text-black">
+                        {locationMap.get(movementLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
+                      </span>
+                      <span className="text-xs text-gray-500 font-medium">Default & Locked</span>
+                    </div>
+                  ) : (
+                    <CustomSelect
+                      value={movementLocationId}
+                      onValueChange={setMovementLocationId}
+                      options={movementLocationOptions}
+                      placeholder="Select location..."
+                    />
+                  )}
                 </div>
               </div>
 
               {/* Type-Specific Fields */}
               {movementType === 'transfer' && (
                 <div className="space-y-4">
+                  {/* Idol Piece Selection for Transfer */}
+                  {isMovementProductAnIdol && (
+                    <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                          Select Idol Piece to Transfer <span className="text-red-500">*</span>
+                        </label>
+                        <span className="text-[11px] text-gray-500 font-medium">
+                          {availableMovementPieces.length} available at source
+                        </span>
+                      </div>
+                      {availableMovementPieces.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                          {availableMovementPieces.map((pw, i) => (
+                            <button
+                              key={`${pw}-${i}`}
+                              type="button"
+                              onClick={() => setMovementPieceWeight(String(pw))}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${String(movementPieceWeight) === String(pw)
+                                ? 'bg-black text-white shadow-xs'
+                                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                                }`}
+                            >
+                              #{i + 1}: {formatWeight(pw)}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-black font-semibold">
+                          No idol pieces in stock at {locationMap.get(movementLocationId) || 'selected source'}.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
@@ -1515,11 +2036,18 @@ export default function AdminInventory() {
                         type="number"
                         min="1"
                         max={currentSourceStock > 0 ? currentSourceStock : undefined}
-                        value={movementQty}
+                        disabled={isMovementProductAnIdol}
+                        value={isMovementProductAnIdol ? '1' : movementQty}
                         onChange={(e) => setMovementQty(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                        className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isMovementProductAnIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''
+                          }`}
                         required
                       />
+                      {isMovementProductAnIdol && (
+                        <p className="text-[11px] text-gray-500 mt-1">
+                          Idols are transferred 1 unique piece at a time.
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -1582,11 +2110,11 @@ export default function AdminInventory() {
               {movementType === 'repair' && (
                 <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-4">
                   <div className="flex items-center justify-between text-xs text-gray-600">
-                    <span>Original Weight: <strong>{selectedMovementProduct?.weight || 0} grams</strong></span>
+                    <span>Original Weight: <strong>{formatWeight(selectedMovementProduct?.weight)}</strong></span>
                     {movementNewWeight && (
                       <span className="font-semibold text-black">
                         Net Change:{' '}
-                        {(Number(movementNewWeight) - (selectedMovementProduct?.weight || 0)).toFixed(2)}g
+                        {(Number(movementNewWeight) - (selectedMovementProduct?.weight || 0)).toFixed(3)}g
                       </span>
                     )}
                   </div>
@@ -1598,9 +2126,9 @@ export default function AdminInventory() {
                       </label>
                       <input
                         type="number"
-                        step="0.01"
-                        min="0.01"
-                        placeholder="e.g. 102.50"
+                        step="0.001"
+                        min="0.001"
+                        placeholder="e.g. 102.500"
                         value={movementNewWeight}
                         onChange={(e) => setMovementNewWeight(e.target.value)}
                         className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
@@ -1636,6 +2164,41 @@ export default function AdminInventory() {
                     <span>Melt decrements physical item count at {locationMap.get(movementLocationId) || 'selected location'} and records recovered pure metal weight.</span>
                   </div>
 
+                  {/* Idol Piece Selection for Melt */}
+                  {isMovementProductAnIdol && (
+                    <div className="p-3.5 bg-white border border-gray-200 rounded-lg space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                          Select Idol Piece to Melt <span className="text-red-500">*</span>
+                        </label>
+                        <span className="text-[11px] text-gray-500 font-medium">
+                          {availableMovementPieces.length} available at location
+                        </span>
+                      </div>
+                      {availableMovementPieces.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                          {availableMovementPieces.map((pw, i) => (
+                            <button
+                              key={`${pw}-${i}`}
+                              type="button"
+                              onClick={() => setMovementPieceWeight(String(pw))}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${String(movementPieceWeight) === String(pw)
+                                ? 'bg-black text-white shadow-xs'
+                                : 'bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100'
+                                }`}
+                            >
+                              #{i + 1}: {formatWeight(pw)}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-black font-semibold">
+                          No idol pieces in stock at {locationMap.get(movementLocationId) || 'selected location'}.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
@@ -1645,9 +2208,11 @@ export default function AdminInventory() {
                         type="number"
                         min="1"
                         max={currentSourceStock > 0 ? currentSourceStock : undefined}
-                        value={movementQty}
+                        disabled={isMovementProductAnIdol}
+                        value={isMovementProductAnIdol ? '1' : movementQty}
                         onChange={(e) => setMovementQty(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                        className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isMovementProductAnIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''
+                          }`}
                         required
                       />
                       <p className="text-xs text-gray-400 mt-1">
@@ -1661,9 +2226,9 @@ export default function AdminInventory() {
                       </label>
                       <input
                         type="number"
-                        step="0.01"
+                        step="0.001"
                         min="0"
-                        placeholder="e.g. 98.40"
+                        placeholder="e.g. 98.400"
                         value={movementRecoveredWeight}
                         onChange={(e) => setMovementRecoveredWeight(e.target.value)}
                         className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
@@ -1763,6 +2328,7 @@ export default function AdminInventory() {
                       </div>
                     </th>
                     <th className="px-6 py-3.5">Category</th>
+                    <th className="px-6 py-3.5">Brand</th>
                     <th className="px-6 py-3.5">Metal</th>
                     <th
                       onClick={() => toggleSort('sku')}
@@ -1819,11 +2385,23 @@ export default function AdminInventory() {
                     return (
                       <tr key={p.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
                         <td className="px-6 py-4 font-semibold text-black">
-                          {p.name}
+                          <div className="flex items-center gap-2">
+                            <span>{p.name}</span>
+                            {p.isArchived && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-gray-600 border border-gray-300 rounded">
+                                Archived
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
                             {p.category}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium border border-gray-200 text-gray-700 bg-white shadow-2xs">
+                            {p.brand || (p.category === 'MMTC PAMP' ? 'MMTC PAMP' : 'Local')}
                           </span>
                         </td>
                         <td className="px-6 py-4">
@@ -1835,12 +2413,27 @@ export default function AdminInventory() {
                           {p.sku}
                         </td>
                         <td className="px-6 py-4 text-gray-600">
-                          {p.category === 'Idols' && (!p.weight || p.weight === 0) ? (
-                            <span className="text-gray-400 italic">Variable</span>
+                          {p.category === 'Idols' ? (
+                            <div>
+                              <span className="font-semibold text-black">
+                                {p.weight && p.weight > 0 ? `~${formatWeight(p.weight)} avg` : 'Variable'}
+                              </span>{' '}
+                              · {p.purity || '—'}
+                              {p.pieceWeights && p.pieceWeights.length > 0 && (
+                                <div className="text-[11px] text-gray-500 font-mono flex items-center gap-1 mt-0.5" title={p.pieceWeights.map((w) => formatWeight(w)).join(', ')}>
+                                  <span className="font-semibold text-gray-600">{p.pieceWeights.length} pcs:</span>
+                                  <span className="text-gray-400 truncate max-w-[120px]">
+                                    {p.pieceWeights.slice(0, 3).map((w) => formatWeight(w)).join(', ')}
+                                    {p.pieceWeights.length > 3 && ` +${p.pieceWeights.length - 3}`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           ) : (
-                            <strong>{p.weight}g</strong>
-                          )}{' '}
-                          · {p.purity || '—'}
+                            <>
+                              <strong>{formatWeight(p.weight)}</strong> · {p.purity || '—'}
+                            </>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           {locEntries.length === 0 ? (
@@ -1867,7 +2460,7 @@ export default function AdminInventory() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="inline-flex items-center gap-1">
-                            {hasPermission('products', 'edit') && (
+                            {!archivedSession && hasPermission('products', 'edit') && (
                               <button
                                 onClick={() => handleEditProduct(p)}
                                 title="Edit"
@@ -1876,13 +2469,14 @@ export default function AdminInventory() {
                                 <Edit2 size={15} />
                               </button>
                             )}
-                            {hasPermission('products', 'delete') && (
+                            {!archivedSession && hasPermission('products', 'delete') && (
                               <button
                                 onClick={() => setDeleteProductTarget(p)}
-                                title="Delete"
-                                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                title={p.isArchived ? "Product Archived" : "Archive Product"}
+                                disabled={p.isArchived}
+                                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 disabled:opacity-30 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                               >
-                                <Trash2 size={15} />
+                                <Archive size={15} />
                               </button>
                             )}
                           </div>
@@ -1955,6 +2549,11 @@ export default function AdminInventory() {
                         </td>
                         <td className="px-6 py-4 text-right tabular-nums font-semibold text-black">
                           +{tx.quantity}
+                          {tx.pieceWeights && tx.pieceWeights.length > 0 && (
+                            <div className="text-[11px] font-mono text-gray-500 font-normal">
+                              avg {formatWeight(tx.pieceWeights.reduce((a, b) => a + b, 0) / tx.pieceWeights.length)}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right tabular-nums text-gray-600">
                           {tx.price ? `₹${tx.price.toLocaleString('en-IN')}` : '—'}
@@ -1964,15 +2563,25 @@ export default function AdminInventory() {
                         </td>
                         <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate">
                           {tx.notes || '—'}
+                          {tx.isReversed && (
+                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                              Reversed
+                            </span>
+                          )}
+                          {tx.reversalOf && (
+                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                              Reversal
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {hasPermission('purchases', 'delete') && (
+                          {!archivedSession && hasPermission('purchases', 'delete') && !tx.isReversed && !tx.reversalOf && (
                             <button
                               onClick={() => setDeleteTxTarget(tx)}
-                              title="Delete and reverse stock"
+                              title="Post reversing entry"
                               className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                             >
-                              <Trash2 size={15} />
+                              <RotateCcw size={14} />
                             </button>
                           )}
                         </td>
@@ -2061,6 +2670,11 @@ export default function AdminInventory() {
                           {tx.type === 'transfer' && (
                             <div>
                               <span className="font-semibold text-black">{tx.quantity} unit{tx.quantity === 1 ? '' : 's'}</span>
+                              {tx.pieceWeight && (
+                                <span className="text-[11px] font-mono text-gray-500 block font-normal">
+                                  ({formatWeight(tx.pieceWeight)})
+                                </span>
+                              )}
                               <span className="text-[11px] text-gray-400 block font-normal">transferred</span>
                             </div>
                           )}
@@ -2077,13 +2691,18 @@ export default function AdminInventory() {
                           {tx.type === 'melt' && (
                             <div>
                               <span className="font-semibold text-black">−{tx.quantity} unit{tx.quantity === 1 ? '' : 's'}</span>
+                              {tx.pieceWeight && (
+                                <span className="text-[11px] font-mono text-gray-500 block font-normal">
+                                  ({formatWeight(tx.pieceWeight)})
+                                </span>
+                              )}
                               <span className="text-[11px] text-gray-400 block font-normal">melted</span>
                             </div>
                           )}
                           {tx.type === 'repair' && (
                             <div>
-                              <span className="font-semibold text-black">{tx.newWeight}g</span>
-                              <span className="text-[11px] text-gray-400 block font-normal">was {tx.previousWeight}g</span>
+                              <span className="font-semibold text-black">{formatWeight(tx.newWeight)}</span>
+                              <span className="text-[11px] text-gray-400 block font-normal">was {formatWeight(tx.previousWeight)}</span>
                             </div>
                           )}
                         </td>
@@ -2093,7 +2712,7 @@ export default function AdminInventory() {
                               <div>
                                 {tx.weightChange !== undefined && (
                                   <span className="font-medium text-black">
-                                    {tx.weightChange > 0 ? `+${tx.weightChange}` : tx.weightChange}g change
+                                    {tx.weightChange > 0 ? `+${formatWeight(tx.weightChange)}` : formatWeight(tx.weightChange)} change
                                   </span>
                                 )}
                               </div>
@@ -2102,22 +2721,32 @@ export default function AdminInventory() {
                           )}
                           {tx.type === 'melt' && tx.recoveredWeight && (
                             <span className="text-gray-700">
-                              Recovered: <strong className="text-black">{tx.recoveredWeight}g</strong> pure
+                              Recovered: <strong className="text-black">{formatWeight(tx.recoveredWeight)}</strong> pure
                             </span>
                           )}
                           {tx.type !== 'repair' && tx.type !== 'melt' && <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate">
                           {tx.notes || '—'}
+                          {tx.isReversed && (
+                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                              Reversed
+                            </span>
+                          )}
+                          {tx.reversalOf && (
+                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                              Reversal
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {!archivedSession && hasPermission('movements', 'delete') && (
+                          {!archivedSession && hasPermission('movements', 'delete') && !tx.isReversed && !tx.reversalOf && (
                             <button
                               onClick={() => setDeleteTxTarget(tx)}
-                              title="Delete and reverse stock"
+                              title="Post reversing entry"
                               className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                             >
-                              <Trash2 size={15} />
+                              <RotateCcw size={14} />
                             </button>
                           )}
                         </td>
@@ -2131,22 +2760,22 @@ export default function AdminInventory() {
         )
       )}
 
-      {/* Product Delete Modal */}
+      {/* Product Archive Modal */}
       <ConfirmModal
         isOpen={!!deleteProductTarget}
-        title="Delete Product"
-        description={`Are you sure you want to delete ${deleteProductTarget?.name}? This action cannot be undone.`}
-        confirmText="Delete Product"
+        title="Archive Product"
+        description={`Are you sure you want to archive "${deleteProductTarget?.name}" (${deleteProductTarget?.sku})? The product will be hidden from new sales and stock movements, while all historical transactions and stock audit ledgers remain fully preserved.`}
+        confirmText="Archive Product"
         onConfirm={executeDeleteProduct}
         onClose={() => setDeleteProductTarget(null)}
       />
 
-      {/* Transaction Delete Modal */}
+      {/* Transaction Reversal Modal */}
       <ConfirmModal
         isOpen={!!deleteTxTarget}
-        title="Delete & Reverse Movement"
-        description={`Deleting this ${deleteTxTarget?.type} record will automatically reverse its stock/weight changes. Continue?`}
-        confirmText="Reverse & Delete"
+        title={`Reverse ${deleteTxTarget?.type === 'purchase' ? 'Purchase' : deleteTxTarget?.type === 'transfer' ? 'Transfer' : deleteTxTarget?.type === 'repair' ? 'Repair' : deleteTxTarget?.type === 'melt' ? 'Melt' : 'Adjustment'}`}
+        description={`Posting a reversing entry will invert this ${deleteTxTarget?.type} record's stock and weight effects without deleting audit history. This action cannot be undone. Continue?`}
+        confirmText="Post Reversing Entry"
         onConfirm={executeDeleteTransaction}
         onClose={() => setDeleteTxTarget(null)}
       />
@@ -2154,8 +2783,8 @@ export default function AdminInventory() {
       {/* Single Master Zero Balance Modal (Export Archive & Clear All History) */}
       <ConfirmModal
         isOpen={isZeroBalanceModalOpen}
-        title="Zero Balance All History"
-        description="Exports an offline JSON archive of all transactions (sales, purchases, movements) and clears cloud history. Current product stocks remain unchanged."
+        title="Zero Balance All History & Audit Log"
+        description="Exports an offline JSON archive of all transactions and the activity audit trail, then wipes both from the cloud. Current product stocks are rolled over and remain unchanged."
         confirmText={zeroBalanceSubmitting ? "Exporting & Erasing..." : "Export & Zero Balance"}
         onConfirm={handleZeroBalance}
         onClose={() => setIsZeroBalanceModalOpen(false)}

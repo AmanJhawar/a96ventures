@@ -44,9 +44,9 @@ function SidebarContent({
   const router = useRouter()
   const { hasPermission, isSuperAdmin } = usePermissions()
 
-  // Show all sections for administrators. Only filter for explicitly restricted sub-operators.
-  const isRestrictedOperator = adminUser && adminUser.role !== 'super_admin' && !isSuperAdmin
-  const accessibleNavItems = isRestrictedOperator
+  // Show all sections for administrators. Only filter for explicitly restricted users.
+  const isRestrictedUser = adminUser && adminUser.role !== 'super_admin' && !isSuperAdmin
+  const accessibleNavItems = isRestrictedUser
     ? navItems.filter((item) => {
         if (!item.module) return true
         return hasPermission(item.module, item.action || 'view')
@@ -150,7 +150,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           if (data.status === 'suspended') {
             setUser(currentUser)
             setAdminUser(null)
-            setProfileError('Account Suspended: Your operator account has been suspended by an administrator.')
+            setProfileError('Account Suspended: Your user account has been suspended by an administrator.')
             setLoading(false)
             return
           }
@@ -192,7 +192,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           const loaded: AdminUser = {
             id: currentUser.uid,
             email: data.email || currentUser.email || '',
-            displayName: data.displayName || data.name || currentUser.displayName || 'Operator',
+            displayName: data.displayName || data.name || currentUser.displayName || 'User',
             phoneNumber: data.phoneNumber || '',
             role,
             status: data.status,

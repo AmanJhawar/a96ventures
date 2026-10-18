@@ -1,7 +1,7 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore/lite";
 import { getAuth } from "firebase/auth";
-import { initializeAppCheck, ReCaptchaV3Provider, AppCheck } from "firebase/app-check";
+import { initializeAppCheck, ReCaptchaV3Provider, CustomProvider, AppCheck } from "firebase/app-check";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDmKFzBNpXXy_rNvRtdgKhv9wDGax2QEKI",
@@ -33,10 +33,14 @@ if (typeof window !== "undefined") {
         provider: new ReCaptchaV3Provider(siteKey),
         isTokenAutoRefreshEnabled: true
       });
-    } else if (process.env.NODE_ENV !== "production") {
-      // In development / testing, initialize with debug provider so App Check is active
+    } else if (process.env.NEXT_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN) {
       appCheck = initializeAppCheck(app, {
-        provider: new ReCaptchaV3Provider("6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"),
+        provider: new CustomProvider({
+          getToken: async () => ({
+            token: String(process.env.NEXT_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN),
+            expireTimeMillis: Date.now() + 3600000
+          })
+        }),
         isTokenAutoRefreshEnabled: true
       });
     }

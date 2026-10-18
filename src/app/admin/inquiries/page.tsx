@@ -91,7 +91,7 @@ function StatusDropdown({
 const ITEMS_PER_PAGE = 10;
 
 export default function AdminInquiries() {
-  const { hasPermission, operatorIdentity } = usePermissions()
+  const { hasPermission, userIdentity } = usePermissions()
   const [inquiries, setInquiries] = useState<Inquiry[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -139,7 +139,7 @@ export default function AdminInquiries() {
     const inq = inquiries.find(i => i.id === deleteId)
     const contactName = inq ? (inq.firstName ? `${inq.firstName} ${inq.lastName}` : inq.name || inq.email || inq.mobile) : deleteId
     try {
-      await deleteInquiry(deleteId, operatorIdentity ? { id: operatorIdentity.id, email: operatorIdentity.email } : undefined, contactName)
+      await deleteInquiry(deleteId, userIdentity ? { id: userIdentity.id, email: userIdentity.email } : undefined, contactName)
       setInquiries(inquiries.filter(i => i.id !== deleteId))
     } catch (err) {
       console.error("Error deleting", err)
@@ -152,7 +152,7 @@ export default function AdminInquiries() {
     const inq = inquiries.find(i => i.id === id)
     const contactName = inq ? (inq.firstName ? `${inq.firstName} ${inq.lastName}` : inq.name || inq.email || inq.mobile) : id
     try {
-      await updateInquiryStatus(id, newStatus, operatorIdentity ? { id: operatorIdentity.id, email: operatorIdentity.email } : undefined, contactName)
+      await updateInquiryStatus(id, newStatus, userIdentity ? { id: userIdentity.id, email: userIdentity.email } : undefined, contactName)
       setInquiries(inquiries.map(i => i.id === id ? { ...i, status: newStatus } : i))
     } catch (err) {
       console.error("Error updating status", err)

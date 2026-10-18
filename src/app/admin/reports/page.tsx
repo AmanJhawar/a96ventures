@@ -18,8 +18,11 @@ import { getProducts, getLocations, getTransactions } from '@/lib/services/inven
 import CustomSelect, { SelectOption } from '@/components/custom-select'
 import { EmptyState } from '@/components/empty-state'
 import { usePermissions } from '@/lib/context/PermissionsContext'
+import { formatWeight } from '@/lib/utils/weight'
+import { getTodayIST, getDaysAgoIST } from '@/lib/utils/date'
+import { downloadCSV } from '@/lib/utils/csv'
 
-const CATEGORIES: ProductCategory[] = ['MMTC PAMP', 'Idols', 'Bullions']
+const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
 const METALS: MetalType[] = ['Gold', 'Silver']
 
 type ReportTab = 'top_selling' | 'stock_summary'
@@ -47,6 +50,7 @@ interface ProductSalesStat {
   productId: string
   productName: string
   category: ProductCategory
+  brand?: string
   metal: MetalType
   weight: number
   purity: string
@@ -97,18 +101,9 @@ export default function AdminReportsPage() {
   // TOP SELLING PRODUCTS COMPUTATION
   // -------------------------------------------------------------
   const salesTransactions = useMemo(() => {
-    const now = new Date()
-    const todayStr = now.toISOString().split('T')[0]
-
-    // 7 days ago
-    const weekAgo = new Date(now)
-    weekAgo.setDate(now.getDate() - 7)
-    const weekAgoStr = weekAgo.toISOString().split('T')[0]
-
-    // 30 days ago
-    const monthAgo = new Date(now)
-    monthAgo.setDate(now.getDate() - 30)
-    const monthAgoStr = monthAgo.toISOString().split('T')[0]
+    const todayStr = getTodayIST()
+    const weekAgoStr = getDaysAgoIST(7)
+    const monthAgoStr = getDaysAgoIST(30)
 
     return transactions.filter((tx) => {
       if (tx.type !== 'sale') return false
@@ -148,6 +143,7 @@ export default function AdminReportsPage() {
           productId: prod.id,
           productName: prod.name,
           category: prod.category,
+          brand: prod.brand || (prod.category === 'MMTC PAMP' ? 'MMTC PAMP' : 'Local'),
           metal: prod.metal || 'Silver',
           weight: prod.weight || 0,
           purity: prod.purity || '—',
@@ -162,7 +158,8 @@ export default function AdminReportsPage() {
         stats.push({
           productId: prodId,
           productName: sampleTx?.productName || 'Unknown Product',
-          category: (sampleTx?.category || 'MMTC PAMP') as ProductCategory,
+          category: (sampleTx?.category === 'MMTC PAMP' ? 'Bullions' : sampleTx?.category || 'Bullions') as ProductCategory,
+          brand: sampleTx?.brand || (sampleTx?.category === 'MMTC PAMP' ? 'MMTC PAMP' : 'Local'),
           metal: sampleTx?.metal || 'Silver',
           weight: 0,
           purity: '—',
@@ -320,6 +317,7 @@ export default function AdminReportsPage() {
       'Rank',
       'Product Name',
       'Category',
+      'Brand',
       'Metal',
       'Weight (g)',
       'Purity',
@@ -331,28 +329,23 @@ export default function AdminReportsPage() {
 
     const rows = topSellingList.map((item, idx) => [
       `#${idx + 1}`,
-      `"${item.productName.replace(/"/g, '""')}"`,
-      `"${item.category}"`,
-      `"${item.metal}"`,
+      item.productName,
+      item.category,
+      item.brand || 'Local',
+      item.metal,
       item.weight > 0 ? item.weight : 'Variable',
-      `"${item.purity}"`,
+      item.purity,
       item.unitsSold,
       item.totalRevenue,
       item.averagePrice,
       item.currentStock
     ])
 
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
-
-    const encodedUri = encodeURI(csvContent)
-    const link = document.createElement('a')
-    link.setAttribute('href', encodedUri)
-    link.setAttribute('download', `a96-highest-selling-products-${new Date().toISOString().split('T')[0]}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    downloadCSV(
+      `a96-highest-selling-products-${getTodayIST()}`,
+      headers,
+      rows
+    )
   }
 
   const handleExportStockSummaryCSV = () => {
@@ -361,39 +354,35 @@ export default function AdminReportsPage() {
     const headers = [
       'Product Name',
       'Category',
+      'Brand',
       'Metal',
       'SKU',
       'Weight (g)',
       'Purity',
       'Total Stock',
-      ...locations.map((l) => `"${l.name.replace(/"/g, '""')}"`)
+      ...locations.map((l) => l.name)
     ]
 
     const rows = products.map((p) => {
       const locCells = locations.map((l) => p.stockByLocation?.[l.id] || 0)
       return [
-        `"${p.name.replace(/"/g, '""')}"`,
-        `"${p.category}"`,
-        `"${p.metal || 'Silver'}"`,
-        `"${p.sku}"`,
+        p.name,
+        p.category,
+        p.brand || 'Local',
+        p.metal || 'Silver',
+        p.sku,
         p.weight > 0 ? p.weight : 'Variable',
-        `"${p.purity || ''}"`,
+        p.purity || '',
         p.stock,
         ...locCells
       ]
     })
 
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
-
-    const encodedUri = encodeURI(csvContent)
-    const link = document.createElement('a')
-    link.setAttribute('href', encodedUri)
-    link.setAttribute('download', `a96-stock-summary-${new Date().toISOString().split('T')[0]}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    downloadCSV(
+      `a96-stock-summary-${getTodayIST()}`,
+      headers,
+      rows
+    )
   }
 
   return (
@@ -778,8 +767,8 @@ export default function AdminReportsPage() {
               </span>
               <div className="text-2xl font-bold text-black tabular-nums">
                 {summaryReport.totalGoldWeight >= 1000
-                  ? `${(summaryReport.totalGoldWeight / 1000).toFixed(2)} kg`
-                  : `${summaryReport.totalGoldWeight.toFixed(1)} g`}
+                  ? `${(summaryReport.totalGoldWeight / 1000).toFixed(3)} kg`
+                  : `${summaryReport.totalGoldWeight.toFixed(3)} g`}
               </div>
               <span className="text-xs text-gray-500 mt-1 block">
                 {summaryReport.totalGoldUnits} units in stock
@@ -792,8 +781,8 @@ export default function AdminReportsPage() {
               </span>
               <div className="text-2xl font-bold text-black tabular-nums">
                 {summaryReport.totalSilverWeight >= 1000
-                  ? `${(summaryReport.totalSilverWeight / 1000).toFixed(2)} kg`
-                  : `${summaryReport.totalSilverWeight.toFixed(1)} g`}
+                  ? `${(summaryReport.totalSilverWeight / 1000).toFixed(3)} kg`
+                  : `${summaryReport.totalSilverWeight.toFixed(3)} g`}
               </div>
               <span className="text-xs text-gray-500 mt-1 block">
                 {summaryReport.totalSilverUnits} units in stock
@@ -843,13 +832,13 @@ export default function AdminReportsPage() {
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-gray-500 font-medium">Gold:</span>
                       <strong className="text-black tabular-nums">
-                        {stat.goldUnits} units ({stat.goldWeight.toFixed(1)}g)
+                        {stat.goldUnits} units ({stat.goldWeight.toFixed(3)}g)
                       </strong>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-gray-500 font-medium">Silver:</span>
                       <strong className="text-black tabular-nums">
-                        {stat.silverUnits} units ({stat.silverWeight.toFixed(1)}g)
+                        {stat.silverUnits} units ({stat.silverWeight.toFixed(3)}g)
                       </strong>
                     </div>
                     <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-50 font-bold">
@@ -904,10 +893,14 @@ export default function AdminReportsPage() {
                         </span>
                       </td>
                       <td className="px-6 py-3 text-right text-xs text-gray-600 tabular-nums">
-                        {p.category === 'Idols' && (!p.weight || p.weight === 0) ? (
-                          <span className="text-gray-400 italic">Variable</span>
+                        {p.category === 'Idols' ? (
+                          !p.weight || p.weight === 0 ? (
+                            <span className="text-gray-400 italic">Variable</span>
+                          ) : (
+                            `~${formatWeight(p.weight)} avg`
+                          )
                         ) : (
-                          `${p.weight}g`
+                          formatWeight(p.weight)
                         )}
                       </td>
                       <td className="px-6 py-3 text-right font-bold text-black tabular-nums">

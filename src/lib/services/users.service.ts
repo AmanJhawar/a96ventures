@@ -14,7 +14,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 }
 
 /**
- * Fetch all admin users and operators via the server Admin API.
+ * Fetch all admin users via the server Admin API.
  */
 export async function getAdminUsers(): Promise<AdminUser[]> {
   try {
@@ -26,7 +26,7 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}))
-      throw new Error(errData.error || `Failed to fetch operators (${res.status})`)
+      throw new Error(errData.error || `Failed to fetch users (${res.status})`)
     }
 
     const data = await res.json()
@@ -57,7 +57,7 @@ export interface CreateUserResult {
 }
 
 /**
- * Create a new admin operator profile through Firebase Admin on the server.
+ * Create a new admin user profile through Firebase Admin on the server.
  * Returns the newly created user ID and any temporary password generated.
  */
 export async function createAdminUser(params: CreateAdminUserParams): Promise<CreateUserResult> {
@@ -70,7 +70,7 @@ export async function createAdminUser(params: CreateAdminUserParams): Promise<Cr
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}))
-    throw new Error(errData.error || `Failed to create operator (${res.status})`)
+    throw new Error(errData.error || `Failed to create user (${res.status})`)
   }
 
   const data = await res.json()
@@ -81,7 +81,7 @@ export async function createAdminUser(params: CreateAdminUserParams): Promise<Cr
 }
 
 /**
- * Update operator profile, credentials, role, status or permissions via the server Admin API.
+ * Update user profile, credentials, role, status or permissions via the server Admin API.
  */
 export async function updateAdminUser(
   id: string,
@@ -97,12 +97,12 @@ export async function updateAdminUser(
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}))
-    throw new Error(errData.error || `Failed to update operator (${res.status})`)
+    throw new Error(errData.error || `Failed to update user (${res.status})`)
   }
 }
 
 /**
- * Delete an operator account via the server Admin API.
+ * Delete a user account via the server Admin API.
  */
 export async function deleteAdminUser(
   id: string,
@@ -116,7 +116,7 @@ export async function deleteAdminUser(
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}))
-    throw new Error(errData.error || `Failed to delete operator (${res.status})`)
+    throw new Error(errData.error || `Failed to delete user (${res.status})`)
   }
 }
 

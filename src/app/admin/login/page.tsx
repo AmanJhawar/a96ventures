@@ -8,9 +8,25 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
+const DEFAULT_ADMIN_DOMAIN = 'a96ventures.com'
+
+function resolveAdminEmail(input: string): string {
+  const trimmed = input.trim().toLowerCase()
+  if (trimmed.includes('@')) {
+    return trimmed
+  }
+  return `${trimmed}@${DEFAULT_ADMIN_DOMAIN}`
+}
+
 const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
+  identifier: z.string().min(1, 'Please enter your username or email'),
   password: z.string().min(6, 'Password must be at least 6 characters')
+}).refine(data => {
+  const resolved = resolveAdminEmail(data.identifier)
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(resolved)
+}, {
+  message: 'Please enter a valid username or email address',
+  path: ['identifier']
 })
 
 type LoginValues = z.infer<typeof loginSchema>
@@ -25,14 +41,15 @@ export default function AdminLogin() {
     formState: { errors, isSubmitting }
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' }
+    defaultValues: { identifier: '', password: '' }
   })
 
   const onSubmit = async (data: LoginValues) => {
     setError('')
+    const targetEmail = resolveAdminEmail(data.identifier)
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password)
+      const userCredential = await signInWithEmailAndPassword(auth, targetEmail, data.password)
       
       // Verify they are in the admins collection
       // TREAT MISSING PROFILE AS AN ERROR: Never fail open or grant access without profile document
@@ -58,10 +75,9 @@ export default function AdminLogin() {
       if (adminData.status === 'suspended') {
         const { signOut } = await import('firebase/auth')
         await signOut(auth)
-        setError('Your operator account has been suspended. Please contact a super admin.')
+        setError('Your user account has been suspended. Please contact a super admin.')
         return
       }
-
 
       // Check if user has custom claims, otherwise sync with server
       const tokenResult = await userCredential.user.getIdTokenResult()
@@ -83,7 +99,7 @@ export default function AdminLogin() {
       router.push('/admin')
     } catch (err) {
       console.error(err)
-      setError('Invalid email or password.')
+      setError('Invalid username or password.')
     }
   }
 
@@ -103,22 +119,31 @@ export default function AdminLogin() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-500 mb-2">Email Address</label>
+            <label htmlFor="identifier" className="block text-sm font-medium text-gray-500 mb-2">
+              Username or Email
+            </label>
             <input
-              type="email"
-              {...register('email')}
-              className={`w-full px-4 py-3 rounded-lg border focus:border-black focus:ring-4 focus:ring-black/10 transition-[border-color,box-shadow] duration-200 ${errors.email ? 'border-gray-900' : 'border-gray-200'}`}
-              placeholder="you@example.com"
+              id="identifier"
+              type="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              {...register('identifier')}
+              className={`w-full px-4 py-3 rounded-lg border focus:border-black focus:ring-4 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] ${errors.identifier ? 'border-gray-900' : 'border-gray-200'}`}
+              placeholder="e.g. aman or aman@a96ventures.com"
             />
-            {errors.email && <p className="text-gray-500 font-medium text-sm mt-1">{errors.email.message}</p>}
+            {errors.identifier && <p className="text-gray-500 font-medium text-sm mt-1">{errors.identifier.message}</p>}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-500 mb-2">Password</label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-500 mb-2">
+              Password
+            </label>
             <input
+              id="password"
               type="password"
               {...register('password')}
-              className={`w-full px-4 py-3 rounded-lg border focus:border-black focus:ring-4 focus:ring-black/10 transition-[border-color,box-shadow] duration-200 ${errors.password ? 'border-gray-900' : 'border-gray-200'}`}
+              className={`w-full px-4 py-3 rounded-lg border focus:border-black focus:ring-4 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] ${errors.password ? 'border-gray-900' : 'border-gray-200'}`}
               placeholder="••••••••"
             />
             {errors.password && <p className="text-gray-500 font-medium text-sm mt-1">{errors.password.message}</p>}
@@ -127,9 +152,13 @@ export default function AdminLogin() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="admin-btn-primary w-full disabled:opacity-70"
+            className="admin-btn-primary w-full disabled:opacity-70 transition-[background-color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97]"
           >
-            {isSubmitting ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white/30 border-t-white"></div> : 'Sign In'}
+            {isSubmitting ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white/30 border-t-white mx-auto"></div>
+            ) : (
+              'Sign In'
+            )}
           </button>
         </form>
       </div>

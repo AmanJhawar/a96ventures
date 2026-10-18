@@ -90,24 +90,109 @@ function getTimestampMs(ts: unknown): number {
 }
 
 export async function getProducts(): Promise<Product[]> {
-  const querySnapshot = await withTimeout(getDocs(collection(db, 'products')));
-  const items: Product[] = [];
-  querySnapshot.forEach((docSnap) => {
-    const data = docSnap.data();
-    const normalizedCategory = (data.category === 'Silver Idols' ? 'Idols' : data.category) as ProductCategory;
-    items.push({
-      id: docSnap.id,
-      name: data.name || '',
-      category: normalizedCategory,
-      metal: (data.metal || (normalizedCategory === 'Idols' ? 'Silver' : 'Gold')) as MetalType,
-      sku: data.sku || '',
-      stock: Number(data.stock || 0),
-      stockByLocation: data.stockByLocation || {},
-      weight: Number(data.weight || 0),
-      purity: data.purity || '',
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt,
+  const [prodsSnap, txsSnap] = await Promise.all([
+    withTimeout(getDocs(collection(db, 'products'))),
+    withTimeout(getDocs(collection(db, 'transactions'))).catch(() => null)
+  ]);
+
+  // Derive stock directly and authoritatively from the transaction ledger
+  const ledgerMap = new Map<string, { total: number; byLocation: Record<string, number>; hasLedger: boolean }>();
+
+  if (txsSnap && !txsSnap.empty) {
+    txsSnap.forEach((docSnap) => {
+      const tx = docSnap.data();
+      const pId = tx.productId;
+      if (!pId) return;
+
+      if (!ledgerMap.has(pId)) {
+        ledgerMap.set(pId, { total: 0, byLocation: {}, hasLedger: true });
+      }
+      const record = ledgerMap.get(pId)!;
+      const qty = Number(tx.quantity || 0);
+      const locId = tx.locationId;
+
+      switch (tx.type) {
+        case 'purchase':
+        case 'return':
+          if (locId) record.byLocation[locId] = (record.byLocation[locId] || 0) + qty;
+          record.total += qty;
+          break;
+        case 'sale':
+        case 'melt':
+          if (locId) record.byLocation[locId] = (record.byLocation[locId] || 0) - qty;
+          record.total -= qty;
+          break;
+        case 'transfer':
+          if (locId) record.byLocation[locId] = (record.byLocation[locId] || 0) - qty;
+          if (tx.toLocationId) {
+            record.byLocation[tx.toLocationId] = (record.byLocation[tx.toLocationId] || 0) + qty;
+          }
+          break;
+        case 'adjustment':
+          if (locId) record.byLocation[locId] = (record.byLocation[locId] || 0) + qty;
+          record.total += qty;
+          break;
+      }
     });
+  }
+
+  const items: Product[] = [];
+  prodsSnap.forEach((docSnap) => {
+    const data = docSnap.data();
+    let normalizedCategory: ProductCategory = 'Bullions';
+    let brand = data.brand ? String(data.brand).trim() : '';
+
+    if (data.category === 'MMTC PAMP') {
+      normalizedCategory = 'Bullions';
+      if (!brand) brand = 'MMTC PAMP';
+    } else if (data.category === 'Silver Idols' || data.category === 'Idols') {
+      normalizedCategory = 'Idols';
+      if (!brand) brand = 'Local';
+    } else if (data.category === 'Bullions') {
+      normalizedCategory = 'Bullions';
+      if (!brand) brand = 'Local';
+    }
+
+    const derived = ledgerMap.get(docSnap.id);
+
+    // If transactions exist for this product, use the derived ledger stock
+    const finalStock = derived?.hasLedger ? derived.total : Number(data.stock || 0);
+    const finalStockByLoc = derived?.hasLedger ? derived.byLocation : (data.stockByLocation || {});
+
+      const wMg = data.weightMg !== undefined ? Number(data.weightMg) : Math.round(Number(data.weight || 0) * 1000);
+      const pieceWs = Array.isArray(data.pieceWeightsMg)
+        ? data.pieceWeightsMg.map((mg: number) => mg / 1000)
+        : Array.isArray(data.pieceWeights)
+          ? data.pieceWeights.map((w: number) => Math.round(Number(w) * 1000) / 1000)
+          : undefined;
+      const pieceWsMg = Array.isArray(data.pieceWeightsMg)
+        ? data.pieceWeightsMg
+        : Array.isArray(data.pieceWeights)
+          ? data.pieceWeights.map((w: number) => Math.round(Number(w) * 1000))
+          : undefined;
+
+      items.push({
+        id: docSnap.id,
+        name: data.name || '',
+        category: normalizedCategory,
+        brand,
+        metal: (data.metal || (normalizedCategory === 'Idols' ? 'Silver' : 'Gold')) as MetalType,
+        sku: data.sku || '',
+        stock: finalStock,
+        stockByLocation: finalStockByLoc,
+        weight: wMg / 1000,
+        weightMg: wMg,
+        pieceWeights: pieceWs,
+        pieceWeightsMg: pieceWsMg,
+        pieceWeightsByLocation: data.pieceWeightsByLocation || undefined,
+        pieceWeightsByLocationMg: data.pieceWeightsByLocationMg || undefined,
+        purity: data.purity || '',
+        isArchived: Boolean(data.isArchived),
+        archivedAt: data.archivedAt,
+        archivedBy: data.archivedBy,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+      });
   });
   // Default sort: last added / modified first
   return items.sort((a, b) => {
@@ -124,6 +209,7 @@ export async function getProducts(): Promise<Product[]> {
 export async function addProduct(data: {
   name: string;
   category: ProductCategory;
+  brand?: string;
   metal: MetalType;
   sku: string;
   weight: number;
@@ -131,6 +217,7 @@ export async function addProduct(data: {
   initialStock?: number;
   initialLocationId?: string;
   initialLocationName?: string;
+  pieceWeights?: number[];
 }): Promise<string> {
   const headers = await getAuthHeaders();
   const res = await fetch('/api/admin/products', {
@@ -154,10 +241,12 @@ export async function addProduct(data: {
 export async function updateProduct(id: string, data: {
   name: string;
   category: ProductCategory;
+  brand?: string;
   metal: MetalType;
   sku: string;
   weight: number;
   purity: string;
+  pieceWeights?: number[];
 }): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch('/api/admin/products', {
@@ -201,6 +290,16 @@ export async function getTransactions(): Promise<Transaction[]> {
       ...data,
       id: docSnap.id,
       category: (data.category === 'Silver Idols' ? 'Idols' : data.category) as ProductCategory,
+      previousWeight: data.previousWeightMg !== undefined ? Number(data.previousWeightMg) / 1000 : (data.previousWeight !== undefined ? Number(data.previousWeight) : undefined),
+      newWeight: data.newWeightMg !== undefined ? Number(data.newWeightMg) / 1000 : (data.newWeight !== undefined ? Number(data.newWeight) : undefined),
+      weightChange: data.weightChangeMg !== undefined ? Number(data.weightChangeMg) / 1000 : (data.weightChange !== undefined ? Number(data.weightChange) : undefined),
+      recoveredWeight: data.recoveredWeightMg !== undefined ? Number(data.recoveredWeightMg) / 1000 : (data.recoveredWeight !== undefined ? Number(data.recoveredWeight) : undefined),
+      pieceWeight: data.pieceWeightMg !== undefined ? Number(data.pieceWeightMg) / 1000 : (data.pieceWeight !== undefined ? Number(data.pieceWeight) : undefined),
+      pieceWeights: Array.isArray(data.pieceWeightsMg)
+        ? data.pieceWeightsMg.map((mg: number) => Number(mg) / 1000)
+        : Array.isArray(data.pieceWeights)
+          ? data.pieceWeights.map((w: number) => Number(w))
+          : undefined,
     } as Transaction);
   });
   // Sort by date descending, then createdAt descending
@@ -212,6 +311,7 @@ export interface RecordTransactionParams {
   productId: string;
   productName: string;
   category: ProductCategory;
+  brand?: string;
   metal?: MetalType;
   quantity?: number;
   price?: number;
@@ -224,6 +324,8 @@ export interface RecordTransactionParams {
   previousWeight?: number;
   newWeight?: number;
   recoveredWeight?: number;
+  pieceWeights?: number[];
+  pieceWeight?: number;
   date: string; // YYYY-MM-DD
 }
 
@@ -249,9 +351,9 @@ export async function recordTransaction(params: RecordTransactionParams): Promis
 }
 
 /**
- * Reverse and delete a transaction via server API with atomic stock reversal.
+ * Reverse a transaction via server API by posting a linked reversing entry (never deletes).
  */
-export async function deleteTransaction(tx: Transaction): Promise<void> {
+export async function reverseTransaction(tx: Transaction): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch(`/api/admin/transactions?id=${encodeURIComponent(tx.id)}`, {
     method: 'DELETE',
@@ -264,10 +366,12 @@ export async function deleteTransaction(tx: Transaction): Promise<void> {
   }
 }
 
+export const deleteTransaction = reverseTransaction;
+
 /**
- * Erases all transaction history (Master Zero-Balance) via server API.
+ * Erases all transaction history and scrubs the audit trail (Master Zero-Balance) via server API.
  */
-export async function clearTransactionHistory(): Promise<number> {
+export async function clearTransactionHistory(): Promise<{ count: number; auditCount: number }> {
   const headers = await getAuthHeaders();
   const res = await fetch('/api/admin/transactions', {
     method: 'PUT',
@@ -280,5 +384,8 @@ export async function clearTransactionHistory(): Promise<number> {
   }
 
   const resData = await res.json();
-  return resData.count || 0;
+  return {
+    count: resData.count || 0,
+    auditCount: resData.auditCount || 0
+  };
 }

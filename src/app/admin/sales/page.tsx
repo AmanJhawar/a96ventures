@@ -11,7 +11,8 @@ import {
   RotateCcw,
   IndianRupee,
   TrendingUp,
-  PackageCheck
+  PackageCheck,
+  Lock
 } from 'lucide-react'
 import { Product, Location, Transaction, ProductCategory, MetalType } from '@/lib/types'
 import {
@@ -29,14 +30,18 @@ import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
+import { formatWeight } from '@/lib/utils/weight'
+import { getTodayIST } from '@/lib/utils/date'
 
-const CATEGORIES: ProductCategory[] = ['MMTC PAMP', 'Idols', 'Bullions']
+const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
 const METALS: MetalType[] = ['Gold', 'Silver']
 
 type SalesTab = 'sales' | 'returns'
 
 export default function AdminSales() {
-  const { hasPermission } = usePermissions()
+  const { hasPermission, adminUser, isSuperAdmin } = usePermissions()
+  const userAssignedLocationId = adminUser?.assignedLocationId
+  const isLocationLocked = Boolean(!isSuperAdmin && userAssignedLocationId)
   const [activeTab, setActiveTab] = useState<SalesTab>('sales')
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All')
   const [selectedMetal, setSelectedMetal] = useState<MetalType | 'All'>('All')
@@ -53,9 +58,10 @@ export default function AdminSales() {
   const [saleProductId, setSaleProductId] = useState('')
   const [saleLocationId, setSaleLocationId] = useState('')
   const [saleQty, setSaleQty] = useState('1')
+  const [salePieceWeight, setSalePieceWeight] = useState('')
   const [salePrice, setSalePrice] = useState('')
   const [saleCustomerName, setSaleCustomerName] = useState('')
-  const [saleDate, setSaleDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [saleDate, setSaleDate] = useState(() => getTodayIST())
   const [saleNotes, setSaleNotes] = useState('')
   const [saleSubmitting, setSaleSubmitting] = useState(false)
   const [saleError, setSaleError] = useState<string | null>(null)
@@ -65,9 +71,10 @@ export default function AdminSales() {
   const [returnProductId, setReturnProductId] = useState('')
   const [returnLocationId, setReturnLocationId] = useState('')
   const [returnQty, setReturnQty] = useState('1')
+  const [returnPieceWeight, setReturnPieceWeight] = useState('')
   const [returnPrice, setReturnPrice] = useState('')
   const [returnCustomerName, setReturnCustomerName] = useState('')
-  const [returnDate, setReturnDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [returnDate, setReturnDate] = useState(() => getTodayIST())
   const [returnNotes, setReturnNotes] = useState('')
   const [returnSubmitting, setReturnSubmitting] = useState(false)
   const [returnError, setReturnError] = useState<string | null>(null)
@@ -164,13 +171,46 @@ export default function AdminSales() {
   }, [selectedSaleProduct, saleLocationId])
 
   const saleProductOptions: SelectOption[] = useMemo(() => {
-    return products.map((p) => ({
-      value: p.id,
-      label: p.name,
-      sublabel: `${p.category} · ${p.weight}g · ${p.sku}`,
-      badge: `${p.stock} in stock`
-    }))
+    return products
+      .filter((p) => !p.isArchived)
+      .map((p) => {
+        const weightLabel = p.category === 'Idols' && p.weight && p.weight > 0 ? `~${formatWeight(p.weight)} avg` : formatWeight(p.weight)
+        const brandLabel = p.brand ? ` · ${p.brand}` : ''
+        return {
+          value: p.id,
+          label: p.name,
+          sublabel: `${p.category}${brandLabel} · ${weightLabel} · ${p.sku}`,
+          badge: `${p.stock} in stock`
+        }
+      })
   }, [products])
+
+  const isSaleProductAnIdol = useMemo(() => {
+    return selectedSaleProduct?.category === 'Idols'
+  }, [selectedSaleProduct])
+
+  const availableSalePieces = useMemo(() => {
+    if (!selectedSaleProduct || !saleLocationId) return []
+    return selectedSaleProduct.pieceWeightsByLocation?.[saleLocationId] || []
+  }, [selectedSaleProduct, saleLocationId])
+
+  useEffect(() => {
+    if (isSaleProductAnIdol && availableSalePieces.length > 0) {
+      if (!salePieceWeight || !availableSalePieces.includes(Number(salePieceWeight))) {
+        setSalePieceWeight(String(availableSalePieces[0]))
+      }
+    } else if (isSaleProductAnIdol && availableSalePieces.length === 0) {
+      setSalePieceWeight('')
+    }
+  }, [isSaleProductAnIdol, availableSalePieces, salePieceWeight])
+
+  const selectedReturnProduct = useMemo(() => {
+    return products.find((p) => p.id === returnProductId)
+  }, [products, returnProductId])
+
+  const isReturnProductAnIdol = useMemo(() => {
+    return selectedReturnProduct?.category === 'Idols'
+  }, [selectedReturnProduct])
 
   const saleLocationOptions: SelectOption[] = useMemo(() => {
     return locations.map((l) => {
@@ -194,17 +234,18 @@ export default function AdminSales() {
   const handleOpenSaleForm = () => {
     const firstP = products.find((p) => p.stock > 0) || products[0]
     setSaleProductId(firstP?.id || '')
-    // Default to a location with stock if possible
-    let defaultLoc = locations[0]?.id || ''
-    if (firstP?.stockByLocation) {
+    // Default and lock to assigned store if staff has an assignment
+    let defaultLoc = userAssignedLocationId || locations[0]?.id || ''
+    if (!userAssignedLocationId && firstP?.stockByLocation) {
       const locWithStock = Object.keys(firstP.stockByLocation).find((id) => (firstP.stockByLocation[id] || 0) > 0)
       if (locWithStock) defaultLoc = locWithStock
     }
     setSaleLocationId(defaultLoc)
     setSaleQty('1')
+    setSalePieceWeight('')
     setSalePrice('')
     setSaleCustomerName('')
-    setSaleDate(new Date().toISOString().split('T')[0])
+    setSaleDate(getTodayIST())
     setSaleNotes('')
     setSaleError(null)
     setIsSaleFormOpen(true)
@@ -213,11 +254,13 @@ export default function AdminSales() {
   // Open Return modal
   const handleOpenReturnForm = () => {
     setReturnProductId(products[0]?.id || '')
-    setReturnLocationId(locations[0]?.id || '')
+    // Default and lock to assigned store if staff has an assignment
+    setReturnLocationId(userAssignedLocationId || locations[0]?.id || '')
     setReturnQty('1')
+    setReturnPieceWeight('')
     setReturnPrice('')
     setReturnCustomerName('')
-    setReturnDate(new Date().toISOString().split('T')[0])
+    setReturnDate(getTodayIST())
     setReturnNotes('')
     setReturnError(null)
     setIsReturnFormOpen(true)
@@ -231,17 +274,26 @@ export default function AdminSales() {
       setSaleError('Please select a valid product')
       return
     }
-    if (!saleLocationId) {
+    const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : saleLocationId
+    if (!effectiveLocId) {
       setSaleError('Please select a selling location')
       return
     }
-    const qty = Number(saleQty)
+
+    const isIdol = prod.category === 'Idols'
+    if (isIdol && !salePieceWeight) {
+      setSaleError('Please select which specific piece weight is being sold')
+      return
+    }
+    const qty = isIdol ? 1 : Number(saleQty)
+
     if (isNaN(qty) || qty <= 0) {
       setSaleError('Quantity must be at least 1')
       return
     }
-    if (qty > availableStockAtSaleLocation) {
-      setSaleError(`Insufficient stock at this location. Available: ${availableStockAtSaleLocation}, Requested: ${qty}`)
+    const stockAvailable = prod.stockByLocation?.[effectiveLocId] || 0
+    if (qty > stockAvailable) {
+      setSaleError(`Insufficient stock at this location. Available: ${stockAvailable}, Requested: ${qty}`)
       return
     }
 
@@ -249,16 +301,18 @@ export default function AdminSales() {
     setSaleError(null)
 
     try {
-      const locName = locationMap.get(saleLocationId) || ''
+      const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
       await recordTransaction({
         type: 'sale',
         productId: prod.id,
         productName: prod.name,
         category: prod.category,
+        brand: prod.brand,
         metal: prod.metal,
         quantity: qty,
+        pieceWeight: isIdol ? Number(salePieceWeight) : undefined,
         price: salePrice ? Number(salePrice) : undefined,
-        locationId: saleLocationId,
+        locationId: effectiveLocId,
         locationName: locName,
         customerName: saleCustomerName,
         date: saleDate,
@@ -284,11 +338,22 @@ export default function AdminSales() {
       setReturnError('Please select a product')
       return
     }
-    if (!returnLocationId) {
+    const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : returnLocationId
+    if (!effectiveLocId) {
       setReturnError('Please select a location to receive the return')
       return
     }
-    const qty = Number(returnQty)
+
+    const isIdol = prod.category === 'Idols'
+    if (isIdol) {
+      const numW = Number(returnPieceWeight)
+      if (isNaN(numW) || numW <= 0) {
+        setReturnError('Please enter the returned piece weight in grams')
+        return
+      }
+    }
+    const qty = isIdol ? 1 : Number(returnQty)
+
     if (isNaN(qty) || qty <= 0) {
       setReturnError('Quantity must be at least 1')
       return
@@ -298,16 +363,18 @@ export default function AdminSales() {
     setReturnError(null)
 
     try {
-      const locName = locationMap.get(returnLocationId) || ''
+      const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
       await recordTransaction({
         type: 'return',
         productId: prod.id,
         productName: prod.name,
         category: prod.category,
+        brand: prod.brand,
         metal: prod.metal,
         quantity: qty,
+        pieceWeight: isIdol ? Number(returnPieceWeight) : undefined,
         price: returnPrice ? Number(returnPrice) : undefined,
-        locationId: returnLocationId,
+        locationId: effectiveLocId,
         locationName: locName,
         customerName: returnCustomerName,
         date: returnDate,
@@ -325,17 +392,18 @@ export default function AdminSales() {
     }
   }
 
-  // Delete transaction with automatic stock reversal
+  // Reverse transaction with automatic reversing entry
   const executeDeleteTransaction = async () => {
     if (!deleteTxTarget) return
     try {
       await deleteTransaction(deleteTxTarget)
-      toast.success('Transaction reversed and deleted')
+      toast.success('Reversing entry posted successfully')
       setDeleteTxTarget(null)
       await loadData()
     } catch (err: unknown) {
-      console.error('Failed to delete transaction', err)
-      toast.error('Failed to reverse transaction')
+      console.error('Failed to reverse transaction', err)
+      const msg = err instanceof Error ? err.message : 'Failed to reverse transaction'
+      toast.error(msg)
     }
   }
 
@@ -539,15 +607,34 @@ export default function AdminSales() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Fulfill from Location <span className="text-red-500">*</span>
-                  </label>
-                  <CustomSelect
-                    value={saleLocationId}
-                    onValueChange={setSaleLocationId}
-                    options={saleLocationOptions}
-                    placeholder="Select selling location..."
-                  />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Fulfill from Location <span className="text-red-500">*</span>
+                    </label>
+                    {isLocationLocked && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                        <Lock className="w-3 h-3 text-gray-500" />
+                        Assigned Store
+                      </span>
+                    )}
+                  </div>
+                  {isLocationLocked ? (
+                    <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-black flex items-center justify-between">
+                      <span className="font-semibold text-black">
+                        {locationMap.get(saleLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
+                      </span>
+                      <span className="text-xs text-gray-500 font-medium">
+                        Default & Locked
+                      </span>
+                    </div>
+                  ) : (
+                    <CustomSelect
+                      value={saleLocationId}
+                      onValueChange={setSaleLocationId}
+                      options={saleLocationOptions}
+                      placeholder="Select selling location..."
+                    />
+                  )}
                   <div className="text-xs text-gray-500 mt-1">
                     Available at selected location:{' '}
                     <strong className={availableStockAtSaleLocation > 0 ? 'text-black' : 'text-gray-400'}>
@@ -557,20 +644,69 @@ export default function AdminSales() {
                 </div>
               </div>
 
+              {/* Idol Piece Selection for Sale */}
+              {isSaleProductAnIdol && (
+                <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Select Piece Weight to Sell <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[11px] text-gray-500 font-medium">
+                      {availableSalePieces.length} available at this location
+                    </span>
+                  </div>
+                  {availableSalePieces.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                      {availableSalePieces.map((pw, i) => (
+                        <button
+                          key={`${pw}-${i}`}
+                          type="button"
+                          onClick={() => setSalePieceWeight(String(pw))}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${String(salePieceWeight) === String(pw)
+                            ? 'bg-black text-white shadow-xs'
+                            : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                          #{i + 1}: {formatWeight(pw)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-black font-semibold">
+                      No idol pieces in stock at this location.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Quantity Sold <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Quantity Sold <span className="text-red-500">*</span>
+                    </label>
+                    {isSaleProductAnIdol && salePieceWeight && (
+                      <span className="text-[11px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                        Piece: {formatWeight(salePieceWeight)}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="number"
                     min="1"
                     max={availableStockAtSaleLocation}
-                    value={saleQty}
+                    disabled={isSaleProductAnIdol}
+                    value={isSaleProductAnIdol ? '1' : saleQty}
                     onChange={(e) => setSaleQty(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isSaleProductAnIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''
+                      }`}
                     required
                   />
+                  {isSaleProductAnIdol && (
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Idols are sold 1 unique piece at a time.
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -692,17 +828,58 @@ export default function AdminSales() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Restock into Location <span className="text-red-500">*</span>
-                  </label>
-                  <CustomSelect
-                    value={returnLocationId}
-                    onValueChange={setReturnLocationId}
-                    options={returnLocationOptions}
-                    placeholder="Select location to restock..."
-                  />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Restock into Location <span className="text-red-500">*</span>
+                    </label>
+                    {isLocationLocked && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                        <Lock className="w-3 h-3 text-gray-500" />
+                        Assigned Store
+                      </span>
+                    )}
+                  </div>
+                  {isLocationLocked ? (
+                    <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-black flex items-center justify-between">
+                      <span className="font-semibold text-black">
+                        {locationMap.get(returnLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
+                      </span>
+                      <span className="text-xs text-gray-500 font-medium">
+                        Default & Locked
+                      </span>
+                    </div>
+                  ) : (
+                    <CustomSelect
+                      value={returnLocationId}
+                      onValueChange={setReturnLocationId}
+                      options={returnLocationOptions}
+                      placeholder="Select location to restock..."
+                    />
+                  )}
                 </div>
               </div>
+
+              {/* Idol Piece Weight for Return */}
+              {isReturnProductAnIdol && (
+                <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    Returned Piece Weight (Grams) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    placeholder="e.g. 48.250"
+                    value={returnPieceWeight}
+                    onChange={(e) => setReturnPieceWeight(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    required
+                  />
+                  <p className="text-xs text-gray-500">
+                    This weight will be registered back into the idol inventory at the restocked location.
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -712,9 +889,11 @@ export default function AdminSales() {
                   <input
                     type="number"
                     min="1"
-                    value={returnQty}
+                    disabled={isReturnProductAnIdol}
+                    value={isReturnProductAnIdol ? '1' : returnQty}
                     onChange={(e) => setReturnQty(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isReturnProductAnIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''
+                      }`}
                     required
                   />
                 </div>
@@ -865,6 +1044,11 @@ export default function AdminSales() {
                         </td>
                         <td className="px-6 py-4 text-right tabular-nums font-semibold text-black">
                           −{tx.quantity}
+                          {tx.pieceWeight && (
+                            <div className="text-[11px] font-mono text-gray-500">
+                              ({formatWeight(tx.pieceWeight)})
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right tabular-nums text-gray-600">
                           {tx.price ? `₹${tx.price.toLocaleString('en-IN')}` : '—'}
@@ -874,15 +1058,25 @@ export default function AdminSales() {
                         </td>
                         <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate">
                           {tx.notes || '—'}
+                          {tx.isReversed && (
+                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                              Reversed
+                            </span>
+                          )}
+                          {tx.reversalOf && (
+                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                              Reversal
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {hasPermission('sales', 'delete') && (
+                          {hasPermission('sales', 'delete') && !tx.isReversed && !tx.reversalOf && (
                             <button
                               onClick={() => setDeleteTxTarget(tx)}
-                              title="Delete sale (restores stock)"
+                              title="Post reversing entry (restores stock)"
                               className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                             >
-                              <Trash2 size={15} />
+                              <RotateCcw size={14} />
                             </button>
                           )}
                         </td>
@@ -959,6 +1153,11 @@ export default function AdminSales() {
                         </td>
                         <td className="px-6 py-4 text-right tabular-nums font-semibold text-black">
                           +{tx.quantity}
+                          {tx.pieceWeight && (
+                            <div className="text-[11px] font-mono text-gray-500">
+                              ({formatWeight(tx.pieceWeight)})
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right tabular-nums text-gray-600">
                           {tx.price ? `₹${tx.price.toLocaleString('en-IN')}` : '—'}
@@ -968,15 +1167,25 @@ export default function AdminSales() {
                         </td>
                         <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate">
                           {tx.notes || '—'}
+                          {tx.isReversed && (
+                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                              Reversed
+                            </span>
+                          )}
+                          {tx.reversalOf && (
+                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                              Reversal
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {hasPermission('returns', 'delete') && (
+                          {hasPermission('returns', 'delete') && !tx.isReversed && !tx.reversalOf && (
                             <button
                               onClick={() => setDeleteTxTarget(tx)}
-                              title="Delete return (reverses restock)"
+                              title="Post reversing entry (reverses restock)"
                               className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                             >
-                              <Trash2 size={15} />
+                              <RotateCcw size={14} />
                             </button>
                           )}
                         </td>
@@ -990,13 +1199,13 @@ export default function AdminSales() {
         )
       )}
 
-      {/* Delete / Reverse Modal */}
+      {/* Reversal Modal */}
       <ConfirmModal
         isOpen={!!deleteTxTarget}
-        title={`Delete & Reverse ${deleteTxTarget?.type === 'sale' ? 'Sale' : 'Return'}`}
-        description={`Deleting this transaction will reverse its stock effect (${deleteTxTarget?.type === 'sale' ? 'restore sold stock back into location' : 'remove returned stock from location'
-          }). Continue?`}
-        confirmText="Reverse & Delete"
+        title={`Reverse ${deleteTxTarget?.type === 'sale' ? 'Sale' : 'Return'}`}
+        description={`Posting a reversing entry will invert its stock effect (${deleteTxTarget?.type === 'sale' ? 'restore sold stock back into location' : 'remove returned stock from location'
+          }) without deleting audit history. This action cannot be undone. Continue?`}
+        confirmText="Post Reversing Entry"
         onConfirm={executeDeleteTransaction}
         onClose={() => setDeleteTxTarget(null)}
       />

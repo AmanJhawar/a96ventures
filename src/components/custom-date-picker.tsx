@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { getTodayIST, getYesterdayIST } from '@/lib/utils/date'
 
 export interface CustomDatePickerProps {
   value: string // 'YYYY-MM-DD'
@@ -48,11 +49,9 @@ export function CustomDatePicker({
 
   // Current viewed month & year
   const initialDate = useMemo(() => {
-    if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      const [y, m, d] = value.split('-').map(Number)
-      return new Date(y, m - 1, d)
-    }
-    return new Date()
+    const dateStr = value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : getTodayIST()
+    const [y, m, d] = dateStr.split('-').map(Number)
+    return new Date(y, m - 1, d)
   }, [value])
 
   const [viewYear, setViewYear] = useState<number>(initialDate.getFullYear())
@@ -113,7 +112,7 @@ export function CustomDatePicker({
       isToday: boolean
     }> = []
 
-    const todayStr = new Date().toISOString().split('T')[0]
+    const todayStr = getTodayIST()
 
     // Preceding month trailing days
     for (let i = firstDayIndex - 1; i >= 0; i--) {
@@ -181,16 +180,12 @@ export function CustomDatePicker({
   }
 
   const setToday = () => {
-    const today = new Date().toISOString().split('T')[0]
-    onChange(today)
+    onChange(getTodayIST())
     setIsOpen(false)
   }
 
   const setYesterday = () => {
-    const d = new Date()
-    d.setDate(d.getDate() - 1)
-    const yday = d.toISOString().split('T')[0]
-    onChange(yday)
+    onChange(getYesterdayIST())
     setIsOpen(false)
   }
 

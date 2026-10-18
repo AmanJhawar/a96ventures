@@ -101,7 +101,7 @@ export default function AdminUsersPage() {
       setLocations(locList)
     } catch (err) {
       console.error('Failed to load users data:', err)
-      toast.error('Unable to load operators data')
+      toast.error('Unable to load users data')
     } finally {
       setLoading(false)
     }
@@ -252,7 +252,7 @@ export default function AdminUsersPage() {
           },
           actorInfo
         )
-        toast.success('Operator updated successfully')
+        toast.success('User updated successfully')
       } else {
         const createResult = await createAdminUser({
           email: formEmail,
@@ -269,18 +269,18 @@ export default function AdminUsersPage() {
         })
 
         if (createResult.temporaryPassword) {
-          toast.success(`Operator created! Initial password: ${createResult.temporaryPassword}`, {
+          toast.success(`User created! Initial password: ${createResult.temporaryPassword}`, {
             duration: 10000
           })
         } else {
-          toast.success('New operator created successfully')
+          toast.success('New user created successfully')
         }
       }
 
       setIsFormOpen(false)
       await loadData()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to save operator'
+      const msg = err instanceof Error ? err.message : 'Failed to save user'
       setFormError(msg)
       toast.error(msg)
     } finally {
@@ -296,12 +296,12 @@ export default function AdminUsersPage() {
         id: currentLoggedUser?.id || 'admin',
         email: currentLoggedUser?.email || 'admin@a96ventures.com'
       })
-      toast.success('Operator deleted')
+      toast.success('User deleted')
       setDeleteTarget(null)
       await loadData()
     } catch (err) {
       console.error(err)
-      toast.error('Failed to delete operator')
+      toast.error('Failed to delete user')
     }
   }
 
@@ -330,7 +330,7 @@ export default function AdminUsersPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Users & Access Control</h1>
           <p className="text-gray-500 text-sm">
-            Manage store operators, granular subsection permissions, and audit activity streams.
+            Manage store users, granular subsection permissions, and audit activity streams.
           </p>
         </div>
 
@@ -339,7 +339,7 @@ export default function AdminUsersPage() {
           className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97] shrink-0"
         >
           <Plus size={14} />
-          Add Operator
+          Add User
         </button>
       </div>
 
@@ -356,7 +356,7 @@ export default function AdminUsersPage() {
             }`}
         >
           <Users size={16} />
-          Staff & Operators ({users.length})
+          Staff & Users ({users.length})
         </button>
         <button
           onClick={() => {
@@ -381,7 +381,7 @@ export default function AdminUsersPage() {
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Role:</span>
             {(['All', 'super_admin', 'store_manager', 'sales_cashier', 'vault_custodian', 'custom'] as const).map(
               (r) => {
-                const label = r === 'All' ? 'All Operators' : ROLE_LABELS[r]?.label || r
+                const label = r === 'All' ? 'All Users' : ROLE_LABELS[r]?.label || r
                 const isActive = selectedRoleFilter === r
                 return (
                   <button
@@ -412,7 +412,7 @@ export default function AdminUsersPage() {
                 <div className="flex items-center justify-between pb-4 mb-5 border-b border-gray-100">
                   <div>
                     <h2 className="text-lg font-semibold text-black">
-                      {editingUserId ? `Edit Operator: ${formDisplayName}` : 'Add New Operator Account'}
+                      {editingUserId ? `Edit User: ${formDisplayName}` : 'Add New User Account'}
                     </h2>
                     <p className="text-xs text-gray-500 mt-0.5">
                       Configure profile credentials, default location restrictions, and granular action permissions.
@@ -730,7 +730,7 @@ export default function AdminUsersPage() {
                       className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
                     >
                       <Check size={16} />
-                      {formSubmitting ? 'Saving...' : editingUserId ? 'Update Operator' : 'Create Operator'}
+                      {formSubmitting ? 'Saving...' : editingUserId ? 'Update User' : 'Create User'}
                     </button>
                   </div>
                 </form>
@@ -745,15 +745,15 @@ export default function AdminUsersPage() {
             </div>
           ) : filteredUsers.length === 0 ? (
             <EmptyState
-              title="No operators found"
-              description="Add your first operator account to delegate store operations with granular permissions."
+              title="No users found"
+              description="Add your first user account to delegate store operations with granular permissions."
               action={
                 <button
                   onClick={handleOpenAdd}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
                 >
                   <Plus size={16} />
-                  Add Operator
+                  Add User
                 </button>
               }
             />
@@ -763,7 +763,7 @@ export default function AdminUsersPage() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200 text-xs uppercase font-semibold text-gray-500 tracking-wider">
                     <tr>
-                      <th className="px-6 py-3.5">Operator</th>
+                      <th className="px-6 py-3.5">User</th>
                       <th className="px-6 py-3.5">Role</th>
                       <th className="px-6 py-3.5">Location Scope</th>
                       <th className="px-6 py-3.5">Permissions Summary</th>
@@ -894,7 +894,7 @@ export default function AdminUsersPage() {
               <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search audit narrative, operator, or entity..."
+                placeholder="Search audit narrative, user, or entity..."
                 value={auditSearch}
                 onChange={(e) => setAuditSearch(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
@@ -973,7 +973,7 @@ export default function AdminUsersPage() {
       {/* Delete User Modal */}
       <ConfirmModal
         isOpen={!!deleteTarget}
-        title="Delete Operator Account"
+        title="Delete User Account"
         description={`Are you sure you want to delete ${deleteTarget?.displayName} (${deleteTarget?.email})? They will immediately lose access to the admin dashboard.`}
         confirmText="Delete Account"
         onConfirm={executeDelete}

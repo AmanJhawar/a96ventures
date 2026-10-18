@@ -99,7 +99,7 @@ export async function getAuthenticatedCaller(req: NextRequest): Promise<AuthResu
         callerData: {
           ...callerData,
           email: callerData.email || (decoded.email as string) || '',
-          displayName: callerData.displayName || callerData.name || (decoded.name as string) || 'Operator',
+          displayName: callerData.displayName || callerData.name || (decoded.name as string) || 'User',
           role: callerData.role,
           status: callerData.status || 'active'
         },

@@ -22,7 +22,7 @@ async function getCaller(req: NextRequest) {
 
 /**
  * GET /api/admin/users
- * Lists all registered admin operators.
+ * Lists all registered admin users.
  * Requires: users.view permission or super_admin.
  */
 export async function GET(req: NextRequest) {
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
       users.push({
         id: doc.id,
         email: data.email || doc.id,
-        displayName: data.displayName || data.name || data.email?.split('@')[0] || 'Operator',
+        displayName: data.displayName || data.name || data.email?.split('@')[0] || 'User',
         phoneNumber: data.phoneNumber || '',
         role,
         status: (data.status as UserStatus) || 'active',
@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
       entityType: 'user',
       entityId: userRecord.uid,
       entityName: cleanName,
-      description: `Created operator account "${cleanName}" (${cleanEmail}) with role "${userRole}"`,
+      description: `Created user account "${cleanName}" (${cleanEmail}) with role "${userRole}"`,
       diffs: [],
       timestamp: now
     })
@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
 
 /**
  * PUT /api/admin/users
- * Updates an operator profile, modifies permissions, updates custom claims, and syncs status.
+ * Updates a user profile, modifies permissions, updates custom claims, and syncs status.
  * Requires: users.edit permission or super_admin.
  */
 export async function PUT(req: NextRequest) {
@@ -234,7 +234,7 @@ export async function PUT(req: NextRequest) {
 
     const targetDoc = await adminDb.collection('admins').doc(id).get()
     if (!targetDoc.exists) {
-      return NextResponse.json({ error: 'Operator account not found' }, { status: 404 })
+      return NextResponse.json({ error: 'User account not found' }, { status: 404 })
     }
 
     const currentData = targetDoc.data()!
@@ -329,7 +329,7 @@ export async function PUT(req: NextRequest) {
       entityType: 'user',
       entityId: id,
       entityName: firestoreUpdates.displayName || currentData.displayName || id,
-      description: `Updated operator "${firestoreUpdates.displayName || currentData.displayName || id}" (Role: ${updatedRole}, Status: ${updatedStatus})`,
+      description: `Updated user "${firestoreUpdates.displayName || currentData.displayName || id}" (Role: ${updatedRole}, Status: ${updatedStatus})`,
       diffs: [],
       timestamp: now
     })
@@ -344,7 +344,7 @@ export async function PUT(req: NextRequest) {
 
 /**
  * DELETE /api/admin/users
- * Removes an operator from Firebase Auth and Firestore.
+ * Removes a user from Firebase Auth and Firestore.
  * Requires: users.delete permission or super_admin.
  */
 export async function DELETE(req: NextRequest) {
@@ -378,7 +378,7 @@ export async function DELETE(req: NextRequest) {
 
     const targetDoc = await adminDb.collection('admins').doc(id).get()
     if (!targetDoc.exists) {
-      return NextResponse.json({ error: 'Operator account not found' }, { status: 404 })
+      return NextResponse.json({ error: 'User account not found' }, { status: 404 })
     }
 
     const targetData = targetDoc.data()!
@@ -417,7 +417,7 @@ export async function DELETE(req: NextRequest) {
       entityType: 'user',
       entityId: id,
       entityName: targetData.displayName || targetData.email || id,
-      description: `Deleted operator account "${targetData.displayName || targetData.email || id}"`,
+      description: `Deleted user account "${targetData.displayName || targetData.email || id}"`,
       diffs: [],
       timestamp: now
     })

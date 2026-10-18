@@ -11,7 +11,7 @@ export default function AdminDashboard() {
     { name: 'Locations', href: '/admin/locations', icon: MapPin, description: 'Manage showrooms, vaults, warehouses, and workshops.' },
     { name: 'Reports', href: '/admin/reports', icon: BarChart3, description: 'Track sales leaderboards, highest-selling items, and stock valuation.' },
     { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare, description: 'View and respond to customer inquiries.' },
-    { name: 'Users & Access', href: '/admin/users', icon: ShieldCheck, description: 'Manage staff operators, granular subsection permissions, and audit logs.' },
+    { name: 'Users & Access', href: '/admin/users', icon: ShieldCheck, description: 'Manage staff users, granular subsection permissions, and audit logs.' },
     { name: 'Team', href: '/admin/team', icon: Users, description: 'Manage team members and their roles.' },
     { name: 'Brands', href: '/admin/brands', icon: Bookmark, description: 'Manage the brands in your ecosystem.' },
     { name: 'Portfolio', href: '/admin/portfolio', icon: Briefcase, description: 'Update your investment portfolio.' },
