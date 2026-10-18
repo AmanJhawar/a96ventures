@@ -6,8 +6,12 @@ import { Location } from '@/lib/types'
 import { getLocations, addLocation, updateLocation, deleteLocation, getProducts } from '@/lib/services/inventory.service'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { EASE_OUT } from '@/components/motion-transitions'
+import { usePermissions } from '@/lib/context/PermissionsContext'
 
 export default function AdminLocations() {
+  const { hasPermission } = usePermissions()
   const [locations, setLocations] = useState<Location[]>([])
   const [stockCounts, setStockCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -110,110 +114,120 @@ export default function AdminLocations() {
     }
   }
 
+  const shouldReduceMotion = useReducedMotion()
+
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Locations</h1>
           <p className="text-gray-500 text-sm">
             Manage your physical points of storage (showrooms, vaults, warehouses, workshops).
           </p>
         </div>
-        {!isFormOpen && (
+        {!isFormOpen && hasPermission('locations', 'add') && (
           <button
             onClick={handleOpenAdd}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97]"
           >
-            <Plus size={16} />
+            <Plus size={14} />
             Add Location
           </button>
         )}
       </div>
 
       {deleteError && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-700 text-sm">
-          <AlertCircle size={18} className="shrink-0 mt-0.5" />
+        <div className="mb-6 p-4 bg-gray-50 border border-gray-300 rounded-xl flex items-start gap-3 text-gray-900 text-sm">
+          <AlertCircle size={18} className="shrink-0 mt-0.5 text-gray-600" />
           <div className="flex-1">
             <span className="font-semibold">Action blocked: </span>
             {deleteError}
           </div>
-          <button onClick={() => setDeleteError(null)} className="text-red-500 hover:text-red-800">
+          <button onClick={() => setDeleteError(null)} className="text-gray-400 hover:text-black">
             <X size={16} />
           </button>
         </div>
       )}
 
       {/* Add / Edit Form Drawer/Card */}
-      {isFormOpen && (
-        <div className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-            <h2 className="text-lg font-semibold text-black">
-              {editingId ? 'Edit Location' : 'New Location'}
-            </h2>
-            <button
-              onClick={handleCancel}
-              className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2">
-              <AlertCircle size={14} />
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                Location Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Main Showroom, Central Vault, Workshop A"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                autoFocus
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                Description / Notes (Optional)
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Ground floor safe deposit, retail counter"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
+      <AnimatePresence>
+        {isFormOpen && (
+          <motion.div
+            initial={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.97) translateY(8px)" }}
+            animate={{ opacity: 1, transform: shouldReduceMotion ? "none" : "scale(1) translateY(0px)" }}
+            exit={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.97) translateY(8px)" }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
+            className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
+          >
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-black">
+                {editingId ? 'Edit Location' : 'New Location'}
+              </h2>
               <button
-                type="button"
                 onClick={handleCancel}
-                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
+                className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-              >
-                <Check size={16} />
-                {submitting ? 'Saving...' : editingId ? 'Update Location' : 'Save Location'}
+                <X size={18} />
               </button>
             </div>
-          </form>
-        </div>
-      )}
+
+            {error && (
+              <div className="mb-4 p-3 bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg flex items-center gap-2">
+                <AlertCircle size={14} className="text-gray-600" />
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                  Location Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Main Showroom, Central Vault, Workshop A"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                  Description / Notes (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Ground floor safe deposit, retail counter"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                >
+                  <Check size={16} />
+                  {submitting ? 'Saving...' : editingId ? 'Update Location' : 'Save Location'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Locations Table */}
       {loading ? (
@@ -225,13 +239,15 @@ export default function AdminLocations() {
           title="No locations configured"
           description="Create your first location such as 'Showroom' or 'Vault' to start managing inventory across locations."
           action={
-            <button
-              onClick={handleOpenAdd}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-            >
-              <Plus size={16} />
-              Add First Location
-            </button>
+            hasPermission('locations', 'add') ? (
+              <button
+                onClick={handleOpenAdd}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+              >
+                <Plus size={16} />
+                Add First Location
+              </button>
+            ) : undefined
           }
         />
       ) : (
@@ -268,20 +284,24 @@ export default function AdminLocations() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="inline-flex items-center gap-1">
-                        <button
-                          onClick={() => handleEdit(loc)}
-                          title="Edit"
-                          className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button
-                          onClick={() => setDeleteId(loc.id)}
-                          title="Delete"
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {hasPermission('locations', 'edit') && (
+                          <button
+                            onClick={() => handleEdit(loc)}
+                            title="Edit"
+                            className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                          >
+                            <Edit2 size={15} />
+                          </button>
+                        )}
+                        {hasPermission('locations', 'delete') && (
+                          <button
+                            onClick={() => setDeleteId(loc.id)}
+                            title="Delete"
+                            className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

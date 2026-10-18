@@ -39,6 +39,10 @@ import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
 import CustomSelect, { SelectOption } from '@/components/custom-select'
 import CustomDatePicker from '@/components/custom-date-picker'
+import { toast } from 'sonner'
+import { motion, AnimatePresence } from 'framer-motion'
+import { EASE_OUT } from '@/components/motion-transitions'
+import { usePermissions } from '@/lib/context/PermissionsContext'
 
 const CATEGORIES: ProductCategory[] = ['MMTC PAMP', 'Idols', 'Bullions']
 const METALS: MetalType[] = ['Gold', 'Silver']
@@ -80,6 +84,7 @@ function getTimestampMs(ts: unknown): number {
 }
 
 export default function AdminInventory() {
+  const { hasPermission } = usePermissions()
   const [activeTab, setActiveTab] = useState<InventoryTab>('products')
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All')
   const [selectedMetal, setSelectedMetal] = useState<MetalType | 'All'>('All')
@@ -120,6 +125,7 @@ export default function AdminInventory() {
   // Movement modal / form state
   const [isMovementFormOpen, setIsMovementFormOpen] = useState(false)
   const [movementType, setMovementType] = useState<MovementSubtype>('transfer')
+  const [movementTypeFilter, setMovementTypeFilter] = useState<'All' | MovementSubtype>('All')
   const [movementProductId, setMovementProductId] = useState('')
   const [movementLocationId, setMovementLocationId] = useState('')
   const [movementToLocationId, setMovementToLocationId] = useState('')
@@ -141,7 +147,6 @@ export default function AdminInventory() {
   // Zero Balance & Offline Archive Export/Upload
   const [isZeroBalanceModalOpen, setIsZeroBalanceModalOpen] = useState(false)
   const [zeroBalanceSubmitting, setZeroBalanceSubmitting] = useState(false)
-  const [zeroBalanceSuccess, setZeroBalanceSuccess] = useState<string | null>(null)
 
   // Offline archive viewing state
   const [archivedSession, setArchivedSession] = useState<{
@@ -183,12 +188,13 @@ export default function AdminInventory() {
           transactions: loadedTxs
         })
         setActiveTab('movements')
-        setZeroBalanceSuccess(
-          `Loaded archive "${file.name}" with ${loadedTxs.length} historical transactions for offline inspection.`
-        )
+        toast.success(`Loaded offline archive "${file.name}"`, {
+          description: `${loadedTxs.length} historical transactions available for review.`
+        })
       } catch (err: unknown) {
         console.error('Failed to parse archive file', err)
         setError('Failed to read archive file. Please ensure it is a valid JSON export.')
+        toast.error('Failed to read archive file')
       } finally {
         if (e.target) e.target.value = ''
       }
@@ -203,11 +209,20 @@ export default function AdminInventory() {
       // 1. Export archive JSON to user's computer before erasing from cloud
       if (transactions.length > 0) {
         const archivePayload = {
-          system: 'A96 Ventures Inventory System',
-          type: 'Transaction History Audit Archive',
+          system: 'A96 Ventures Unified Inventory System',
+          type: 'Master Audit Archive (All History)',
           version: '1.0',
           exportedAt: new Date().toISOString(),
           totalTransactions: transactions.length,
+          breakdown: {
+            sales: transactions.filter((t) => t.type === 'sale').length,
+            purchases: transactions.filter((t) => t.type === 'purchase').length,
+            transfers: transactions.filter((t) => t.type === 'transfer').length,
+            adjustments: transactions.filter((t) => t.type === 'adjustment').length,
+            repairs: transactions.filter((t) => t.type === 'repair').length,
+            melts: transactions.filter((t) => t.type === 'melt').length,
+            returns: transactions.filter((t) => t.type === 'return').length
+          },
           productsSnapshot: products.map((p) => ({
             id: p.id,
             name: p.name,
@@ -236,14 +251,16 @@ export default function AdminInventory() {
       // 2. Erase transaction documents from cloud database
       const count = await clearTransactionHistory()
       setIsZeroBalanceModalOpen(false)
-      setZeroBalanceSuccess(
-        `Transaction history successfully exported to JSON file and erased from cloud (${count} transactions cleared). All product stock and location balances remain untouched.`
-      )
+      toast.success('Zero balance complete', {
+        description: `Exported and cleared ${count} transactions across all history. Stock counts remain unchanged.`,
+        duration: 5000
+      })
       setArchivedSession(null)
       await loadAll()
     } catch (err: unknown) {
       console.error('Failed to zero balance history', err)
       setError('Failed to clear transaction history. Please try again.')
+      toast.error('Failed to clear transaction history')
     } finally {
       setZeroBalanceSubmitting(false)
     }
@@ -380,15 +397,16 @@ export default function AdminInventory() {
     })
   }, [displayTransactions, selectedCategory, selectedMetal])
 
-  // Filtered movements
+  // Filtered movements with subtype support
   const filteredMovements = useMemo(() => {
     const movementTypes: TransactionType[] = ['transfer', 'adjustment', 'repair', 'melt']
     return displayTransactions.filter((tx) => {
+      const typeMatch = movementTypeFilter === 'All' || tx.type === movementTypeFilter
       const catMatch = selectedCategory === 'All' || tx.category === selectedCategory
       const metalMatch = selectedMetal === 'All' || tx.metal === selectedMetal
-      return movementTypes.includes(tx.type) && catMatch && metalMatch
+      return movementTypes.includes(tx.type) && typeMatch && catMatch && metalMatch
     })
-  }, [displayTransactions, selectedCategory, selectedMetal])
+  }, [displayTransactions, movementTypeFilter, selectedCategory, selectedMetal])
 
   // Selected product in purchase modal
   const selectedPurchaseProduct = useMemo(() => {
@@ -420,10 +438,47 @@ export default function AdminInventory() {
       return {
         value: l.id,
         label: l.name,
-        badge: `${stock} units`
+        badge: `${stock} in stock`
       }
     })
   }, [locations, selectedMovementProduct])
+
+  // Destination options for transfers (filters out source location)
+  const destinationLocationOptions: SelectOption[] = useMemo(() => {
+    return locations
+      .filter((l) => l.id !== movementLocationId)
+      .map((l) => {
+        const stock = selectedMovementProduct?.stockByLocation?.[l.id] || 0
+        return {
+          value: l.id,
+          label: l.name,
+          badge: `${stock} currently`
+        }
+      })
+  }, [locations, movementLocationId, selectedMovementProduct])
+
+  // Current stock counts at selected movement locations
+  const currentSourceStock = useMemo(() => {
+    if (!selectedMovementProduct || !movementLocationId) return 0
+    return selectedMovementProduct.stockByLocation?.[movementLocationId] || 0
+  }, [selectedMovementProduct, movementLocationId])
+
+  const currentDestStock = useMemo(() => {
+    if (!selectedMovementProduct || !movementToLocationId) return 0
+    return selectedMovementProduct.stockByLocation?.[movementToLocationId] || 0
+  }, [selectedMovementProduct, movementToLocationId])
+
+  // Auto-select valid destination if source matches or is unselected
+  useEffect(() => {
+    if (movementType === 'transfer' && movementLocationId) {
+      if (movementToLocationId === movementLocationId || !destinationLocationOptions.some((d) => d.value === movementToLocationId)) {
+        const firstAlt = destinationLocationOptions[0]
+        if (firstAlt) {
+          setMovementToLocationId(firstAlt.value)
+        }
+      }
+    }
+  }, [movementType, movementLocationId, movementToLocationId, destinationLocationOptions])
 
   // Auto-set current weight when selecting a product for repair
   useEffect(() => {
@@ -512,10 +567,12 @@ export default function AdminInventory() {
         })
       }
       setIsProductFormOpen(false)
+      toast.success(editingProductId ? 'Product updated successfully' : 'Product added to catalog')
       await loadAll()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save product'
       setProductFormError(msg)
+      toast.error(msg)
     } finally {
       setProductFormSubmitting(false)
     }
@@ -525,10 +582,12 @@ export default function AdminInventory() {
     if (!deleteProductTarget) return
     try {
       await deleteProduct(deleteProductTarget.id)
+      toast.success('Product deleted')
       setDeleteProductTarget(null)
       await loadAll()
     } catch (err: unknown) {
       console.error(err)
+      toast.error('Failed to delete product')
     }
   }
 
@@ -583,17 +642,19 @@ export default function AdminInventory() {
         notes: purchaseNotes
       })
       setIsPurchaseFormOpen(false)
+      toast.success('Purchase recorded successfully')
       await loadAll()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record purchase'
       setPurchaseError(msg)
+      toast.error(msg)
     } finally {
       setPurchaseSubmitting(false)
     }
   }
 
   // Handlers for Movements
-  const handleOpenMovement = (type: MovementSubtype) => {
+  const handleOpenMovement = (type: MovementSubtype = 'transfer') => {
     setMovementType(type)
     setMovementProductId(products[0]?.id || '')
     setMovementLocationId(locations[0]?.id || '')
@@ -702,10 +763,12 @@ export default function AdminInventory() {
       }
 
       setIsMovementFormOpen(false)
+      toast.success(`${movementType.charAt(0).toUpperCase() + movementType.slice(1)} recorded successfully`)
       await loadAll()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record movement'
       setMovementError(msg)
+      toast.error(msg)
     } finally {
       setMovementSubmitting(false)
     }
@@ -715,10 +778,12 @@ export default function AdminInventory() {
     if (!deleteTxTarget) return
     try {
       await deleteTransaction(deleteTxTarget)
+      toast.success('Movement reversed and deleted')
       setDeleteTxTarget(null)
       await loadAll()
     } catch (err: unknown) {
       console.error('Failed to delete transaction', err)
+      toast.error('Failed to reverse movement')
     }
   }
 
@@ -744,7 +809,7 @@ export default function AdminInventory() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Inventory Management</h1>
           <p className="text-gray-500 text-sm">
-            Track catalog items, Gold & Silver metals, purchases, transfers, idol repairs, melts, and complete stock reports.
+            Track items, purchases, transfers, idol repairs, and melts.
           </p>
         </div>
 
@@ -758,25 +823,29 @@ export default function AdminInventory() {
             className="hidden"
           />
 
-          <button
-            onClick={() => archiveInputRef.current?.click()}
-            title="Upload an offline archive JSON file to inspect historical transactions"
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
-          >
-            <Upload size={14} />
-            Upload Archive
-          </button>
+          {hasPermission('archive', 'uploadArchive') && (
+            <button
+              onClick={() => archiveInputRef.current?.click()}
+              title="Upload an offline archive JSON file to inspect historical transactions"
+              className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
+            >
+              <Upload size={14} />
+              Upload Archive
+            </button>
+          )}
 
-          <button
-            onClick={() => setIsZeroBalanceModalOpen(true)}
-            title="Export archive to JSON and erase online transactions while preserving stock"
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
-          >
-            <RotateCcw size={14} />
-            Zero Balance
-          </button>
+          {hasPermission('archive', 'zeroBalance') && (
+            <button
+              onClick={() => setIsZeroBalanceModalOpen(true)}
+              title="Master Zero Balance: Export archive and clear all history (sales, purchases, movements) while keeping live stock"
+              className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
+            >
+              <RotateCcw size={14} />
+              Zero Balance
+            </button>
+          )}
 
-          {activeTab === 'products' && (
+          {activeTab === 'products' && hasPermission('products', 'add') && (
             <button
               onClick={handleOpenAddProduct}
               className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97]"
@@ -786,7 +855,7 @@ export default function AdminInventory() {
             </button>
           )}
 
-          {activeTab === 'purchases' && (
+          {activeTab === 'purchases' && hasPermission('purchases', 'add') && (
             <button
               onClick={handleOpenAddPurchase}
               disabled={products.length === 0 || locations.length === 0}
@@ -797,57 +866,22 @@ export default function AdminInventory() {
             </button>
           )}
 
-          {activeTab === 'movements' && (
-            <>
-              <div className="h-5 w-px bg-gray-200 hidden sm:block mx-1" />
+          {activeTab === 'movements' &&
+            (hasPermission('movements', 'transfer') ||
+              hasPermission('movements', 'adjustment') ||
+              hasPermission('movements', 'repair') ||
+              hasPermission('movements', 'melt')) && (
               <button
                 onClick={() => handleOpenMovement('transfer')}
-                disabled={products.length === 0 || locations.length < 2}
-                className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-black hover:bg-gray-50 disabled:opacity-40 rounded-lg text-xs font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
-              >
-                <ArrowRightLeft size={14} />
-                Transfer
-              </button>
-              <button
-                onClick={() => handleOpenMovement('repair')}
                 disabled={products.length === 0 || locations.length === 0}
-                className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-black hover:bg-gray-50 disabled:opacity-40 rounded-lg text-xs font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
+                className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 disabled:opacity-40 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97]"
               >
-                <Wrench size={14} />
-                Repair
+                <Plus size={14} />
+                Record Movement
               </button>
-              <button
-                onClick={() => handleOpenMovement('melt')}
-                disabled={products.length === 0 || locations.length === 0}
-                className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-black hover:bg-gray-50 disabled:opacity-40 rounded-lg text-xs font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
-              >
-                <Flame size={14} />
-                Melt
-              </button>
-              <button
-                onClick={() => handleOpenMovement('adjustment')}
-                disabled={products.length === 0 || locations.length === 0}
-                className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-black hover:bg-gray-50 disabled:opacity-40 rounded-lg text-xs font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
-              >
-                <SlidersHorizontal size={14} />
-                Adjust Stock
-              </button>
-            </>
-          )}
+            )}
         </div>
       </div>
-
-      {zeroBalanceSuccess && (
-        <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-xl text-black text-sm flex items-center justify-between">
-          <span>{zeroBalanceSuccess}</span>
-          <button
-            onClick={() => setZeroBalanceSuccess(null)}
-            className="text-gray-400 hover:text-black transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
 
       {/* Offline Archive Viewer Active Notification */}
       {archivedSession && (
@@ -881,34 +915,46 @@ export default function AdminInventory() {
       {/* Tabs */}
       <div className="flex items-center border-b border-gray-200 mb-6 overflow-x-auto">
         <button
-          onClick={() => setActiveTab('products')}
-          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'products'
-              ? 'border-black text-black'
-              : 'border-transparent text-gray-500 hover:text-black'
-          }`}
+          onClick={() => {
+            setActiveTab('products')
+            setIsProductFormOpen(false)
+            setIsPurchaseFormOpen(false)
+            setIsMovementFormOpen(false)
+          }}
+          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'products'
+            ? 'border-black text-black'
+            : 'border-transparent text-gray-500 hover:text-black'
+            }`}
         >
           <Package size={16} />
           Products Catalog ({products.length})
         </button>
         <button
-          onClick={() => setActiveTab('purchases')}
-          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'purchases'
-              ? 'border-black text-black'
-              : 'border-transparent text-gray-500 hover:text-black'
-          }`}
+          onClick={() => {
+            setActiveTab('purchases')
+            setIsProductFormOpen(false)
+            setIsPurchaseFormOpen(false)
+            setIsMovementFormOpen(false)
+          }}
+          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'purchases'
+            ? 'border-black text-black'
+            : 'border-transparent text-gray-500 hover:text-black'
+            }`}
         >
           <ShoppingBag size={16} />
           Purchases ({displayTransactions.filter((t) => t.type === 'purchase').length})
         </button>
         <button
-          onClick={() => setActiveTab('movements')}
-          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'movements'
-              ? 'border-black text-black'
-              : 'border-transparent text-gray-500 hover:text-black'
-          }`}
+          onClick={() => {
+            setActiveTab('movements')
+            setIsProductFormOpen(false)
+            setIsPurchaseFormOpen(false)
+            setIsMovementFormOpen(false)
+          }}
+          className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'movements'
+            ? 'border-black text-black'
+            : 'border-transparent text-gray-500 hover:text-black'
+            }`}
         >
           <Layers size={16} />
           Stock Movements ({filteredMovements.length})
@@ -916,18 +962,47 @@ export default function AdminInventory() {
       </div>
 
       {/* Dual Filter Pills (Category + Metal) & Sort Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col gap-3 mb-6">
+        {/* Movements Subtype Filter */}
+        {activeTab === 'movements' && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Movement:</span>
+            {(['All', 'transfer', 'adjustment', 'repair', 'melt'] as const).map((mType) => {
+              const labelMap: Record<string, string> = {
+                All: 'All',
+                transfer: 'Transfers',
+                adjustment: 'Stock Adjustments',
+                repair: 'Repairs',
+                melt: 'Melts'
+              }
+              const isActive = movementTypeFilter === mType
+              return (
+                <button
+                  key={mType}
+                  onClick={() => setMovementTypeFilter(mType)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${isActive
+                      ? 'bg-black text-white border border-black shadow-xs'
+                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                    }`}
+                >
+                  {labelMap[mType]}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-4 flex-wrap">
             {/* Category Filter */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Category:</span>
               <button
                 onClick={() => setSelectedCategory('All')}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
-                  selectedCategory === 'All'
-                    ? 'bg-black text-white'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedCategory === 'All'
+                  ? 'bg-black text-white border border-black shadow-xs'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                  }`}
               >
                 All
               </button>
@@ -935,11 +1010,10 @@ export default function AdminInventory() {
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
-                    selectedCategory === cat
-                      ? 'bg-black text-white'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedCategory === cat
+                    ? 'bg-black text-white border border-black shadow-xs'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                    }`}
                 >
                   {cat}
                 </button>
@@ -951,11 +1025,10 @@ export default function AdminInventory() {
               <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Metal:</span>
               <button
                 onClick={() => setSelectedMetal('All')}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
-                  selectedMetal === 'All'
-                    ? 'bg-black text-white'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedMetal === 'All'
+                  ? 'bg-black text-white border border-black shadow-xs'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                  }`}
               >
                 All
               </button>
@@ -963,11 +1036,10 @@ export default function AdminInventory() {
                 <button
                   key={m}
                   onClick={() => setSelectedMetal(m)}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
-                    selectedMetal === m
-                      ? 'bg-black text-white'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedMetal === m
+                    ? 'bg-black text-white border border-black shadow-xs'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                    }`}
                 >
                   {m}
                 </button>
@@ -990,572 +1062,664 @@ export default function AdminInventory() {
             </div>
           )}
         </div>
+      </div>
 
       {/* Product Form Drawer/Card */}
-      {isProductFormOpen && (
-        <div className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-            <h2 className="text-lg font-semibold text-black">
-              {editingProductId ? 'Edit Product' : 'Add New Product'}
-            </h2>
-            <button
-              onClick={() => setIsProductFormOpen(false)}
-              className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          {productFormError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2">
-              <AlertCircle size={14} />
-              {productFormError}
-            </div>
-          )}
-
-          <form onSubmit={handleSaveProduct} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Product Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. MMTC Gold Bar 10g / Silver Lakshmi Idol"
-                  value={prodName}
-                  onChange={(e) => setProdName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Category <span className="text-red-500">*</span>
-                </label>
-                <CustomSelect
-                  value={prodCategory}
-                  onValueChange={(val) => handleCategoryChange(val as ProductCategory)}
-                  options={categoryOptions}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Metal <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setProdMetal('Gold')}
-                    className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color] duration-150 flex items-center justify-center ${
-                      prodMetal === 'Gold'
-                        ? 'bg-black text-white shadow-sm'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    Gold
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProdMetal('Silver')}
-                    className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color] duration-150 flex items-center justify-center ${
-                      prodMetal === 'Silver'
-                        ? 'bg-black text-white shadow-sm'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    Silver
-                  </button>
-                </div>
-              </div>
+      <AnimatePresence>
+        {isProductFormOpen && (
+          <motion.div
+            initial={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
+            animate={{ opacity: 1, transform: "scale(1) translateY(0px)" }}
+            exit={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
+            className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
+          >
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-black">
+                {editingProductId ? 'Edit Product' : 'Add New Product'}
+              </h2>
+              <button
+                onClick={() => setIsProductFormOpen(false)}
+                className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  SKU Code <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. GP-10G / IDOL-SLV-100"
-                  value={prodSku}
-                  onChange={(e) => setProdSku(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black uppercase transition-[border-color] duration-150"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Weight (Grams) {isIdolCategory ? <span className="text-gray-400 font-normal lowercase">(variable)</span> : <span className="text-red-500">*</span>}
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  placeholder={isIdolCategory ? "Disabled for idols" : "e.g. 10.00 (mandatory)"}
-                  value={isIdolCategory ? '' : prodWeight}
-                  disabled={isIdolCategory}
-                  onChange={(e) => setProdWeight(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 border rounded-lg text-sm transition-[border-color] duration-150 ${
-                    isIdolCategory
-                      ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                      : 'bg-white border-gray-200 text-black placeholder-gray-400 focus:outline-none focus:border-black'
-                  }`}
-                  required={!isIdolCategory}
-                />
-                {isIdolCategory && (
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Disabled for idols as each piece has a unique weight.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Purity <span className="text-red-500">*</span>
-                </label>
-                <CustomSelect
-                  value={prodPurity}
-                  onValueChange={setProdPurity}
-                  options={purityOptions}
-                  placeholder="Select purity..."
-                />
-              </div>
-            </div>
-
-            {/* Opening stock (Only on creation) */}
-            {!editingProductId && (
-              <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <div className="text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
-                  Initial Stock Setup (Optional)
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">
-                      Initial Quantity {prodCategory === 'Idols' && '(Max 1 for Idols)'}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max={prodCategory === 'Idols' ? 1 : undefined}
-                      placeholder="0"
-                      value={prodInitialStock}
-                      onChange={(e) => setProdInitialStock(e.target.value)}
-                      className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Assign to Location</label>
-                    <CustomSelect
-                      value={prodInitialLocationId}
-                      onValueChange={setProdInitialLocationId}
-                      options={[{ value: '', label: 'Select location...' }, ...locationOptions]}
-                    />
-                  </div>
-                </div>
+            {productFormError && (
+              <div className="mb-4 p-3 bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg flex items-center gap-2">
+                <AlertCircle size={14} className="text-gray-600" />
+                {productFormError}
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsProductFormOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={productFormSubmitting}
-                className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-              >
-                <Check size={16} />
-                {productFormSubmitting ? 'Saving...' : editingProductId ? 'Update Product' : 'Create Product'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Record Purchase Modal / Card */}
-      {isPurchaseFormOpen && (
-        <div className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-            <h2 className="text-lg font-semibold text-black">Record Purchase (Restock)</h2>
-            <button
-              onClick={() => setIsPurchaseFormOpen(false)}
-              className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          {purchaseError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2">
-              <AlertCircle size={14} />
-              {purchaseError}
-            </div>
-          )}
-
-          <form onSubmit={handleSavePurchase} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Product <span className="text-red-500">*</span>
-                </label>
-                <CustomSelect
-                  value={purchaseProductId}
-                  onValueChange={setPurchaseProductId}
-                  options={productOptions}
-                  placeholder="Select product to restock..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Receiving Location <span className="text-red-500">*</span>
-                </label>
-                <CustomSelect
-                  value={purchaseLocationId}
-                  onValueChange={setPurchaseLocationId}
-                  options={locationOptions}
-                  placeholder="Select receiving location..."
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
-                    Quantity <span className="text-red-500">*</span>
-                  </label>
-                  {isPurchaseProductAnIdol && (
-                    <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
-                      Idols locked to 1
-                    </span>
-                  )}
-                </div>
-                <input
-                  type="number"
-                  min="1"
-                  max={isPurchaseProductAnIdol ? 1 : undefined}
-                  disabled={isPurchaseProductAnIdol}
-                  value={isPurchaseProductAnIdol ? '1' : purchaseQty}
-                  onChange={(e) => setPurchaseQty(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${
-                    isPurchaseProductAnIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''
-                  }`}
-                  required
-                />
-                {isPurchaseProductAnIdol && (
-                  <p className="text-[11px] text-gray-500 mt-1">
-                    Idols are unique pieces and purchased 1 unit at a time.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Unit Purchase Price (₹)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="e.g. 75000"
-                  value={purchasePrice}
-                  onChange={(e) => setPurchasePrice(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Purchase Date <span className="text-red-500">*</span>
-                </label>
-                <CustomDatePicker
-                  value={purchaseDate}
-                  onChange={setPurchaseDate}
-                  placeholder="Select purchase date"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                Notes / Supplier Ref (Optional)
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Supplier Invoice #9821, MMTC lot 44"
-                value={purchaseNotes}
-                onChange={(e) => setPurchaseNotes(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsPurchaseFormOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={purchaseSubmitting}
-                className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-              >
-                <Check size={16} />
-                {purchaseSubmitting ? 'Recording...' : 'Add Stock'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Movement Modal / Card */}
-      {isMovementFormOpen && (
-        <div className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold text-black capitalize">Record {movementType}</h2>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider bg-gray-100 text-gray-700">
-                {movementType}
-              </span>
-            </div>
-            <button
-              onClick={() => setIsMovementFormOpen(false)}
-              className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          {movementError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2">
-              <AlertCircle size={14} />
-              {movementError}
-            </div>
-          )}
-
-          <form onSubmit={handleSaveMovement} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Select Product <span className="text-red-500">*</span>
-                </label>
-                <CustomSelect
-                  value={movementProductId}
-                  onValueChange={setMovementProductId}
-                  options={productOptions}
-                  placeholder="Select product..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  {movementType === 'transfer' ? 'Source Location *' : 'Location *'}
-                </label>
-                <CustomSelect
-                  value={movementLocationId}
-                  onValueChange={setMovementLocationId}
-                  options={movementLocationOptions}
-                  placeholder="Select location..."
-                />
-              </div>
-            </div>
-
-            {/* Type-Specific Fields */}
-            {movementType === 'transfer' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+            <form onSubmit={handleSaveProduct} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="md:col-span-2">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Destination Location <span className="text-red-500">*</span>
+                    Product Name <span className="text-red-500">*</span>
                   </label>
-                  <CustomSelect
-                    value={movementToLocationId}
-                    onValueChange={setMovementToLocationId}
-                    options={locationOptions}
-                    placeholder="Select destination location..."
+                  <input
+                    type="text"
+                    placeholder="e.g. MMTC Gold Bar 10g / Silver Lakshmi Idol"
+                    value={prodName}
+                    onChange={(e) => setProdName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    required
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Transfer Quantity <span className="text-red-500">*</span>
+                    Category <span className="text-red-500">*</span>
                   </label>
+                  <CustomSelect
+                    value={prodCategory}
+                    onValueChange={(val) => handleCategoryChange(val as ProductCategory)}
+                    options={categoryOptions}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Metal <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setProdMetal('Gold')}
+                      className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color] duration-150 flex items-center justify-center ${prodMetal === 'Gold'
+                        ? 'bg-black text-white shadow-sm'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                    >
+                      Gold
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProdMetal('Silver')}
+                      className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color] duration-150 flex items-center justify-center ${prodMetal === 'Silver'
+                        ? 'bg-black text-white shadow-sm'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                    >
+                      Silver
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    SKU Code <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. GP-10G / IDOL-SLV-100"
+                    value={prodSku}
+                    onChange={(e) => setProdSku(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black uppercase transition-[border-color] duration-150"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Weight (Grams) {isIdolCategory ? <span className="text-gray-400 font-normal lowercase">(variable)</span> : <span className="text-red-500">*</span>}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    placeholder={isIdolCategory ? "Disabled for idols" : "e.g. 10.00 (mandatory)"}
+                    value={isIdolCategory ? '' : prodWeight}
+                    disabled={isIdolCategory}
+                    onChange={(e) => setProdWeight(e.target.value)}
+                    className={`w-full px-3.5 py-2.5 border rounded-lg text-sm transition-[border-color] duration-150 ${isIdolCategory
+                      ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-white border-gray-200 text-black placeholder-gray-400 focus:outline-none focus:border-black'
+                      }`}
+                    required={!isIdolCategory}
+                  />
+                  {isIdolCategory && (
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Disabled for idols as each piece has a unique weight.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Purity <span className="text-red-500">*</span>
+                  </label>
+                  <CustomSelect
+                    value={prodPurity}
+                    onValueChange={setProdPurity}
+                    options={purityOptions}
+                    placeholder="Select purity..."
+                  />
+                </div>
+              </div>
+
+              {/* Opening stock (Only on creation) */}
+              {!editingProductId && (
+                <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
+                    Initial Stock Setup (Optional)
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Initial Quantity {prodCategory === 'Idols' && '(Max 1 for Idols)'}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={prodCategory === 'Idols' ? 1 : undefined}
+                        placeholder="0"
+                        value={prodInitialStock}
+                        onChange={(e) => setProdInitialStock(e.target.value)}
+                        className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Assign to Location</label>
+                      <CustomSelect
+                        value={prodInitialLocationId}
+                        onValueChange={setProdInitialLocationId}
+                        options={[{ value: '', label: 'Select location...' }, ...locationOptions]}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsProductFormOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={productFormSubmitting}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                >
+                  <Check size={16} />
+                  {productFormSubmitting ? 'Saving...' : editingProductId ? 'Update Product' : 'Create Product'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Record Purchase Modal / Card */}
+      <AnimatePresence>
+        {isPurchaseFormOpen && (
+          <motion.div
+            initial={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
+            animate={{ opacity: 1, transform: "scale(1) translateY(0px)" }}
+            exit={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
+            className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
+          >
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-black">Record Purchase</h2>
+              <button
+                onClick={() => setIsPurchaseFormOpen(false)}
+                className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {purchaseError && (
+              <div className="mb-4 p-3 bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg flex items-center gap-2">
+                <AlertCircle size={14} className="text-gray-600" />
+                {purchaseError}
+              </div>
+            )}
+
+            <form onSubmit={handleSavePurchase} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Product <span className="text-red-500">*</span>
+                  </label>
+                  <CustomSelect
+                    value={purchaseProductId}
+                    onValueChange={setPurchaseProductId}
+                    options={productOptions}
+                    placeholder="Select product to restock..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Receiving Location <span className="text-red-500">*</span>
+                  </label>
+                  <CustomSelect
+                    value={purchaseLocationId}
+                    onValueChange={setPurchaseLocationId}
+                    options={locationOptions}
+                    placeholder="Select receiving location..."
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Quantity <span className="text-red-500">*</span>
+                    </label>
+                    {isPurchaseProductAnIdol && (
+                      <span className="text-[11px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                        Idols locked to 1
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="number"
                     min="1"
-                    value={movementQty}
-                    onChange={(e) => setMovementQty(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    max={isPurchaseProductAnIdol ? 1 : undefined}
+                    disabled={isPurchaseProductAnIdol}
+                    value={isPurchaseProductAnIdol ? '1' : purchaseQty}
+                    onChange={(e) => setPurchaseQty(e.target.value)}
+                    className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isPurchaseProductAnIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''
+                      }`}
                     required
                   />
-                </div>
-              </div>
-            )}
-
-            {movementType === 'adjustment' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Quantity Adjustment (+ or -) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="e.g. +2 or -1"
-                    value={movementQty}
-                    onChange={(e) => setMovementQty(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                    required
-                  />
-                  <p className="text-xs text-gray-400 mt-1">
-                    Enter positive number for surplus found, or negative for shortage/damaged items.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {movementType === 'repair' && (
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-4">
-                <div className="flex items-center justify-between text-xs text-gray-600">
-                  <span>Current Weight: <strong>{selectedMovementProduct?.weight || 0} grams</strong></span>
-                  {movementNewWeight && (
-                    <span className="font-semibold text-black">
-                      Difference:{' '}
-                      {(Number(movementNewWeight) - (selectedMovementProduct?.weight || 0)).toFixed(2)}g
-                    </span>
+                  {isPurchaseProductAnIdol && (
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Idols are unique pieces and purchased 1 unit at a time.
+                    </p>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                      New Weight (Grams) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      placeholder="e.g. 102.50"
-                      value={movementNewWeight}
-                      onChange={(e) => setMovementNewWeight(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                      required
-                    />
-                    <p className="text-xs text-gray-400 mt-1">
-                      This will update the idol product weight in the system.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                      Repair / Labor Charge (₹)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="e.g. 1500"
-                      value={movementRepairCharge}
-                      onChange={(e) => setMovementRepairCharge(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Unit Purchase Price (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="e.g. 75000"
+                    value={purchasePrice}
+                    onChange={(e) => setPurchasePrice(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                  />
                 </div>
-              </div>
-            )}
 
-            {movementType === 'melt' && (
-              <div className="p-4 bg-red-50/50 border border-red-200/60 rounded-xl space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                      Quantity to Melt <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={movementQty}
-                      onChange={(e) => setMovementQty(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Destructive: This will decrement inventory stock at {locationMap.get(movementLocationId) || 'selected location'}.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                      Recovered Raw Weight (Grams)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="e.g. 98.40"
-                      value={movementRecoveredWeight}
-                      onChange={(e) => setMovementRecoveredWeight(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Purchase Date <span className="text-red-500">*</span>
+                  </label>
+                  <CustomDatePicker
+                    value={purchaseDate}
+                    onChange={setPurchaseDate}
+                    placeholder="Select purchase date"
+                  />
                 </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Date <span className="text-red-500">*</span>
-                </label>
-                <CustomDatePicker
-                  value={movementDate}
-                  onChange={setMovementDate}
-                  placeholder="Select movement date"
-                />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Reason / Notes
+                  Notes / Supplier Ref (Optional)
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Broken pedestal repaired, sent to refinery"
-                  value={movementNotes}
-                  onChange={(e) => setMovementNotes(e.target.value)}
+                  placeholder="e.g. Supplier Invoice #9821, MMTC lot 44"
+                  value={purchaseNotes}
+                  onChange={(e) => setPurchaseNotes(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
                 />
               </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPurchaseFormOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={purchaseSubmitting}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                >
+                  <Check size={16} />
+                  {purchaseSubmitting ? 'Recording...' : 'Add Stock'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Movement Modal / Card */}
+      <AnimatePresence>
+        {isMovementFormOpen && (
+          <motion.div
+            initial={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
+            animate={{ opacity: 1, transform: "scale(1) translateY(0px)" }}
+            exit={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
+            className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
+          >
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-semibold text-black">Record Stock Movement</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Transfer between locations, audit inventory counts, log repairs, or melt scrap metal.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsMovementFormOpen(false)}
+                className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsMovementFormOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={movementSubmitting}
-                className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-              >
-                <Check size={16} />
-                {movementSubmitting ? 'Recording...' : `Confirm ${movementType}`}
-              </button>
+            {/* Segmented Control for Movement Type */}
+            <div className="flex items-center p-1 bg-gray-100 rounded-lg mb-5 max-w-md">
+              {(['transfer', 'adjustment', 'repair', 'melt'] as MovementSubtype[]).map((type) => {
+                const labelMap: Record<MovementSubtype, string> = {
+                  transfer: 'Transfer',
+                  adjustment: 'Audit / Adjust',
+                  repair: 'Repair',
+                  melt: 'Melt'
+                }
+                const isActive = movementType === type
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setMovementType(type)
+                      setMovementError(null)
+                    }}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${isActive
+                        ? 'bg-white text-black shadow-xs font-bold'
+                        : 'text-gray-500 hover:text-black'
+                      }`}
+                  >
+                    {labelMap[type]}
+                  </button>
+                )
+              })}
             </div>
-          </form>
-        </div>
-      )}
+
+            {movementError && (
+              <div className="mb-4 p-3 bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg flex items-center gap-2">
+                <AlertCircle size={14} className="text-gray-600" />
+                {movementError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveMovement} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Select Product <span className="text-red-500">*</span>
+                  </label>
+                  <CustomSelect
+                    value={movementProductId}
+                    onValueChange={setMovementProductId}
+                    options={productOptions}
+                    placeholder="Select product..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    {movementType === 'transfer' ? 'Source Location *' : 'Location *'}
+                  </label>
+                  <CustomSelect
+                    value={movementLocationId}
+                    onValueChange={setMovementLocationId}
+                    options={movementLocationOptions}
+                    placeholder="Select location..."
+                  />
+                </div>
+              </div>
+
+              {/* Type-Specific Fields */}
+              {movementType === 'transfer' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                        Destination Location <span className="text-red-500">*</span>
+                      </label>
+                      <CustomSelect
+                        value={movementToLocationId}
+                        onValueChange={setMovementToLocationId}
+                        options={destinationLocationOptions}
+                        placeholder={locations.length < 2 ? 'At least 2 locations required' : 'Select destination location...'}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                        Transfer Quantity <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max={currentSourceStock > 0 ? currentSourceStock : undefined}
+                        value={movementQty}
+                        onChange={(e) => setMovementQty(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Real-time Transfer Flow Preview */}
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1.5">
+                    <div className="flex items-center justify-between text-gray-700">
+                      <span>Source: <strong>{locationMap.get(movementLocationId) || '—'}</strong> ({currentSourceStock} units)</span>
+                      <span className="text-gray-400">→</span>
+                      <span>Destination: <strong>{locationMap.get(movementToLocationId) || '—'}</strong> ({currentDestStock} units)</span>
+                    </div>
+                    {Number(movementQty) > 0 && (
+                      <div className="pt-1.5 border-t border-gray-200/60 flex items-center justify-between text-[11px]">
+                        <span className={Number(movementQty) > currentSourceStock ? 'text-black font-semibold' : 'text-gray-500'}>
+                          {Number(movementQty) > currentSourceStock
+                            ? `Insufficient stock: only ${currentSourceStock} units available at source`
+                            : `After transfer: ${currentSourceStock - Number(movementQty)} remaining · ${currentDestStock + Number(movementQty)} at destination`}
+                        </span>
+                        <span className="font-semibold text-black">Moving {movementQty} unit{Number(movementQty) === 1 ? '' : 's'}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {movementType === 'adjustment' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                        Quantity Adjustment (+ or -) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="e.g. +2 or -1"
+                        value={movementQty}
+                        onChange={(e) => setMovementQty(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                        required
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        Positive number for surplus found, or negative for shrinkage / damaged units.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs flex flex-col justify-center">
+                      <div className="text-gray-500">Current Stock: <strong className="text-black">{currentSourceStock} units</strong></div>
+                      <div className="mt-1 pt-1 border-t border-gray-200/60 font-semibold text-black">
+                        New Stock: {currentSourceStock + (Number(movementQty) || 0)} units
+                        {Number(movementQty) !== 0 && (
+                          <span className="ml-1.5 text-[11px] font-normal text-gray-500">
+                            ({Number(movementQty) > 0 ? `+${movementQty} surplus` : `${movementQty} deficit`})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {movementType === 'repair' && (
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-4">
+                  <div className="flex items-center justify-between text-xs text-gray-600">
+                    <span>Original Weight: <strong>{selectedMovementProduct?.weight || 0} grams</strong></span>
+                    {movementNewWeight && (
+                      <span className="font-semibold text-black">
+                        Net Change:{' '}
+                        {(Number(movementNewWeight) - (selectedMovementProduct?.weight || 0)).toFixed(2)}g
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                        New Weight (Grams) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        placeholder="e.g. 102.50"
+                        value={movementNewWeight}
+                        onChange={(e) => setMovementNewWeight(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                        required
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        Updates physical weight of the product in system inventory.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                        Repair / Labor Charge (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="e.g. 1500"
+                        value={movementRepairCharge}
+                        onChange={(e) => setMovementRepairCharge(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {movementType === 'melt' && (
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-4">
+                  <div className="p-3 bg-zinc-100/70 border border-zinc-200 rounded-lg text-xs text-zinc-700 flex items-center gap-2">
+                    <span className="font-semibold">Notice:</span>
+                    <span>Melt decrements physical item count at {locationMap.get(movementLocationId) || 'selected location'} and records recovered pure metal weight.</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                        Quantity to Melt <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max={currentSourceStock > 0 ? currentSourceStock : undefined}
+                        value={movementQty}
+                        onChange={(e) => setMovementQty(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                        required
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        Available to melt at this location: {currentSourceStock} units
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                        Recovered Raw Weight (Grams)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="e.g. 98.40"
+                        value={movementRecoveredWeight}
+                        onChange={(e) => setMovementRecoveredWeight(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Date <span className="text-red-500">*</span>
+                  </label>
+                  <CustomDatePicker
+                    value={movementDate}
+                    onChange={setMovementDate}
+                    placeholder="Select movement date"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Reason / Notes
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Physical count discrepancy, store stock replenishment"
+                    value={movementNotes}
+                    onChange={(e) => setMovementNotes(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsMovementFormOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={movementSubmitting}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                >
+                  <Check size={16} />
+                  {movementSubmitting ? 'Recording...' : `Confirm ${movementType.charAt(0).toUpperCase() + movementType.slice(1)}`}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Content Areas */}
       {loading ? (
@@ -1696,28 +1860,31 @@ export default function AdminInventory() {
                           )}
                         </td>
                         <td className="px-6 py-4 text-right tabular-nums">
-                          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                            p.stock > 0 ? 'bg-black text-white' : 'bg-red-50 text-red-700 border border-red-200'
-                          }`}>
+                          <span className={`inline-flex px-2.5 py-0.5 rounded-md text-xs font-bold ${p.stock > 0 ? 'bg-black text-white' : 'bg-gray-100 text-gray-400 border border-gray-200'
+                            }`}>
                             {p.stock} units
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="inline-flex items-center gap-1">
-                            <button
-                              onClick={() => handleEditProduct(p)}
-                              title="Edit"
-                              className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                            >
-                              <Edit2 size={15} />
-                            </button>
-                            <button
-                              onClick={() => setDeleteProductTarget(p)}
-                              title="Delete"
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                            >
-                              <Trash2 size={15} />
-                            </button>
+                            {hasPermission('products', 'edit') && (
+                              <button
+                                onClick={() => handleEditProduct(p)}
+                                title="Edit"
+                                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                              >
+                                <Edit2 size={15} />
+                              </button>
+                            )}
+                            {hasPermission('products', 'delete') && (
+                              <button
+                                onClick={() => setDeleteProductTarget(p)}
+                                title="Delete"
+                                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1734,14 +1901,16 @@ export default function AdminInventory() {
             title="No purchases recorded"
             description="Purchases record incoming stock inventory and automatically increase product counts at designated locations."
             action={
-              <button
-                onClick={handleOpenAddPurchase}
-                disabled={products.length === 0 || locations.length === 0}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-40 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-              >
-                <Plus size={16} />
-                Record First Purchase
-              </button>
+              hasPermission('purchases', 'add') ? (
+                <button
+                  onClick={handleOpenAddPurchase}
+                  disabled={products.length === 0 || locations.length === 0}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-40 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                >
+                  <Plus size={16} />
+                  Record First Purchase
+                </button>
+              ) : undefined
             }
           />
         ) : (
@@ -1797,13 +1966,15 @@ export default function AdminInventory() {
                           {tx.notes || '—'}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button
-                            onClick={() => setDeleteTxTarget(tx)}
-                            title="Delete and reverse stock"
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {hasPermission('purchases', 'delete') && (
+                            <button
+                              onClick={() => setDeleteTxTarget(tx)}
+                              title="Delete and reverse stock"
+                              className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     )
@@ -1817,16 +1988,25 @@ export default function AdminInventory() {
         filteredMovements.length === 0 ? (
           <EmptyState
             title="No stock movements recorded"
-            description="Stock movements include location transfers, idol weight repairs, destructive melts, and manual stock audits."
+            description={
+              movementTypeFilter !== 'All'
+                ? `No ${movementTypeFilter} records found under the current filters.`
+                : 'Stock movements track transfers between stores, physical count audits, idol weight repairs, and scrap melts.'
+            }
             action={
-              <button
-                onClick={() => handleOpenMovement('transfer')}
-                disabled={products.length === 0 || locations.length < 2}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-40 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-              >
-                <ArrowRightLeft size={16} />
-                Record Transfer
-              </button>
+              (hasPermission('movements', 'transfer') ||
+                hasPermission('movements', 'adjustment') ||
+                hasPermission('movements', 'repair') ||
+                hasPermission('movements', 'melt')) ? (
+                <button
+                  onClick={() => handleOpenMovement('transfer')}
+                  disabled={products.length === 0 || locations.length === 0}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-40 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                >
+                  <Plus size={16} />
+                  Record Movement
+                </button>
+              ) : undefined
             }
           />
         ) : (
@@ -1839,7 +2019,7 @@ export default function AdminInventory() {
                     <th className="px-6 py-3.5">Type</th>
                     <th className="px-6 py-3.5">Product</th>
                     <th className="px-6 py-3.5">Metal</th>
-                    <th className="px-6 py-3.5">Location / Flow</th>
+                    <th className="px-6 py-3.5">Location / Route</th>
                     <th className="px-6 py-3.5 text-right">Qty / Effect</th>
                     <th className="px-6 py-3.5">Details</th>
                     <th className="px-6 py-3.5">Notes</th>
@@ -1848,19 +2028,13 @@ export default function AdminInventory() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredMovements.map((tx) => {
-                    let typeBadgeClass = 'bg-gray-100 text-gray-800'
-                    if (tx.type === 'transfer') typeBadgeClass = 'bg-amber-50 text-amber-900 border border-amber-200'
-                    if (tx.type === 'repair') typeBadgeClass = 'bg-blue-50 text-blue-900 border border-blue-200'
-                    if (tx.type === 'melt') typeBadgeClass = 'bg-red-50 text-red-900 border border-red-200'
-                    if (tx.type === 'adjustment') typeBadgeClass = 'bg-purple-50 text-purple-900 border border-purple-200'
-
                     return (
                       <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
                         <td className="px-6 py-4 text-xs font-mono text-gray-500">
                           {tx.date}
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`inline-flex px-2.5 py-0.5 rounded text-xs font-semibold capitalize ${typeBadgeClass}`}>
+                          <span className="inline-flex px-2.5 py-0.5 rounded-lg text-xs font-medium border border-gray-200 bg-gray-50 text-gray-800 capitalize">
                             {tx.type}
                           </span>
                         </td>
@@ -1874,44 +2048,74 @@ export default function AdminInventory() {
                         </td>
                         <td className="px-6 py-4 text-xs text-gray-700">
                           {tx.type === 'transfer' ? (
-                            <span className="flex items-center gap-1.5">
-                              <span>{tx.locationName}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-gray-600">{tx.locationName}</span>
                               <span className="text-gray-400">→</span>
                               <strong className="text-black">{tx.toLocationName}</strong>
-                            </span>
+                            </div>
                           ) : (
-                            tx.locationName
+                            <span className="font-medium text-black">{tx.locationName}</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-right tabular-nums font-semibold">
-                          {tx.type === 'transfer' && `±${tx.quantity}`}
-                          {tx.type === 'adjustment' && (tx.quantity > 0 ? `+${tx.quantity}` : tx.quantity)}
-                          {tx.type === 'melt' && `−${tx.quantity}`}
+                        <td className="px-6 py-4 text-right tabular-nums">
+                          {tx.type === 'transfer' && (
+                            <div>
+                              <span className="font-semibold text-black">{tx.quantity} unit{tx.quantity === 1 ? '' : 's'}</span>
+                              <span className="text-[11px] text-gray-400 block font-normal">transferred</span>
+                            </div>
+                          )}
+                          {tx.type === 'adjustment' && (
+                            <div>
+                              <span className={`font-semibold ${tx.quantity > 0 ? 'text-black' : 'text-gray-800'}`}>
+                                {tx.quantity > 0 ? `+${tx.quantity}` : tx.quantity} unit{Math.abs(tx.quantity) === 1 ? '' : 's'}
+                              </span>
+                              <span className={`text-[11px] block font-normal ${tx.quantity > 0 ? 'text-gray-500' : 'text-gray-400'}`}>
+                                {tx.quantity > 0 ? 'surplus audit' : 'deficit audit'}
+                              </span>
+                            </div>
+                          )}
+                          {tx.type === 'melt' && (
+                            <div>
+                              <span className="font-semibold text-black">−{tx.quantity} unit{tx.quantity === 1 ? '' : 's'}</span>
+                              <span className="text-[11px] text-gray-400 block font-normal">melted</span>
+                            </div>
+                          )}
                           {tx.type === 'repair' && (
-                            <span className="text-xs font-normal text-gray-500">Weight updated</span>
+                            <div>
+                              <span className="font-semibold text-black">{tx.newWeight}g</span>
+                              <span className="text-[11px] text-gray-400 block font-normal">was {tx.previousWeight}g</span>
+                            </div>
                           )}
                         </td>
                         <td className="px-6 py-4 text-xs text-gray-600">
                           {tx.type === 'repair' && (
-                            <span>
-                              {tx.previousWeight}g → <strong>{tx.newWeight}g</strong> ({tx.weightChange && tx.weightChange > 0 ? `+${tx.weightChange}` : tx.weightChange}g)
-                              {tx.price ? ` · ₹${tx.price.toLocaleString('en-IN')}` : ''}
-                            </span>
+                            <div className="space-y-0.5">
+                              <div>
+                                {tx.weightChange !== undefined && (
+                                  <span className="font-medium text-black">
+                                    {tx.weightChange > 0 ? `+${tx.weightChange}` : tx.weightChange}g change
+                                  </span>
+                                )}
+                              </div>
+                              {tx.price ? <div className="text-gray-500">Labor: ₹{tx.price.toLocaleString('en-IN')}</div> : null}
+                            </div>
                           )}
                           {tx.type === 'melt' && tx.recoveredWeight && (
-                            <span>Recovered: {tx.recoveredWeight}g pure metal</span>
+                            <span className="text-gray-700">
+                              Recovered: <strong className="text-black">{tx.recoveredWeight}g</strong> pure
+                            </span>
                           )}
-                          {tx.type !== 'repair' && tx.type !== 'melt' && '—'}
+                          {tx.type !== 'repair' && tx.type !== 'melt' && <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate">
                           {tx.notes || '—'}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {!archivedSession && (
+                          {!archivedSession && hasPermission('movements', 'delete') && (
                             <button
                               onClick={() => setDeleteTxTarget(tx)}
                               title="Delete and reverse stock"
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                              className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                             >
                               <Trash2 size={15} />
                             </button>
@@ -1947,12 +2151,12 @@ export default function AdminInventory() {
         onClose={() => setDeleteTxTarget(null)}
       />
 
-      {/* Zero Balance Modal (Export Archive & Clear Cloud History) */}
+      {/* Single Master Zero Balance Modal (Export Archive & Clear All History) */}
       <ConfirmModal
         isOpen={isZeroBalanceModalOpen}
-        title="Export Archive & Zero Balance History"
-        description="Sensitive transaction history should not reside permanently online. This will automatically compile and download your entire transaction records into a secure offline JSON archive file on your computer, and then permanently delete them from the cloud database. Live product stock quantities and location balances will NOT change."
-        confirmText={zeroBalanceSubmitting ? "Exporting & Erasing..." : "Download Archive & Zero Balance"}
+        title="Zero Balance All History"
+        description="Exports an offline JSON archive of all transactions (sales, purchases, movements) and clears cloud history. Current product stocks remain unchanged."
+        confirmText={zeroBalanceSubmitting ? "Exporting & Erasing..." : "Export & Zero Balance"}
         onConfirm={handleZeroBalance}
         onClose={() => setIsZeroBalanceModalOpen(false)}
       />

@@ -7,9 +7,12 @@ const db = getFirestore(app)
 import { PortfolioCompany } from '@/lib/types'
 import { Trash2, Plus, Briefcase, Edit2 } from 'lucide-react'
 import { ConfirmModal } from '@/components/confirm-modal'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { EASE_OUT } from '@/components/motion-transitions'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { usePermissions } from '@/lib/context/PermissionsContext'
 
 const portfolioSchema = z.object({
   id: z.string().min(1, 'URL Key (ID) is required').regex(/^[a-z0-9-]+$/, 'Only lowercase letters, numbers, and hyphens'),
@@ -22,6 +25,7 @@ const portfolioSchema = z.object({
 type PortfolioValues = z.infer<typeof portfolioSchema>
 
 export default function AdminPortfolio() {
+  const { hasPermission } = usePermissions()
   const [companies, setCompanies] = useState<(PortfolioCompany & { id: string })[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -127,109 +131,115 @@ export default function AdminPortfolio() {
     }
   }
 
+  const shouldReduceMotion = useReducedMotion()
+
   return (
     <div>
-      {!isFormOpen && (
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
-              <Briefcase size={28} />
-              Portfolio Manager
-            </h1>
-            <p className="text-gray-500">Manage your portfolio companies and case studies.</p>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Portfolio Manager</h1>
+          <p className="text-gray-500 text-sm">Manage your portfolio companies and case studies.</p>
+        </div>
+        {!isFormOpen && hasPermission('portfolio', 'add') && (
           <button 
             onClick={handleAddNew}
-            className="admin-btn-primary flex items-center gap-2"
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97]"
           >
-            <Plus size={18} className="transition-transform" />
+            <Plus size={14} />
             Add Company
           </button>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {isFormOpen && (
+          <motion.div
+            initial={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.97) translateY(8px)" }}
+            animate={{ opacity: 1, transform: shouldReduceMotion ? "none" : "scale(1) translateY(0px)" }}
+            exit={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.97) translateY(8px)" }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
+            className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8"
+          >
+            <h2 className="text-xl font-semibold mb-6">{editingId ? 'Edit Company' : 'Add New Company'}</h2>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="admin-label required">Company Name</label>
+                  <input 
+                    type="text" 
+                    {...register('name')}
+                    className={`admin-input ${errors.name ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                    placeholder="e.g., Milemax"
+                  />
+                  {errors.name && <p className="text-gray-500 font-medium text-sm mt-1">{errors.name.message}</p>}
+                </div>
+                <div>
+                  <label className="admin-label required">URL Key (ID)</label>
+                  <input 
+                    type="text" 
+                    {...register('id', {
+                      onChange: (e) => {
+                        e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+                        setValue('id', e.target.value)
+                      }
+                    })}
+                    disabled={!!editingId}
+                    className={`admin-input disabled:bg-gray-100 ${errors.id ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                    placeholder="e.g. milemax"
+                  />
+                  {errors.id && <p className="text-gray-500 font-medium text-sm mt-1">{errors.id.message}</p>}
+                </div>
+                <div>
+                  <label className="admin-label required">Stage</label>
+                  <input 
+                    type="text" 
+                    {...register('stage')}
+                    className={`admin-input ${errors.stage ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                    placeholder="e.g., Seed, Series A"
+                  />
+                  {errors.stage && <p className="text-gray-500 font-medium text-sm mt-1">{errors.stage.message}</p>}
+                </div>
+                <div>
+                  <label className="admin-label required">Sector</label>
+                  <input 
+                    type="text" 
+                    {...register('sector')}
+                    className={`admin-input ${errors.sector ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                    placeholder="e.g., Logistics, Fintech"
+                  />
+                  {errors.sector && <p className="text-gray-500 font-medium text-sm mt-1">{errors.sector.message}</p>}
+                </div>
+              </div>
+              
+              <div>
+                <label className="admin-label required">Description</label>
+                <textarea 
+                  rows={3}
+                  {...register('description')}
+                  className={`admin-input resize-none ${errors.description ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                  placeholder="Overview of the company, challenge, and solution..."
+                />
+                {errors.description && <p className="text-gray-500 font-medium text-sm mt-1">{errors.description.message}</p>}
+              </div>
+
+              <div className="flex justify-end gap-4 mt-12">
+                <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isSubmitting} className="admin-btn-primary disabled:opacity-50">
+                  {isSubmitting ? 'Saving...' : (editingId ? 'Update Company' : 'Save Company')}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
         </div>
-      )}
-
-      {isFormOpen && (
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
-          <h2 className="text-xl font-semibold mb-6">{editingId ? 'Edit Company' : 'Add New Company'}</h2>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="admin-label required">Company Name</label>
-                <input 
-                  type="text"
-                  {...register('name')}
-                  className={`admin-input ${errors.name ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                  placeholder="e.g., Milemax"
-                />
-                {errors.name && <p className="text-gray-500 font-medium text-sm mt-1">{errors.name.message}</p>}
-              </div>
-              <div>
-                <label className="admin-label required">URL Key (ID)</label>
-                <input 
-                  type="text"
-                  {...register('id', {
-                    onChange: (e) => {
-                      e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-                      setValue('id', e.target.value)
-                    }
-                  })}
-                  disabled={!!editingId}
-                  className={`admin-input disabled:bg-gray-100 ${errors.id ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                  placeholder="e.g. milemax"
-                />
-                {errors.id && <p className="text-gray-500 font-medium text-sm mt-1">{errors.id.message}</p>}
-              </div>
-              <div>
-                <label className="admin-label required">Stage</label>
-                <input 
-                  type="text"
-                  {...register('stage')}
-                  className={`admin-input ${errors.stage ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                  placeholder="e.g., Seed, Series A"
-                />
-                {errors.stage && <p className="text-gray-500 font-medium text-sm mt-1">{errors.stage.message}</p>}
-              </div>
-              <div>
-                <label className="admin-label required">Sector</label>
-                <input 
-                  type="text"
-                  {...register('sector')}
-                  className={`admin-input ${errors.sector ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                  placeholder="e.g., Logistics, Fintech"
-                />
-                {errors.sector && <p className="text-gray-500 font-medium text-sm mt-1">{errors.sector.message}</p>}
-              </div>
-            </div>
-            
-            <div>
-              <label className="admin-label required">Description</label>
-              <textarea 
-                rows={3}
-                {...register('description')}
-                className={`admin-input resize-none ${errors.description ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                placeholder="Overview of the company, challenge, and solution..."
-              />
-              {errors.description && <p className="text-gray-500 font-medium text-sm mt-1">{errors.description.message}</p>}
-            </div>
-
-            <div className="flex justify-end gap-4 mt-12">
-              <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
-                Cancel
-              </button>
-              <button type="submit" disabled={isSubmitting} className="admin-btn-primary disabled:opacity-50">
-                {isSubmitting ? 'Saving...' : (editingId ? 'Update Company' : 'Save Company')}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {!isFormOpen && (
-        loading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
-          </div>
-        ) : (
+      ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[800px]">
@@ -252,20 +262,24 @@ export default function AdminPortfolio() {
                     </td>
                     <td className="px-6 py-4 text-gray-500 text-sm">{company.sector}</td>
                     <td className="px-6 py-4 text-right space-x-2">
-                      <button 
-                        onClick={() => handleEdit(company)}
-                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
-                        title="Edit"
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                      <button 
-                        onClick={() => confirmDelete(company.id)}
-                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
-                        title="Delete"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      {hasPermission('portfolio', 'edit') && (
+                        <button 
+                          onClick={() => handleEdit(company)}
+                          className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
+                          title="Edit"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                      )}
+                      {hasPermission('portfolio', 'delete') && (
+                        <button 
+                          onClick={() => confirmDelete(company.id)}
+                          className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -280,7 +294,6 @@ export default function AdminPortfolio() {
             </table>
           </div>
         </div>
-        )
       )}
 
       <ConfirmModal

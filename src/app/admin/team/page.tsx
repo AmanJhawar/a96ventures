@@ -10,9 +10,12 @@ import { getOptimizedUrl } from '@/lib/utils'
 import { Trash2, Plus, Users, Edit2 } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 import { ConfirmModal } from '@/components/confirm-modal'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { EASE_OUT } from '@/components/motion-transitions'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { usePermissions } from '@/lib/context/PermissionsContext'
 
 const teamSchema = z.object({
   name: z.string().min(1, 'Full name is required'),
@@ -26,6 +29,7 @@ const teamSchema = z.object({
 type TeamValues = z.infer<typeof teamSchema>
 
 export default function AdminTeam() {
+  const { hasPermission } = usePermissions()
   const [team, setTeam] = useState<(TeamMember & { id: string })[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -127,121 +131,127 @@ export default function AdminTeam() {
     }
   }
 
+  const shouldReduceMotion = useReducedMotion()
+
   return (
     <div>
-      {!isFormOpen && (
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
-              <Users size={28} />
-              Team Manager
-            </h1>
-            <p className="text-gray-500">Add, edit or remove team members from the public site.</p>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Team Manager</h1>
+          <p className="text-gray-500 text-sm">Add, edit or remove team members from the public site.</p>
+        </div>
+        {!isFormOpen && hasPermission('team', 'add') && (
           <button 
             onClick={handleAddNew}
-            className="admin-btn-primary flex items-center gap-2"
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97]"
           >
-            <Plus size={18} className="transition-transform" />
+            <Plus size={14} />
             Add Member
           </button>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {isFormOpen && (
+          <motion.div
+            initial={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.97) translateY(8px)" }}
+            animate={{ opacity: 1, transform: shouldReduceMotion ? "none" : "scale(1) translateY(0px)" }}
+            exit={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.97) translateY(8px)" }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
+            className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8"
+          >
+            <h2 className="text-xl font-semibold mb-6">{editingId ? 'Edit Team Member' : 'Add New Member'}</h2>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="admin-label required">Full Name</label>
+                  <input 
+                    type="text" 
+                    {...register('name')}
+                    className={`admin-input ${errors.name ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                    placeholder="e.g., Jane Doe"
+                  />
+                  {errors.name && <p className="text-gray-500 font-medium text-sm mt-1">{errors.name.message}</p>}
+                </div>
+                <div>
+                  <label className="admin-label required">Role</label>
+                  <input 
+                    type="text" 
+                    {...register('role')}
+                    className={`admin-input ${errors.role ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                    placeholder="e.g., Chief Executive Officer"
+                  />
+                  {errors.role && <p className="text-gray-500 font-medium text-sm mt-1">{errors.role.message}</p>}
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="admin-label required">Profile Image</label>
+                  <Controller 
+                    name="imageFile"
+                    control={control}
+                    render={({ field }) => (
+                      <ImageDropzone 
+                        value={field.value} 
+                        onChange={field.onChange} 
+                      />
+                    )}
+                  />
+                  {errors.imageFile && <p className="text-gray-500 font-medium text-sm mt-1">{errors.imageFile.message}</p>}
+                </div>
+                <div>
+                  <label className="admin-label">LinkedIn URL (Optional)</label>
+                  <input 
+                    type="url" 
+                    {...register('linkedin')}
+                    className={`admin-input ${errors.linkedin ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                    placeholder="https://linkedin.com/in/username"
+                  />
+                  {errors.linkedin && <p className="text-gray-500 font-medium text-sm mt-1">{errors.linkedin.message}</p>}
+                </div>
+              </div>
+
+              <div>
+                <label className="admin-label required">Expertise (comma separated)</label>
+                <input 
+                  type="text" 
+                  {...register('expertise')}
+                  className={`admin-input ${errors.expertise ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                  placeholder="e.g., Sales Strategy, Design"
+                />
+                {errors.expertise && <p className="text-gray-500 font-medium text-sm mt-1">{errors.expertise.message}</p>}
+              </div>
+
+              <div>
+                <label className="admin-label required">Bio</label>
+                <textarea 
+                  rows={3}
+                  {...register('bio')}
+                  className={`admin-input resize-none ${errors.bio ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                  placeholder="Short biography highlighting achievements and experience..."
+                />
+                {errors.bio && <p className="text-gray-500 font-medium text-sm mt-1">{errors.bio.message}</p>}
+              </div>
+
+              <div className="flex justify-end gap-4 mt-12">
+                <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isSubmitting} className="admin-btn-primary disabled:opacity-50">
+                  {isSubmitting ? 'Saving...' : (editingId ? 'Update Member' : 'Save Member')}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
         </div>
-      )}
-
-      {isFormOpen && (
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
-          <h2 className="text-xl font-semibold mb-6">{editingId ? 'Edit Team Member' : 'Add New Member'}</h2>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="admin-label required">Full Name</label>
-                <input 
-                  type="text"
-                  {...register('name')}
-                  className={`admin-input ${errors.name ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                  placeholder="e.g., Jane Doe"
-                />
-                {errors.name && <p className="text-gray-500 font-medium text-sm mt-1">{errors.name.message}</p>}
-              </div>
-              <div>
-                <label className="admin-label required">Role</label>
-                <input 
-                  type="text"
-                  {...register('role')}
-                  className={`admin-input ${errors.role ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                  placeholder="e.g., Chief Executive Officer"
-                />
-                {errors.role && <p className="text-gray-500 font-medium text-sm mt-1">{errors.role.message}</p>}
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="admin-label required">Profile Image</label>
-                <Controller
-                  name="imageFile"
-                  control={control}
-                  render={({ field }) => (
-                    <ImageDropzone 
-                      value={field.value} 
-                      onChange={field.onChange} 
-                    />
-                  )}
-                />
-                {errors.imageFile && <p className="text-gray-500 font-medium text-sm mt-1">{errors.imageFile.message}</p>}
-              </div>
-              <div>
-                <label className="admin-label">LinkedIn URL (Optional)</label>
-                <input 
-                  type="url" 
-                  {...register('linkedin')}
-                  className={`admin-input ${errors.linkedin ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                  placeholder="https://linkedin.com/in/username"
-                />
-                {errors.linkedin && <p className="text-gray-500 font-medium text-sm mt-1">{errors.linkedin.message}</p>}
-              </div>
-            </div>
-
-            <div>
-              <label className="admin-label required">Expertise (comma separated)</label>
-              <input 
-                type="text"
-                {...register('expertise')}
-                className={`admin-input ${errors.expertise ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                placeholder="e.g., Sales Strategy, Design"
-              />
-              {errors.expertise && <p className="text-gray-500 font-medium text-sm mt-1">{errors.expertise.message}</p>}
-            </div>
-
-            <div>
-              <label className="admin-label required">Bio</label>
-              <textarea 
-                rows={3}
-                {...register('bio')}
-                className={`admin-input resize-none ${errors.bio ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                placeholder="Short biography highlighting achievements and experience..."
-              />
-              {errors.bio && <p className="text-gray-500 font-medium text-sm mt-1">{errors.bio.message}</p>}
-            </div>
-
-            <div className="flex justify-end gap-4 mt-12">
-              <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
-                Cancel
-              </button>
-              <button type="submit" disabled={isSubmitting} className="admin-btn-primary disabled:opacity-50">
-                {isSubmitting ? 'Saving...' : (editingId ? 'Update Member' : 'Save Member')}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {!isFormOpen && (
-        loading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
-          </div>
-        ) : (
+      ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[600px]">
@@ -270,20 +280,24 @@ export default function AdminTeam() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
-                      <button 
-                        onClick={() => handleEdit(member)}
-                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
-                        title="Edit"
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                      <button 
-                        onClick={() => confirmDelete(member.id)}
-                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
-                        title="Delete"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      {hasPermission('team', 'edit') && (
+                        <button 
+                          onClick={() => handleEdit(member)}
+                          className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
+                          title="Edit"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                      )}
+                      {hasPermission('team', 'delete') && (
+                        <button 
+                          onClick={() => confirmDelete(member.id)}
+                          className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -298,7 +312,6 @@ export default function AdminTeam() {
             </table>
           </div>
         </div>
-        )
       )}
 
       <ConfirmModal

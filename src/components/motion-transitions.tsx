@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { motion, HTMLMotionProps } from 'framer-motion'
+import { motion, HTMLMotionProps, useReducedMotion } from 'framer-motion'
 
 // Custom Emil Kowalski easing curves
 export const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1] // Strong ease-out
@@ -54,16 +54,18 @@ export function FadeInUp({
   duration = 0.4,
   ...props 
 }: FadeInUpProps) {
+  const shouldReduceMotion = useReducedMotion()
+
   const variants = {
     hidden: { 
       opacity: 0, 
-      transform: `translateY(${yOffset}px)`
+      transform: shouldReduceMotion ? 'none' : `translateY(${yOffset}px)`
     },
     visible: { 
       opacity: 1, 
-      transform: 'translateY(0px)',
+      transform: shouldReduceMotion ? 'none' : 'translateY(0px)',
       transition: { 
-        duration, 
+        duration: shouldReduceMotion ? 0.15 : duration, 
         ease: EASE_OUT 
       }
     }

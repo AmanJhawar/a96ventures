@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 export interface CustomDatePickerProps {
@@ -34,7 +34,17 @@ export function CustomDatePicker({
   disabled = false
 }: CustomDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const closePicker = useCallback(() => {
+    if (!isOpen || isClosing) return
+    setIsClosing(true)
+    setTimeout(() => {
+      setIsOpen(false)
+      setIsClosing(false)
+    }, 120)
+  }, [isOpen, isClosing])
 
   // Current viewed month & year
   const initialDate = useMemo(() => {
@@ -61,12 +71,14 @@ export function CustomDatePicker({
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false)
+        if (isOpen) {
+          closePicker()
+        }
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [isOpen, closePicker])
 
   // Month navigation
   const prevMonth = () => {
@@ -213,7 +225,15 @@ export function CustomDatePicker({
       </button>
 
       {isOpen && (
-        <div className="absolute z-40 mt-1.5 p-3.5 bg-white border border-gray-200 rounded-xl shadow-[0_12px_32px_rgba(0,0,0,0.08)] w-[280px] animate-[fadeInUp_160ms_var(--ease-out)_forwards] origin-top select-none">
+        <div
+          className="absolute z-40 mt-1.5 p-3.5 bg-white border border-gray-200 rounded-xl shadow-[0_12px_32px_rgba(0,0,0,0.08)] w-[280px] origin-top select-none"
+          style={{
+            opacity: isClosing ? 0 : 1,
+            transform: isClosing ? 'scale(0.97) translateY(-4px)' : 'scale(1) translateY(0)',
+            transition: 'opacity 120ms var(--ease-out), transform 120ms var(--ease-out)',
+            animation: isClosing ? 'none' : 'fadeInUp 160ms var(--ease-out) forwards',
+          }}
+        >
           {/* Calendar Header */}
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-semibold text-black tracking-tight">

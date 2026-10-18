@@ -8,9 +8,12 @@ import { Brand } from '@/lib/types'
 import { Trash2, Plus, Bookmark, Edit2 } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 import { ConfirmModal } from '@/components/confirm-modal'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { EASE_OUT } from '@/components/motion-transitions'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { usePermissions } from '@/lib/context/PermissionsContext'
 
 const db = getFirestore(app)
 
@@ -24,6 +27,7 @@ const brandSchema = z.object({
 type BrandValues = z.infer<typeof brandSchema>
 
 export default function AdminBrands() {
+  const { hasPermission } = usePermissions()
   const [brands, setBrands] = useState<Brand[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -114,98 +118,104 @@ export default function AdminBrands() {
     setIsFormOpen(true)
   }
 
+  const shouldReduceMotion = useReducedMotion()
+
   return (
     <div>
-      {!isFormOpen && (
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
-              <Bookmark size={28} />
-              Brands Manager
-            </h1>
-            <p className="text-gray-500">Add or remove portfolio brands.</p>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Brands Manager</h1>
+          <p className="text-gray-500 text-sm">Add or remove portfolio brands.</p>
+        </div>
+        {!isFormOpen && hasPermission('brands', 'add') && (
           <button 
             onClick={handleAddNew}
-            className="admin-btn-primary flex items-center gap-2"
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97]"
           >
-            <Plus size={18} className="transition-transform" />
+            <Plus size={14} />
             Add Brand
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {isFormOpen && (
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8 animate-[fadeInUp_300ms_var(--ease-out)_forwards]">
-          <h2 className="text-xl font-semibold mb-6">{editingId ? 'Edit Brand' : 'Add New Brand'}</h2>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="admin-label required">Name</label>
-                <input 
-                  type="text"
-                  {...register('name')}
-                  className={`admin-input ${errors.name ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                  placeholder="e.g., Acme Corp"
-                />
-                {errors.name && <p className="text-gray-500 font-medium text-sm mt-1">{errors.name.message}</p>}
-              </div>
-              <div>
-                <label className="admin-label required">Sector</label>
-                <input 
-                  type="text"
-                  {...register('sector')}
-                  className={`admin-input ${errors.sector ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                  placeholder="e.g., Technology"
-                />
-                {errors.sector && <p className="text-gray-500 font-medium text-sm mt-1">{errors.sector.message}</p>}
-              </div>
-            </div>
-            
-            <div>
-              <label className="admin-label required">Brand Logo</label>
-              <Controller
-                name="logoFile"
-                control={control}
-                render={({ field }) => (
-                  <ImageDropzone 
-                    value={field.value} 
-                    onChange={field.onChange} 
+      <AnimatePresence>
+        {isFormOpen && (
+          <motion.div
+            initial={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.97) translateY(8px)" }}
+            animate={{ opacity: 1, transform: shouldReduceMotion ? "none" : "scale(1) translateY(0px)" }}
+            exit={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.97) translateY(8px)" }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
+            className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mb-8"
+          >
+            <h2 className="text-xl font-semibold mb-6">{editingId ? 'Edit Brand' : 'Add New Brand'}</h2>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="admin-label required">Name</label>
+                  <input 
+                    type="text" 
+                    {...register('name')}
+                    className={`admin-input ${errors.name ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                    placeholder="e.g., Acme Corp"
                   />
-                )}
-              />
-              {errors.logoFile && <p className="text-gray-500 font-medium text-sm mt-1">{errors.logoFile.message}</p>}
-            </div>
+                  {errors.name && <p className="text-gray-500 font-medium text-sm mt-1">{errors.name.message}</p>}
+                </div>
+                <div>
+                  <label className="admin-label required">Sector</label>
+                  <input 
+                    type="text" 
+                    {...register('sector')}
+                    className={`admin-input ${errors.sector ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                    placeholder="e.g., Technology"
+                  />
+                  {errors.sector && <p className="text-gray-500 font-medium text-sm mt-1">{errors.sector.message}</p>}
+                </div>
+              </div>
+              
+              <div>
+                <label className="admin-label required">Brand Logo</label>
+                <Controller 
+                  name="logoFile"
+                  control={control}
+                  render={({ field }) => (
+                    <ImageDropzone 
+                      value={field.value} 
+                      onChange={field.onChange} 
+                    />
+                  )}
+                />
+                {errors.logoFile && <p className="text-gray-500 font-medium text-sm mt-1">{errors.logoFile.message}</p>}
+              </div>
 
-            <div>
-              <label className="admin-label required">Description</label>
-              <textarea 
-                rows={3}
-                {...register('description')}
-                className={`admin-input resize-none ${errors.description ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
-                placeholder="Enter brand background and portfolio details..."
-              />
-              {errors.description && <p className="text-gray-500 font-medium text-sm mt-1">{errors.description.message}</p>}
-            </div>
+              <div>
+                <label className="admin-label required">Description</label>
+                <textarea 
+                  rows={3}
+                  {...register('description')}
+                  className={`admin-input resize-none ${errors.description ? 'border-gray-900 focus:border-gray-900 focus:ring-black/10' : ''}`}
+                  placeholder="Enter brand background and portfolio details..."
+                />
+                {errors.description && <p className="text-gray-500 font-medium text-sm mt-1">{errors.description.message}</p>}
+              </div>
 
-            <div className="flex justify-end gap-4 mt-12">
-              <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
-                Cancel
-              </button>
-              <button type="submit" disabled={isSubmitting} className="admin-btn-primary disabled:opacity-50">
-                {isSubmitting ? 'Saving...' : (editingId ? 'Update Brand' : 'Save Brand')}
-              </button>
-            </div>
-          </form>
+              <div className="flex justify-end gap-4 mt-12">
+                <button type="button" onClick={handleCancel} className="admin-btn-outline px-6">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isSubmitting} className="admin-btn-primary disabled:opacity-50">
+                  {isSubmitting ? 'Saving...' : (editingId ? 'Update Brand' : 'Save Brand')}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
         </div>
-      )}
-
-      {!isFormOpen && (
-        loading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
-          </div>
-        ) : (
+      ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[600px]">
@@ -234,20 +244,24 @@ export default function AdminBrands() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
-                      <button 
-                        onClick={() => handleEdit(brand)}
-                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
-                        title="Edit"
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                      <button 
-                        onClick={() => confirmDelete(brand.id)}
-                        className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
-                        title="Delete"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      {hasPermission('brands', 'edit') && (
+                        <button 
+                          onClick={() => handleEdit(brand)}
+                          className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
+                          title="Edit"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                      )}
+                      {hasPermission('brands', 'delete') && (
+                        <button 
+                          onClick={() => confirmDelete(brand.id)}
+                          className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -262,7 +276,6 @@ export default function AdminBrands() {
             </table>
           </div>
         </div>
-        )
       )}
       
       <ConfirmModal

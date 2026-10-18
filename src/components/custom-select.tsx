@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 
 export interface SelectOption {
@@ -36,32 +36,39 @@ export default function CustomSelect({
   disabled = false
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const selectRef = useRef<HTMLDivElement>(null)
 
   const selectedOption = options.find((opt) => opt.value === value)
 
+  const closeSelect = useCallback(() => {
+    if (!isOpen || isClosing) return
+    setIsClosing(true)
+    setTimeout(() => {
+      setIsOpen(false)
+      setIsClosing(false)
+      setFocusedIndex(-1)
+    }, 120)
+  }, [isOpen, isClosing])
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (selectRef.current && !selectRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-        setFocusedIndex(-1)
+        if (isOpen) {
+          closeSelect()
+        }
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [isOpen, closeSelect])
 
   const openSelect = () => {
     if (disabled) return
     setIsOpen(true)
     const idx = options.findIndex((opt) => opt.value === value)
     setFocusedIndex(idx >= 0 ? idx : 0)
-  }
-
-  const closeSelect = () => {
-    setIsOpen(false)
-    setFocusedIndex(-1)
   }
 
   const handleSelect = (optionValue: string) => {
@@ -135,7 +142,15 @@ export default function CustomSelect({
       </button>
 
       {isOpen && (
-        <div className="absolute z-30 w-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.08)] overflow-hidden animate-[fadeInUp_160ms_var(--ease-out)_forwards] origin-top">
+        <div
+          className="absolute z-30 w-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.08)] overflow-hidden origin-top"
+          style={{
+            opacity: isClosing ? 0 : 1,
+            transform: isClosing ? 'scale(0.97) translateY(-4px)' : 'scale(1) translateY(0)',
+            transition: 'opacity 120ms var(--ease-out), transform 120ms var(--ease-out)',
+            animation: isClosing ? 'none' : 'fadeInUp 160ms var(--ease-out) forwards',
+          }}
+        >
           <ul
             id={id ? `${id}-listbox` : undefined}
             role="listbox"

@@ -12,8 +12,9 @@ import {
   query,
   orderBy
 } from 'firebase/firestore/lite';
-import { Location, Product, Transaction, TransactionType, ProductCategory, MetalType } from '@/lib/types';
+import { Location, Product, Transaction, TransactionType, ProductCategory, MetalType, AuditActionType, AuditLogEntry } from '@/lib/types';
 import { withTimeout } from './utils';
+import { recordAuditLog } from './audit.service';
 
 const db = getFirestore(app);
 
@@ -172,6 +173,14 @@ export async function addProduct(data: {
     });
   }
 
+  await recordAuditLog({
+    action: 'create',
+    entityType: 'product',
+    entityId: docRef.id,
+    entityName: data.name.trim(),
+    description: `Added product "${data.name.trim()}" (${data.metal} · ${data.category} · ${weight}g · SKU: ${data.sku.trim().toUpperCase()}) with ${totalStock} opening units`
+  });
+
   return docRef.id;
 }
 
@@ -204,10 +213,28 @@ export async function updateProduct(id: string, data: {
     purity: data.purity.trim(),
     updatedAt: serverTimestamp(),
   }, { merge: true });
+
+  await recordAuditLog({
+    action: 'update',
+    entityType: 'product',
+    entityId: id,
+    entityName: data.name.trim(),
+    description: `Updated product "${data.name.trim()}" (${data.sku.trim().toUpperCase()} · ${weight}g · ${data.purity.trim()})`
+  });
 }
 
 export async function deleteProduct(id: string): Promise<void> {
+  const pSnap = await getDoc(doc(db, 'products', id));
+  const pData = pSnap.exists() ? pSnap.data() : null;
   await deleteDoc(doc(db, 'products', id));
+
+  await recordAuditLog({
+    action: 'delete',
+    entityType: 'product',
+    entityId: id,
+    entityName: pData?.name || id,
+    description: `Deleted product "${pData?.name || id}" from catalog`
+  });
 }
 
 // ==========================================
@@ -392,6 +419,51 @@ export async function recordTransaction(params: RecordTransactionParams): Promis
 
   await setDoc(productRef, productUpdatePayload, { merge: true });
 
+  // 3. Record Audit Log
+  let auditAction: AuditActionType = 'create';
+  let auditEntity: AuditLogEntry['entityType'] = 'movement';
+  let desc = `Recorded ${params.type} for ${params.productName}`;
+
+  if (params.type === 'transfer') {
+    auditAction = 'transfer';
+    auditEntity = 'movement';
+    desc = `Transferred ${qty} unit${qty === 1 ? '' : 's'} of "${params.productName}" from ${params.locationName} to ${params.toLocationName || 'destination'}`;
+  } else if (params.type === 'adjustment') {
+    auditAction = 'adjustment';
+    auditEntity = 'movement';
+    desc = `Stock audit adjustment of ${qty > 0 ? '+' : ''}${qty} unit${Math.abs(qty) === 1 ? '' : 's'} for "${params.productName}" at ${params.locationName}`;
+  } else if (params.type === 'repair') {
+    auditAction = 'repair';
+    auditEntity = 'movement';
+    desc = `Repaired "${params.productName}" at ${params.locationName}: weight updated to ${params.newWeight}g`;
+  } else if (params.type === 'melt') {
+    auditAction = 'melt';
+    auditEntity = 'movement';
+    desc = `Melted ${qty} unit${qty === 1 ? '' : 's'} of "${params.productName}" at ${params.locationName} (Recovered: ${params.recoveredWeight || 0}g pure metal)`;
+  } else if (params.type === 'purchase') {
+    auditAction = 'create';
+    auditEntity = 'purchase';
+    desc = `Recorded purchase of ${qty} unit${qty === 1 ? '' : 's'} of "${params.productName}" at ${params.locationName}`;
+  } else if (params.type === 'sale') {
+    auditAction = 'create';
+    auditEntity = 'sale';
+    desc = `Recorded sale of ${qty} unit${qty === 1 ? '' : 's'} of "${params.productName}" at ${params.locationName}${params.customerName ? ` to ${params.customerName}` : ''}`;
+  } else if (params.type === 'return') {
+    auditAction = 'create';
+    auditEntity = 'return';
+    desc = `Restocked return of ${qty} unit${qty === 1 ? '' : 's'} of "${params.productName}" at ${params.locationName}`;
+  }
+
+  await recordAuditLog({
+    action: auditAction,
+    entityType: auditEntity,
+    entityId: txRef.id,
+    entityName: params.productName,
+    locationId: params.locationId,
+    locationName: params.locationName,
+    description: desc,
+  });
+
   return txRef.id;
 }
 
@@ -476,6 +548,16 @@ export async function deleteTransaction(tx: Transaction): Promise<void> {
 
   // Delete the transaction doc
   await deleteDoc(doc(db, 'transactions', tx.id));
+
+  await recordAuditLog({
+    action: 'reverse',
+    entityType: tx.type === 'purchase' ? 'purchase' : tx.type === 'sale' ? 'sale' : 'movement',
+    entityId: tx.id,
+    entityName: tx.productName,
+    locationId: tx.locationId,
+    locationName: tx.locationName,
+    description: `Reversed and deleted ${tx.type} record for "${tx.productName}" (${tx.quantity} unit${tx.quantity === 1 ? '' : 's'} at ${tx.locationName})`
+  });
 }
 
 /**
@@ -486,11 +568,20 @@ export async function clearTransactionHistory(): Promise<number> {
   const querySnapshot = await withTimeout(getDocs(collection(db, 'transactions')));
   if (querySnapshot.empty) return 0;
 
+  const count = querySnapshot.docs.length;
   const batchSize = 50;
   for (let i = 0; i < querySnapshot.docs.length; i += batchSize) {
     const chunk = querySnapshot.docs.slice(i, i + batchSize);
     await Promise.all(chunk.map((d) => deleteDoc(d.ref)));
   }
 
-  return querySnapshot.docs.length;
+  await recordAuditLog({
+    action: 'zero_balance',
+    entityType: 'archive',
+    entityId: 'master_zero_balance',
+    entityName: 'All Transaction History',
+    description: `Master Zero Balance executed: erased ${count} historical transaction records from cloud database`
+  });
+
+  return count;
 }

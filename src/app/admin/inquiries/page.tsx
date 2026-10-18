@@ -2,16 +2,25 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Trash2, MessageSquare, ChevronDown } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { getInquiriesPage, deleteInquiry, updateInquiryStatus } from '@/lib/services/inquiry.service'
 import { Inquiry } from '@/lib/types'
+import { EASE_OUT } from '@/components/motion-transitions'
+import { usePermissions } from '@/lib/context/PermissionsContext'
 
-const EASE_OUT = [0.16, 1, 0.3, 1] as const;
-
-function StatusDropdown({ status, onChange }: { status: Inquiry['status'], onChange: (newStatus: 'unread' | 'read' | 'handled') => void }) {
+function StatusDropdown({
+  status,
+  onChange,
+  disabled = false
+}: {
+  status: Inquiry['status'],
+  onChange: (newStatus: 'unread' | 'read' | 'handled') => void,
+  disabled?: boolean
+}) {
   const [isOpen, setIsOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const shouldReduceMotion = useReducedMotion()
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -31,6 +40,14 @@ function StatusDropdown({ status, onChange }: { status: Inquiry['status'], onCha
 
   const currentOption = options.find(o => o.value === (status || 'unread'))
 
+  if (disabled) {
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 capitalize border border-gray-200">
+        {currentOption?.label}
+      </span>
+    )
+  }
+
   return (
     <div className="relative inline-block text-left" ref={ref}>
       <button
@@ -44,9 +61,9 @@ function StatusDropdown({ status, onChange }: { status: Inquiry['status'], onCha
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -4 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            initial={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.95) translateY(-4px)" }}
+            animate={{ opacity: 1, transform: shouldReduceMotion ? "none" : "scale(1) translateY(0px)" }}
+            exit={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.95) translateY(-4px)" }}
             transition={{ duration: 0.15, ease: EASE_OUT }}
             className="absolute z-10 mt-1 w-full bg-white border border-gray-100 rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.06)] overflow-hidden origin-top"
           >
@@ -74,6 +91,7 @@ function StatusDropdown({ status, onChange }: { status: Inquiry['status'], onCha
 const ITEMS_PER_PAGE = 10;
 
 export default function AdminInquiries() {
+  const { hasPermission, operatorIdentity } = usePermissions()
   const [inquiries, setInquiries] = useState<Inquiry[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -118,8 +136,10 @@ export default function AdminInquiries() {
 
   const executeDelete = async () => {
     if (!deleteId) return
+    const inq = inquiries.find(i => i.id === deleteId)
+    const contactName = inq ? (inq.firstName ? `${inq.firstName} ${inq.lastName}` : inq.name || inq.email || inq.mobile) : deleteId
     try {
-      await deleteInquiry(deleteId)
+      await deleteInquiry(deleteId, operatorIdentity ? { id: operatorIdentity.id, email: operatorIdentity.email } : undefined, contactName)
       setInquiries(inquiries.filter(i => i.id !== deleteId))
     } catch (err) {
       console.error("Error deleting", err)
@@ -129,8 +149,10 @@ export default function AdminInquiries() {
   }
 
   const handleStatusChange = async (id: string, newStatus: 'unread' | 'read' | 'handled') => {
+    const inq = inquiries.find(i => i.id === id)
+    const contactName = inq ? (inq.firstName ? `${inq.firstName} ${inq.lastName}` : inq.name || inq.email || inq.mobile) : id
     try {
-      await updateInquiryStatus(id, newStatus)
+      await updateInquiryStatus(id, newStatus, operatorIdentity ? { id: operatorIdentity.id, email: operatorIdentity.email } : undefined, contactName)
       setInquiries(inquiries.map(i => i.id === id ? { ...i, status: newStatus } : i))
     } catch (err) {
       console.error("Error updating status", err)
@@ -152,13 +174,10 @@ export default function AdminInquiries() {
   return (
     <div>
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-black mb-2 tracking-tight flex items-center gap-3">
-            <MessageSquare size={28} />
-            Inquiries
-          </h1>
-          <p className="text-gray-500">View contact submissions from the public site.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Inquiries</h1>
+          <p className="text-gray-500 text-sm">View contact submissions from the public site.</p>
         </div>
       </div>
 
@@ -190,6 +209,7 @@ export default function AdminInquiries() {
                       <td className="px-6 py-4">
                         <StatusDropdown 
                           status={inquiry.status || 'unread'} 
+                          disabled={!hasPermission('inquiries', 'edit')}
                           onChange={(newStatus) => handleStatusChange(inquiry.id, newStatus)} 
                         />
                       </td>
@@ -216,13 +236,15 @@ export default function AdminInquiries() {
                         {inquiry.message}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button 
-                          onClick={() => confirmDelete(inquiry.id)}
-                          className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
-                          title="Delete Inquiry"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        {hasPermission('inquiries', 'delete') && (
+                          <button 
+                            onClick={() => confirmDelete(inquiry.id)}
+                            className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
+                            title="Delete Inquiry"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   )

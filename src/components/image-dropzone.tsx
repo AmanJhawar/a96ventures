@@ -116,7 +116,7 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      className={`relative flex flex-col items-center justify-center gap-3 w-full px-4 py-8 rounded-xl border-2 border-dashed text-sm focus:outline-none transition-all duration-[160ms] ease-[var(--ease-out)]
+      className={`relative flex flex-col items-center justify-center gap-3 w-full px-4 py-8 rounded-xl border-2 border-dashed text-sm focus:outline-none transition-[border-color,background-color,transform,opacity] duration-[160ms] ease-[var(--ease-out)]
         ${isUploading ? 'opacity-70 cursor-not-allowed border-gray-200 bg-gray-50' : 'cursor-pointer'}
         ${isDragging ? 'border-black bg-gray-50 scale-[0.99]' : 'border-gray-300 hover:bg-gray-50 hover:border-gray-400'}
       `}

@@ -2,6 +2,7 @@ import { app } from '@/lib/firebase/config'
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, addDoc, serverTimestamp } from 'firebase/firestore/lite'
 import { Inquiry } from '@/lib/types'
 import { withTimeout } from './utils'
+import { recordAuditLog } from './audit.service'
 
 const db = getFirestore(app)
 const INQUIRIES_COLLECTION = 'inquiries'
@@ -27,12 +28,39 @@ export async function getInquiriesPage(pageSize: number, cursorId?: string | nul
   return { items, nextCursor };
 }
 
-export async function deleteInquiry(id: string): Promise<void> {
+export async function deleteInquiry(
+  id: string,
+  actor?: { id: string; email: string },
+  inquiryContact?: string
+): Promise<void> {
   await deleteDoc(doc(db, INQUIRIES_COLLECTION, id));
+  await recordAuditLog({
+    userId: actor?.id,
+    userEmail: actor?.email,
+    action: 'delete',
+    entityType: 'inquiry',
+    entityId: id,
+    entityName: inquiryContact || id,
+    description: `Deleted customer inquiry from "${inquiryContact || id}"`
+  });
 }
 
-export async function updateInquiryStatus(id: string, status: 'unread' | 'read' | 'handled'): Promise<void> {
+export async function updateInquiryStatus(
+  id: string,
+  status: 'unread' | 'read' | 'handled',
+  actor?: { id: string; email: string },
+  inquiryContact?: string
+): Promise<void> {
   await setDoc(doc(db, INQUIRIES_COLLECTION, id), { status }, { merge: true });
+  await recordAuditLog({
+    userId: actor?.id,
+    userEmail: actor?.email,
+    action: 'status_change',
+    entityType: 'inquiry',
+    entityId: id,
+    entityName: inquiryContact || id,
+    description: `Updated status to "${status}" for inquiry from "${inquiryContact || id}"`
+  });
 }
 
 export async function submitInquiry(data: {

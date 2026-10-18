@@ -17,6 +17,7 @@ import { Product, Location, Transaction, ProductCategory, MetalType } from '@/li
 import { getProducts, getLocations, getTransactions } from '@/lib/services/inventory.service'
 import CustomSelect, { SelectOption } from '@/components/custom-select'
 import { EmptyState } from '@/components/empty-state'
+import { usePermissions } from '@/lib/context/PermissionsContext'
 
 const CATEGORIES: ProductCategory[] = ['MMTC PAMP', 'Idols', 'Bullions']
 const METALS: MetalType[] = ['Gold', 'Silver']
@@ -56,6 +57,7 @@ interface ProductSalesStat {
 }
 
 export default function AdminReportsPage() {
+  const { hasPermission } = usePermissions()
   const [activeTab, setActiveTab] = useState<ReportTab>('top_selling')
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All')
   const [selectedMetal, setSelectedMetal] = useState<MetalType | 'All'>('All')
@@ -395,50 +397,52 @@ export default function AdminReportsPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-black">Reports & Analytics</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Reports & Analytics</h1>
+          <p className="text-gray-500 text-sm">
             Highest-selling products, sales leaderboards, and physical stock valuation.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {activeTab === 'top_selling' ? (
-            <button
-              onClick={handleExportTopSellingCSV}
-              disabled={topSellingList.length === 0}
-              className="inline-flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-black disabled:opacity-50 transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
-            >
-              <Download size={15} />
-              Export Sales CSV
-            </button>
-          ) : (
-            <>
+        {hasPermission('reports', 'export') && (
+          <div className="flex items-center gap-2">
+            {activeTab === 'top_selling' ? (
               <button
-                onClick={handleExportStockSummaryCSV}
-                disabled={products.length === 0}
-                className="inline-flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-black disabled:opacity-50 transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                onClick={handleExportTopSellingCSV}
+                disabled={topSellingList.length === 0}
+                className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 disabled:opacity-40 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
               >
-                <Download size={15} />
-                Export Stock CSV
+                <Download size={14} />
+                Export Sales CSV
               </button>
-              <button
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-black transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
-              >
-                <Printer size={15} />
-                Print Summary
-              </button>
-            </>
-          )}
-        </div>
+            ) : (
+              <>
+                <button
+                  onClick={handleExportStockSummaryCSV}
+                  disabled={products.length === 0}
+                  className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 disabled:opacity-40 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                >
+                  <Download size={14} />
+                  Export Stock CSV
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                >
+                  <Printer size={14} />
+                  Print Summary
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+        <div className="mb-6 p-4 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 text-sm">
           {error}
         </div>
       )}
@@ -544,7 +548,7 @@ export default function AdminReportsPage() {
           {/* Filters Bar: Time Range, Category, Metal, Sort */}
           <div className="bg-white p-4 border border-gray-200 rounded-xl flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-4">
-              {/* Time Range Pills */}
+              {/* Time Range Squircles */}
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Period:</span>
                 {[
@@ -556,10 +560,10 @@ export default function AdminReportsPage() {
                   <button
                     key={t.id}
                     onClick={() => setDateRange(t.id as DateRange)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                       dateRange === t.id
-                        ? 'bg-black text-white'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
+                        ? 'bg-black text-white border border-black shadow-xs'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
                     }`}
                   >
                     {t.label}
@@ -567,15 +571,15 @@ export default function AdminReportsPage() {
                 ))}
               </div>
 
-              {/* Category Pills */}
+              {/* Category Squircles */}
               <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4 overflow-x-auto">
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Category:</span>
                 <button
                   onClick={() => setSelectedCategory('All')}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                     selectedCategory === 'All'
-                      ? 'bg-black text-white'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
+                      ? 'bg-black text-white border border-black shadow-xs'
+                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
                   }`}
                 >
                   All
@@ -584,10 +588,10 @@ export default function AdminReportsPage() {
                   <button
                     key={c}
                     onClick={() => setSelectedCategory(c)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                       selectedCategory === c
-                        ? 'bg-black text-white'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
+                        ? 'bg-black text-white border border-black shadow-xs'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
                     }`}
                   >
                     {c}
@@ -595,15 +599,15 @@ export default function AdminReportsPage() {
                 ))}
               </div>
 
-              {/* Metal Pills */}
+              {/* Metal Squircles */}
               <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4">
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Metal:</span>
                 <button
                   onClick={() => setSelectedMetal('All')}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                     selectedMetal === 'All'
-                      ? 'bg-black text-white'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
+                      ? 'bg-black text-white border border-black shadow-xs'
+                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
                   }`}
                 >
                   All
@@ -612,10 +616,10 @@ export default function AdminReportsPage() {
                   <button
                     key={m}
                     onClick={() => setSelectedMetal(m)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                       selectedMetal === m
-                        ? 'bg-black text-white'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
+                        ? 'bg-black text-white border border-black shadow-xs'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
                     }`}
                   >
                     {m}
@@ -629,20 +633,20 @@ export default function AdminReportsPage() {
               <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Rank By:</span>
               <button
                 onClick={() => setTopSort('volume_desc')}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                   topSort === 'volume_desc'
-                    ? 'bg-black text-white'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
+                    ? 'bg-black text-white border border-black shadow-xs'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
                 }`}
               >
                 Volume (Units)
               </button>
               <button
                 onClick={() => setTopSort('revenue_desc')}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                   topSort === 'revenue_desc'
-                    ? 'bg-black text-white'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
+                    ? 'bg-black text-white border border-black shadow-xs'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
                 }`}
               >
                 Revenue (₹)
@@ -727,8 +731,8 @@ export default function AdminReportsPage() {
                           <td className="px-6 py-4">
                             <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                               <div
-                                className="bg-black h-2 rounded-full transition-[width] duration-300"
-                                style={{ width: `${sharePercent}%` }}
+                                className="bg-black h-2 rounded-full origin-left transition-transform duration-300 ease-[var(--ease-out)] w-full"
+                                style={{ transform: `scaleX(${sharePercent / 100})` }}
                               />
                             </div>
                             <span className="text-[10px] text-gray-400 mt-1 block">
@@ -745,9 +749,7 @@ export default function AdminReportsPage() {
                             <span
                               className={`font-semibold ${
                                 item.currentStock === 0
-                                  ? 'text-red-600'
-                                  : item.currentStock <= 2
-                                  ? 'text-amber-600'
+                                  ? 'text-gray-400'
                                   : 'text-black'
                               }`}
                             >
@@ -815,7 +817,7 @@ export default function AdminReportsPage() {
                 Stock Attention
               </span>
               <div className="flex items-baseline gap-3">
-                <span className={`text-2xl font-bold tabular-nums ${summaryReport.outOfStockCount > 0 ? 'text-red-600' : 'text-black'}`}>
+                <span className="text-2xl font-bold tabular-nums text-black">
                   {summaryReport.outOfStockCount} <span className="text-xs font-normal text-gray-500">Out</span>
                 </span>
                 <span className="text-gray-300">/</span>

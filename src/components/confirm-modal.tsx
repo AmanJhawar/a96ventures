@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { EASE_OUT } from './motion-transitions'
 
 interface ConfirmModalProps {
@@ -88,6 +88,8 @@ export function ConfirmModal({
     }
   }, [isOpen, onClose])
 
+  const shouldReduceMotion = useReducedMotion()
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -110,10 +112,10 @@ export function ConfirmModal({
           {/* Modal Container */}
           <motion.div 
             ref={modalRef}
-            initial={{ opacity: 0, transform: "scale(0.95) translateY(8px)" }}
-            animate={{ opacity: 1, transform: "scale(1) translateY(0px)" }}
-            exit={{ opacity: 0, transform: "scale(0.95) translateY(8px)" }}
-            transition={{ duration: 0.2, ease: EASE_OUT }}
+            initial={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.95) translateY(8px)" }}
+            animate={{ opacity: 1, transform: shouldReduceMotion ? "none" : "scale(1) translateY(0px)" }}
+            exit={{ opacity: 0, transform: shouldReduceMotion ? "none" : "scale(0.95) translateY(8px)" }}
+            transition={{ duration: shouldReduceMotion ? 0.12 : 0.2, ease: EASE_OUT }}
             className="relative bg-white rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.06)] w-full max-w-md overflow-hidden z-10"
           >
             <div className="p-6 md:p-8">
@@ -121,7 +123,7 @@ export function ConfirmModal({
                 <h2 id="confirm-modal-title" className="text-xl font-bold text-black tracking-tight">{title}</h2>
                 <button 
                   onClick={onClose}
-                  className="p-2 -mr-2 text-gray-400 hover:text-black transition-[color,background-color,transform] duration-200 ease-[var(--ease-out)] rounded-full hover:bg-gray-100 active:scale-[0.97]"
+                  className="p-2 -mr-2 text-gray-400 hover:text-black transition-[color,background-color,transform] duration-150 rounded-lg hover:bg-gray-100 active:scale-[0.97]"
                 >
                   <X size={20} />
                 </button>
@@ -133,16 +135,18 @@ export function ConfirmModal({
                 </p>
               )}
 
-              <div className="flex flex-col-reverse sm:flex-row items-center sm:justify-end gap-3 mt-8">
+              <div className="flex flex-col-reverse sm:flex-row items-center sm:justify-end gap-3 mt-6">
                 <button
+                  type="button"
                   onClick={() => onClose()}
-                  className="w-full sm:w-auto px-6 py-3 text-sm font-semibold text-black bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-[background-color,border-color,color,transform] duration-200 ease-[var(--ease-out)] active:scale-[0.97]"
+                  className="h-10 px-5 w-full sm:w-auto inline-flex items-center justify-center text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-black transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97]"
                 >
                   {cancelText}
                 </button>
                 <button
+                  type="button"
                   onClick={() => onConfirm()}
-                  className="btn-primary w-full sm:w-auto transition-transform duration-200 ease-[var(--ease-out)] active:scale-[0.97]"
+                  className="h-10 px-5 w-full sm:w-auto inline-flex items-center justify-center text-xs font-semibold text-white bg-black rounded-lg border border-black hover:bg-gray-800 shadow-xs transition-[background-color,transform] duration-150 active:scale-[0.97]"
                 >
                   {confirmText}
                 </button>
