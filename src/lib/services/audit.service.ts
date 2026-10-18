@@ -37,24 +37,22 @@ export interface RecordAuditParams {
  */
 export async function recordAuditLog(params: RecordAuditParams): Promise<string> {
   try {
-    const docRef = await withTimeout(
-      addDoc(collection(db, AUDIT_COLLECTION), {
-        userId: params.userId || 'system',
-        userName: params.userName || 'System User',
-        userEmail: params.userEmail || 'admin@a96ventures.com',
-        action: params.action,
-        entityType: params.entityType,
-        entityId: params.entityId,
-        entityName: params.entityName || '',
-        locationId: params.locationId || '',
-        locationName: params.locationName || '',
-        description: params.description,
-        diffs: params.diffs || [],
-        metadata: params.metadata || {},
-        timestamp: new Date().toISOString(),
-        createdAt: serverTimestamp()
-      })
-    )
+    const docRef = await addDoc(collection(db, AUDIT_COLLECTION), {
+      userId: params.userId || 'system',
+      userName: params.userName || 'System User',
+      userEmail: params.userEmail || 'admin@a96ventures.com',
+      action: params.action,
+      entityType: params.entityType,
+      entityId: params.entityId,
+      entityName: params.entityName || '',
+      locationId: params.locationId || '',
+      locationName: params.locationName || '',
+      description: params.description,
+      diffs: params.diffs || [],
+      metadata: params.metadata || {},
+      timestamp: new Date().toISOString(),
+      createdAt: serverTimestamp()
+    })
     return docRef.id
   } catch (err) {
     // Non-blocking fallback: never fail user operations due to audit failure, but log to console

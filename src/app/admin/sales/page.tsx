@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   ShoppingCart,
   Plus,
-  Trash2,
   AlertCircle,
   X,
   Check,
@@ -12,7 +11,10 @@ import {
   IndianRupee,
   TrendingUp,
   PackageCheck,
-  Lock
+  Lock,
+  Calendar,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { Product, Location, Transaction, ProductCategory, MetalType } from '@/lib/types'
 import {
@@ -31,10 +33,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatWeight } from '@/lib/utils/weight'
-import { getTodayIST } from '@/lib/utils/date'
+import { getTodayIST, getDaysAgoIST } from '@/lib/utils/date'
 
 const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
-const METALS: MetalType[] = ['Gold', 'Silver']
 
 type SalesTab = 'sales' | 'returns'
 
@@ -101,9 +102,60 @@ export default function AdminSales() {
     }
   }
 
+  // Date Range and Pagination State
+  const [dateRangePreset, setDateRangePreset] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all')
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
+  const [salesPage, setSalesPage] = useState(1)
+  const [returnsPage, setReturnsPage] = useState(1)
+  const pageSize = 15
+
+  const { effectiveStartDate, effectiveEndDate } = useMemo(() => {
+    if (dateRangePreset === 'today') {
+      const today = getTodayIST()
+      return { effectiveStartDate: today, effectiveEndDate: today }
+    }
+    if (dateRangePreset === 'week') {
+      return { effectiveStartDate: getDaysAgoIST(7), effectiveEndDate: getTodayIST() }
+    }
+    if (dateRangePreset === 'month') {
+      return { effectiveStartDate: getDaysAgoIST(30), effectiveEndDate: getTodayIST() }
+    }
+    if (dateRangePreset === 'custom') {
+      return { effectiveStartDate: customStartDate, effectiveEndDate: customEndDate }
+    }
+    return { effectiveStartDate: '', effectiveEndDate: '' }
+  }, [dateRangePreset, customStartDate, customEndDate])
+
   useEffect(() => {
-    loadData()
-  }, [])
+    let ignore = false
+    Promise.all([
+      getProducts(),
+      getLocations(),
+      getTransactions({
+        startDate: effectiveStartDate || undefined,
+        endDate: effectiveEndDate || undefined
+      })
+    ])
+      .then(([prods, locs, txs]) => {
+        if (!ignore) {
+          setProducts(prods)
+          setLocations(locs)
+          setTransactions(txs)
+          setLoading(false)
+        }
+      })
+      .catch((err: unknown) => {
+        if (!ignore) {
+          console.error('Failed to load sales data', err)
+          setError('Unable to load sales data. Please check connection.')
+          setLoading(false)
+        }
+      })
+    return () => {
+      ignore = true
+    }
+  }, [effectiveStartDate, effectiveEndDate])
 
   // Helper map for locations
   const locationMap = useMemo(() => {
@@ -118,9 +170,17 @@ export default function AdminSales() {
       (tx) =>
         tx.type === 'sale' &&
         (selectedCategory === 'All' || tx.category === selectedCategory) &&
-        (selectedMetal === 'All' || tx.metal === selectedMetal)
+        (selectedMetal === 'All' || tx.metal === selectedMetal) &&
+        (!effectiveStartDate || tx.date >= effectiveStartDate) &&
+        (!effectiveEndDate || tx.date <= effectiveEndDate)
     )
-  }, [transactions, selectedCategory, selectedMetal])
+  }, [transactions, selectedCategory, selectedMetal, effectiveStartDate, effectiveEndDate])
+
+  const paginatedSales = useMemo(() => {
+    const start = (salesPage - 1) * pageSize
+    return salesList.slice(start, start + pageSize)
+  }, [salesList, salesPage, pageSize])
+  const totalSalesPages = Math.max(1, Math.ceil(salesList.length / pageSize))
 
   // Filtered returns
   const returnsList = useMemo(() => {
@@ -128,9 +188,17 @@ export default function AdminSales() {
       (tx) =>
         tx.type === 'return' &&
         (selectedCategory === 'All' || tx.category === selectedCategory) &&
-        (selectedMetal === 'All' || tx.metal === selectedMetal)
+        (selectedMetal === 'All' || tx.metal === selectedMetal) &&
+        (!effectiveStartDate || tx.date >= effectiveStartDate) &&
+        (!effectiveEndDate || tx.date <= effectiveEndDate)
     )
-  }, [transactions, selectedCategory, selectedMetal])
+  }, [transactions, selectedCategory, selectedMetal, effectiveStartDate, effectiveEndDate])
+
+  const paginatedReturns = useMemo(() => {
+    const start = (returnsPage - 1) * pageSize
+    return returnsList.slice(start, start + pageSize)
+  }, [returnsList, returnsPage, pageSize])
+  const totalReturnsPages = Math.max(1, Math.ceil(returnsList.length / pageSize))
 
   // KPI Metrics
   const metrics = useMemo(() => {
@@ -194,7 +262,10 @@ export default function AdminSales() {
     return selectedSaleProduct.pieceWeightsByLocation?.[saleLocationId] || []
   }, [selectedSaleProduct, saleLocationId])
 
-  useEffect(() => {
+  const [prevSaleKey, setPrevSaleKey] = useState('')
+  const saleKey = `${saleProductId}_${saleLocationId}_${availableSalePieces.join(',')}`
+  if (saleKey !== prevSaleKey) {
+    setPrevSaleKey(saleKey)
     if (isSaleProductAnIdol && availableSalePieces.length > 0) {
       if (!salePieceWeight || !availableSalePieces.includes(Number(salePieceWeight))) {
         setSalePieceWeight(String(availableSalePieces[0]))
@@ -202,7 +273,7 @@ export default function AdminSales() {
     } else if (isSaleProductAnIdol && availableSalePieces.length === 0) {
       setSalePieceWeight('')
     }
-  }, [isSaleProductAnIdol, availableSalePieces, salePieceWeight])
+  }
 
   const selectedReturnProduct = useMemo(() => {
     return products.find((p) => p.id === returnProductId)
@@ -302,7 +373,7 @@ export default function AdminSales() {
 
     try {
       const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
-      await recordTransaction({
+      const { transaction: createdTx } = await recordTransaction({
         type: 'sale',
         productId: prod.id,
         productName: prod.name,
@@ -320,7 +391,40 @@ export default function AdminSales() {
       })
       setIsSaleFormOpen(false)
       toast.success('Sale recorded successfully')
-      await loadData()
+
+      // Optimistically update local transactions & product stock without network reloads
+      setTransactions((prev) => [createdTx, ...prev])
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.id !== prod.id) return p
+          const currentLocStock = p.stockByLocation?.[effectiveLocId] || 0
+          const updatedLocStock = Math.max(0, currentLocStock - qty)
+          const updatedStockByLoc = { ...p.stockByLocation, [effectiveLocId]: updatedLocStock }
+          const updatedTotalStock = Math.max(0, (p.stock || 0) - qty)
+
+          let updatedPieces = p.pieceWeights
+          let updatedPiecesByLoc = p.pieceWeightsByLocation
+          if (isIdol && salePieceWeight) {
+            const soldWeight = Number(salePieceWeight)
+            const locPieces = p.pieceWeightsByLocation?.[effectiveLocId] || []
+            const idxInLoc = locPieces.indexOf(soldWeight)
+            const newLocPieces = idxInLoc >= 0 ? [...locPieces.slice(0, idxInLoc), ...locPieces.slice(idxInLoc + 1)] : locPieces
+            updatedPiecesByLoc = { ...p.pieceWeightsByLocation, [effectiveLocId]: newLocPieces }
+
+            const allPieces = p.pieceWeights || []
+            const idxInAll = allPieces.indexOf(soldWeight)
+            updatedPieces = idxInAll >= 0 ? [...allPieces.slice(0, idxInAll), ...allPieces.slice(idxInAll + 1)] : allPieces
+          }
+
+          return {
+            ...p,
+            stock: updatedTotalStock,
+            stockByLocation: updatedStockByLoc,
+            pieceWeights: updatedPieces,
+            pieceWeightsByLocation: updatedPiecesByLoc
+          }
+        })
+      )
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record sale'
       setSaleError(msg)
@@ -364,7 +468,7 @@ export default function AdminSales() {
 
     try {
       const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
-      await recordTransaction({
+      const { transaction: createdTx } = await recordTransaction({
         type: 'return',
         productId: prod.id,
         productName: prod.name,
@@ -382,7 +486,36 @@ export default function AdminSales() {
       })
       setIsReturnFormOpen(false)
       toast.success('Return recorded and restocked successfully')
-      await loadData()
+
+      // Optimistically update local transactions & product stock
+      setTransactions((prev) => [createdTx, ...prev])
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.id !== prod.id) return p
+          const currentLocStock = p.stockByLocation?.[effectiveLocId] || 0
+          const updatedLocStock = currentLocStock + qty
+          const updatedStockByLoc = { ...p.stockByLocation, [effectiveLocId]: updatedLocStock }
+          const updatedTotalStock = (p.stock || 0) + qty
+
+          let updatedPieces = p.pieceWeights
+          let updatedPiecesByLoc = p.pieceWeightsByLocation
+          if (isIdol && returnPieceWeight) {
+            const retWeight = Number(returnPieceWeight)
+            const locPieces = p.pieceWeightsByLocation?.[effectiveLocId] || []
+            updatedPiecesByLoc = { ...p.pieceWeightsByLocation, [effectiveLocId]: [...locPieces, retWeight] }
+            const allPieces = p.pieceWeights || []
+            updatedPieces = [...allPieces, retWeight]
+          }
+
+          return {
+            ...p,
+            stock: updatedTotalStock,
+            stockByLocation: updatedStockByLoc,
+            pieceWeights: updatedPieces,
+            pieceWeightsByLocation: updatedPiecesByLoc
+          }
+        })
+      )
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record return'
       setReturnError(msg)
@@ -396,10 +529,69 @@ export default function AdminSales() {
   const executeDeleteTransaction = async () => {
     if (!deleteTxTarget) return
     try {
-      await deleteTransaction(deleteTxTarget)
+      const res = await deleteTransaction(deleteTxTarget)
       toast.success('Reversing entry posted successfully')
+      
+      const reversedId = deleteTxTarget.id
+      setTransactions((prev) => {
+        const updated = prev.map((t) => (t.id === reversedId ? { ...t, isReversed: true } : t))
+        if (res.reversingEntry) {
+          return [res.reversingEntry, ...updated]
+        }
+        return updated
+      })
+
+      // Reverse stock on product locally
+      const targetProdId = deleteTxTarget.productId
+      const targetLocId = deleteTxTarget.locationId
+      const targetQty = Number(deleteTxTarget.quantity || 1)
+      const isTargetSale = deleteTxTarget.type === 'sale'
+      const isTargetReturn = deleteTxTarget.type === 'return'
+
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.id !== targetProdId) return p
+          const locStock = p.stockByLocation?.[targetLocId] || 0
+          const updatedLocStock = isTargetSale
+            ? locStock + targetQty
+            : isTargetReturn
+              ? Math.max(0, locStock - targetQty)
+              : locStock
+          const updatedTotalStock = isTargetSale
+            ? (p.stock || 0) + targetQty
+            : isTargetReturn
+              ? Math.max(0, (p.stock || 0) - targetQty)
+              : (p.stock || 0)
+
+          let updatedPieces = p.pieceWeights
+          let updatedPiecesByLoc = p.pieceWeightsByLocation
+          if (p.category === 'Idols' && deleteTxTarget.pieceWeight) {
+            const pw = Number(deleteTxTarget.pieceWeight)
+            if (isTargetSale) {
+              const locPieces = p.pieceWeightsByLocation?.[targetLocId] || []
+              updatedPiecesByLoc = { ...p.pieceWeightsByLocation, [targetLocId]: [...locPieces, pw] }
+              updatedPieces = [...(p.pieceWeights || []), pw]
+            } else if (isTargetReturn) {
+              const locPieces = p.pieceWeightsByLocation?.[targetLocId] || []
+              const idx = locPieces.indexOf(pw)
+              const newLoc = idx >= 0 ? [...locPieces.slice(0, idx), ...locPieces.slice(idx + 1)] : locPieces
+              updatedPiecesByLoc = { ...p.pieceWeightsByLocation, [targetLocId]: newLoc }
+              const allPieces = p.pieceWeights || []
+              const idxAll = allPieces.indexOf(pw)
+              updatedPieces = idxAll >= 0 ? [...allPieces.slice(0, idxAll), ...allPieces.slice(idxAll + 1)] : allPieces
+            }
+          }
+
+          return {
+            ...p,
+            stock: updatedTotalStock,
+            stockByLocation: { ...p.stockByLocation, [targetLocId]: updatedLocStock },
+            pieceWeights: updatedPieces,
+            pieceWeightsByLocation: updatedPiecesByLoc
+          }
+        })
+      )
       setDeleteTxTarget(null)
-      await loadData()
     } catch (err: unknown) {
       console.error('Failed to reverse transaction', err)
       const msg = err instanceof Error ? err.message : 'Failed to reverse transaction'
@@ -519,6 +711,66 @@ export default function AdminSales() {
           <RotateCcw size={16} />
           Returns & Restock ({returnsList.length})
         </button>
+      </div>
+
+      {/* Date Range Filter Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 p-3.5 mb-6 bg-white border border-gray-200 rounded-xl">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500 mr-1">
+            <Calendar size={14} className="text-gray-400" />
+            Date Range:
+          </span>
+          {([
+            { id: 'all', label: 'All Dates' },
+            { id: 'today', label: 'Today' },
+            { id: 'week', label: 'Last 7 Days' },
+            { id: 'month', label: 'Last 30 Days' },
+            { id: 'custom', label: 'Custom' },
+          ] as const).map((preset) => (
+            <button
+              key={preset.id}
+              onClick={() => {
+                setDateRangePreset(preset.id)
+                setSalesPage(1)
+                setReturnsPage(1)
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${dateRangePreset === preset.id
+                ? 'bg-black text-white border border-black shadow-xs'
+                : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
+                }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        {dateRangePreset === 'custom' && (
+          <div className="flex items-center gap-2">
+            <div className="w-36">
+              <CustomDatePicker
+                value={customStartDate}
+                onChange={(d) => {
+                  setCustomStartDate(d)
+                  setSalesPage(1)
+                  setReturnsPage(1)
+                }}
+                placeholder="Start Date"
+              />
+            </div>
+            <span className="text-xs text-gray-400">to</span>
+            <div className="w-36">
+              <CustomDatePicker
+                value={customEndDate}
+                onChange={(d) => {
+                  setCustomEndDate(d)
+                  setSalesPage(1)
+                  setReturnsPage(1)
+                }}
+                placeholder="End Date"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Category & Metal Filter Squircles */}
@@ -1018,7 +1270,7 @@ export default function AdminSales() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {salesList.map((tx) => {
+                  {paginatedSales.map((tx) => {
                     const totalVal = tx.price ? tx.price * tx.quantity : 0
                     return (
                       <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
@@ -1086,6 +1338,46 @@ export default function AdminSales() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {salesList.length > pageSize && (
+              <div className="px-6 py-3.5 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                <span>
+                  Showing{' '}
+                  <strong className="text-black font-semibold">
+                    {(salesPage - 1) * pageSize + 1}
+                  </strong>{' '}
+                  to{' '}
+                  <strong className="text-black font-semibold">
+                    {Math.min(salesPage * pageSize, salesList.length)}
+                  </strong>{' '}
+                  of{' '}
+                  <strong className="text-black font-semibold">
+                    {salesList.length}
+                  </strong>{' '}
+                  sales
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSalesPage((p) => Math.max(1, p - 1))}
+                    disabled={salesPage <= 1}
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="font-medium text-black">
+                    Page {salesPage} of {totalSalesPages}
+                  </span>
+                  <button
+                    onClick={() => setSalesPage((p) => Math.min(totalSalesPages, p + 1))}
+                    disabled={salesPage >= totalSalesPages}
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )
       ) : (
@@ -1127,7 +1419,7 @@ export default function AdminSales() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {returnsList.map((tx) => {
+                  {paginatedReturns.map((tx) => {
                     const totalVal = tx.price ? tx.price * tx.quantity : 0
                     return (
                       <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
@@ -1195,6 +1487,46 @@ export default function AdminSales() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {returnsList.length > pageSize && (
+              <div className="px-6 py-3.5 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                <span>
+                  Showing{' '}
+                  <strong className="text-black font-semibold">
+                    {(returnsPage - 1) * pageSize + 1}
+                  </strong>{' '}
+                  to{' '}
+                  <strong className="text-black font-semibold">
+                    {Math.min(returnsPage * pageSize, returnsList.length)}
+                  </strong>{' '}
+                  of{' '}
+                  <strong className="text-black font-semibold">
+                    {returnsList.length}
+                  </strong>{' '}
+                  returns
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setReturnsPage((p) => Math.max(1, p - 1))}
+                    disabled={returnsPage <= 1}
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="font-medium text-black">
+                    Page {returnsPage} of {totalReturnsPages}
+                  </span>
+                  <button
+                    onClick={() => setReturnsPage((p) => Math.min(totalReturnsPages, p + 1))}
+                    disabled={returnsPage >= totalReturnsPages}
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )
       )}

@@ -261,7 +261,7 @@ export async function PUT(req: NextRequest) {
 
     const updatedRole: UserRole = role !== undefined ? role : currentData.role
     const updatedStatus: UserStatus = status !== undefined ? status : currentData.status
-    let updatedPermissions: UserPermissions =
+    const updatedPermissions: UserPermissions =
       updatedRole === 'super_admin'
         ? SUPER_ADMIN_PERMISSIONS
         : (permissions !== undefined ? permissions : (currentData.permissions || EMPTY_PERMISSIONS))

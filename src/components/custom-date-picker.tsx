@@ -56,15 +56,16 @@ export function CustomDatePicker({
 
   const [viewYear, setViewYear] = useState<number>(initialDate.getFullYear())
   const [viewMonth, setViewMonth] = useState<number>(initialDate.getMonth())
+  const [prevValue, setPrevValue] = useState<string>(value)
 
-  // Keep view sync when value changes from outside
-  useEffect(() => {
+  if (value !== prevValue) {
+    setPrevValue(value)
     if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
       const [y, m] = value.split('-').map(Number)
       setViewYear(y)
       setViewMonth(m - 1)
     }
-  }, [value])
+  }
 
   // Click outside listener
   useEffect(() => {

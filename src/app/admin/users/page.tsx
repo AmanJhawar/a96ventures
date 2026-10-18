@@ -90,7 +90,6 @@ export default function AdminUsersPage() {
   // Load All Data
   const loadData = async () => {
     try {
-      setLoading(true)
       const [uList, aList, locList] = await Promise.all([
         getAdminUsers(),
         getAuditLogs({ limitCount: 200 }),
@@ -108,7 +107,30 @@ export default function AdminUsersPage() {
   }
 
   useEffect(() => {
-    loadData()
+    let ignore = false
+    Promise.all([
+      getAdminUsers(),
+      getAuditLogs({ limitCount: 200 }),
+      getLocations()
+    ])
+      .then(([uList, aList, locList]) => {
+        if (!ignore) {
+          setUsers(uList)
+          setAuditLogs(aList)
+          setLocations(locList)
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        if (!ignore) {
+          console.error('Failed to load users data:', err)
+          toast.error('Unable to load users data')
+          setLoading(false)
+        }
+      })
+    return () => {
+      ignore = true
+    }
   }, [])
 
   // Location Map
@@ -252,6 +274,22 @@ export default function AdminUsersPage() {
           },
           actorInfo
         )
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === editingUserId
+              ? {
+                  ...u,
+                  displayName: formDisplayName,
+                  phoneNumber: formPhone,
+                  role: formRole,
+                  status: formStatus,
+                  assignedLocationId: formLocationId || undefined,
+                  assignedLocationName: locName,
+                  permissions: formPermissions
+                }
+              : u
+          )
+        )
         toast.success('User updated successfully')
       } else {
         const createResult = await createAdminUser({
@@ -268,6 +306,21 @@ export default function AdminUsersPage() {
           createdByEmail: actorInfo.email
         })
 
+        const newUser: AdminUser = {
+          id: createResult.id,
+          email: formEmail,
+          displayName: formDisplayName,
+          phoneNumber: formPhone,
+          role: formRole,
+          status: formStatus,
+          assignedLocationId: formLocationId || undefined,
+          assignedLocationName: locName,
+          permissions: formPermissions,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+        setUsers((prev) => [newUser, ...prev])
+
         if (createResult.temporaryPassword) {
           toast.success(`User created! Initial password: ${createResult.temporaryPassword}`, {
             duration: 10000
@@ -278,7 +331,6 @@ export default function AdminUsersPage() {
       }
 
       setIsFormOpen(false)
-      await loadData()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save user'
       setFormError(msg)
@@ -296,9 +348,9 @@ export default function AdminUsersPage() {
         id: currentLoggedUser?.id || 'admin',
         email: currentLoggedUser?.email || 'admin@a96ventures.com'
       })
+      setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id))
       toast.success('User deleted')
       setDeleteTarget(null)
-      await loadData()
     } catch (err) {
       console.error(err)
       toast.error('Failed to delete user')
@@ -314,9 +366,9 @@ export default function AdminUsersPage() {
         id: currentLoggedUser?.id || 'admin',
         email: currentLoggedUser?.email || 'admin@a96ventures.com'
       })
+      setUsers((prev) => prev.map((u) => (u.id === statusTarget.id ? { ...u, status: newStatus } : u)))
       toast.success(newStatus === 'active' ? 'Account activated' : 'Account suspended')
       setStatusTarget(null)
-      await loadData()
     } catch (err) {
       console.error(err)
       toast.error('Failed to change status')

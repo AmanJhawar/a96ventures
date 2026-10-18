@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -31,7 +31,11 @@ export type ContactValues = z.infer<typeof contactSchema>
 export function useInquiryForm() {
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
-  const formMountTime = useRef(Date.now())
+  const formMountTime = useRef<number | null>(null)
+
+  useEffect(() => {
+    formMountTime.current = Date.now()
+  }, [])
 
   const form = useForm<ContactValues>({
     resolver: zodResolver(contactSchema),
@@ -66,7 +70,7 @@ export function useInquiryForm() {
 
     // 2. Minimum form completion speed check (traps automated script flooding)
     const now = Date.now()
-    if (now - formMountTime.current < 1500) {
+    if (formMountTime.current && now - formMountTime.current < 1500) {
       console.warn('Submission completed inhumanly fast. Discarding bot traffic.');
       setSuccess(true)
       reset()

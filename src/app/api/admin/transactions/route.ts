@@ -5,6 +5,86 @@ import { Product, TransactionType, ProductCategory, MetalType } from '@/lib/type
 import { gramsToMg, mgToGrams } from '@/lib/utils/weight'
 import { getTodayIST } from '@/lib/utils/date'
 
+export async function GET(req: NextRequest) {
+  try {
+    const authResult = await getAuthenticatedCaller(req)
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+    }
+    const { caller } = authResult
+
+    if (
+      !hasModulePermission(caller, 'sales', 'view') &&
+      !hasModulePermission(caller, 'purchases', 'view') &&
+      !hasModulePermission(caller, 'movements', 'view') &&
+      !hasModulePermission(caller, 'reports', 'view')
+    ) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to read transactions' }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const startDate = searchParams.get('startDate') || undefined
+    const endDate = searchParams.get('endDate') || undefined
+    const type = searchParams.get('type') || undefined
+    const limitCount = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10)), 200)
+    const cursor = searchParams.get('cursor') || undefined
+
+    let queryRef: FirebaseFirestore.Query = adminDb.collection('transactions')
+
+    if (startDate && endDate) {
+      queryRef = queryRef.where('date', '>=', startDate).where('date', '<=', endDate).orderBy('date', 'desc')
+    } else if (startDate) {
+      queryRef = queryRef.where('date', '>=', startDate).orderBy('date', 'desc')
+    } else if (endDate) {
+      queryRef = queryRef.where('date', '<=', endDate).orderBy('date', 'desc')
+    } else {
+      queryRef = queryRef.orderBy('date', 'desc')
+    }
+
+    if (cursor) {
+      const cursorSnap = await adminDb.collection('transactions').doc(cursor).get()
+      if (cursorSnap.exists) {
+        queryRef = queryRef.startAfter(cursorSnap)
+      }
+    }
+
+    queryRef = queryRef.limit(limitCount)
+    const snapshot = await queryRef.get()
+
+    let items = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data() as Record<string, unknown>
+      return {
+        ...data,
+        id: docSnap.id,
+        type: data.type as string | undefined,
+        previousWeight: typeof data.previousWeightMg === 'number' ? data.previousWeightMg / 1000 : data.previousWeight,
+        newWeight: typeof data.newWeightMg === 'number' ? data.newWeightMg / 1000 : data.newWeight,
+        weightChange: typeof data.weightChangeMg === 'number' ? data.weightChangeMg / 1000 : data.weightChange,
+        recoveredWeight: typeof data.recoveredWeightMg === 'number' ? data.recoveredWeightMg / 1000 : data.recoveredWeight,
+        pieceWeight: typeof data.pieceWeightMg === 'number' ? data.pieceWeightMg / 1000 : data.pieceWeight,
+        pieceWeights: Array.isArray(data.pieceWeightsMg)
+          ? data.pieceWeightsMg.map((mg: number) => mg / 1000)
+          : Array.isArray(data.pieceWeights)
+            ? data.pieceWeights
+            : undefined
+      }
+    })
+
+    if (type && type !== 'All') {
+      items = items.filter((t) => t.type === type)
+    }
+
+    const nextCursor = snapshot.docs.length === limitCount ? snapshot.docs[snapshot.docs.length - 1].id : null
+    const hasMore = snapshot.docs.length === limitCount
+
+    return NextResponse.json({ success: true, transactions: items, nextCursor, hasMore })
+  } catch (err: unknown) {
+    console.error('GET /api/admin/transactions error:', err)
+    const msg = err instanceof Error ? err.message : 'Failed to query transactions'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const authResult = await getAuthenticatedCaller(req)
@@ -377,10 +457,10 @@ export async function POST(req: NextRequest) {
         timestamp: nowIso
       })
 
-      return txRef.id
+      return { id: txRef.id, payload: txPayload }
     })
 
-    return NextResponse.json({ success: true, id: transactionId })
+    return NextResponse.json({ success: true, id: transactionId.id, transaction: { id: transactionId.id, ...transactionId.payload } })
   } catch (err: unknown) {
     console.error('POST /api/admin/transactions error:', err)
     const msg = err instanceof Error ? err.message : 'Failed to record transaction'
@@ -434,7 +514,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Atomic Reversal via Reversing Entry (Never Delete)
-    await adminDb.runTransaction(async (t) => {
+    const reversalResult = await adminDb.runTransaction(async (t) => {
       const productRef = adminDb.collection('products').doc(tx.productId)
       const productSnap = await t.get(productRef)
 
@@ -705,9 +785,15 @@ export async function DELETE(req: NextRequest) {
         },
         timestamp: nowIso
       })
+      return { reversedId: txId, reversingId: reversingTxRef.id, reversingEntry: { id: reversingTxRef.id, ...reversingEntryDoc } }
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      reversedTransactionId: reversalResult.reversedId,
+      reversingTransactionId: reversalResult.reversingId,
+      reversingEntry: reversalResult.reversingEntry
+    })
   } catch (err: unknown) {
     console.error('DELETE /api/admin/transactions error:', err)
     const msg = err instanceof Error ? err.message : 'Failed to reverse transaction'

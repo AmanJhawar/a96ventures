@@ -48,7 +48,10 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
       })
       formData.append('signature', signature)
 
-      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'di2w0v5ah'
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+      if (!cloudName) {
+        throw new Error('NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME is not configured in environment variables')
+      }
       const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
         method: 'POST',
         body: formData

@@ -227,9 +227,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [router, pathname])
 
   // Close mobile menu on route change
-  useEffect(() => {
+  const [prevPathname, setPrevPathname] = useState(pathname)
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname)
     setIsMobileMenuOpen(false)
-  }, [pathname])
+  }
 
   if (loading) {
     return (

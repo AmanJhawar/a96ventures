@@ -1,7 +1,6 @@
 import { app } from '@/lib/firebase/config'
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, addDoc, serverTimestamp } from 'firebase/firestore/lite'
 import { Inquiry } from '@/lib/types'
-import { withTimeout } from './utils'
 import { recordAuditLog } from './audit.service'
 
 const db = getFirestore(app)
@@ -94,5 +93,5 @@ export async function submitInquiry(data: {
     Object.entries(allowedFields).filter(([, v]) => v !== undefined && v !== '')
   );
 
-  return await withTimeout(addDoc(collection(db, INQUIRIES_COLLECTION), payload));
+  return await addDoc(collection(db, INQUIRIES_COLLECTION), payload);
 }

@@ -195,9 +195,16 @@ function ContactForm() {
       <button 
         type="submit" 
         disabled={isSubmitting}
-        className={`btn-primary border-none ${isSubmitting ? 'opacity-50' : ''}`}
+        className={`btn-primary border-none flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-60 cursor-not-allowed' : ''}`}
       >
-        {isSubmitting ? 'Sending...' : 'Send Message'}
+        {isSubmitting ? (
+          <>
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <span>Sending Inquiry...</span>
+          </>
+        ) : (
+          'Send Message'
+        )}
       </button>
     </form>
   )

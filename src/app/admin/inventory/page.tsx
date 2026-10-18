@@ -22,7 +22,10 @@ import {
   Upload,
   Archive,
   Download,
-  Lock
+  Lock,
+  Calendar,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { Product, Location, Transaction, ProductCategory, ProductBrand, TransactionType, MetalType } from '@/lib/types'
 import {
@@ -46,7 +49,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatWeight } from '@/lib/utils/weight'
-import { getTodayIST } from '@/lib/utils/date'
+import { getTodayIST, getDaysAgoIST } from '@/lib/utils/date'
 
 const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
 const BULLION_BRANDS: ProductBrand[] = ['MMTC PAMP', 'Local']
@@ -104,6 +107,30 @@ export default function AdminInventory() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Date range filter state for transactions (Purchases & Movements)
+  const [dateRangePreset, setDateRangePreset] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all')
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
+
+  const effectiveStartDate = useMemo(() => {
+    if (dateRangePreset === 'today') return getTodayIST()
+    if (dateRangePreset === 'week') return getDaysAgoIST(7)
+    if (dateRangePreset === 'month') return getDaysAgoIST(30)
+    if (dateRangePreset === 'custom') return customStartDate || undefined
+    return undefined
+  }, [dateRangePreset, customStartDate])
+
+  const effectiveEndDate = useMemo(() => {
+    if (dateRangePreset === 'today') return getTodayIST()
+    if (dateRangePreset === 'custom') return customEndDate || undefined
+    return undefined
+  }, [dateRangePreset, customEndDate])
+
+  // Pagination state
+  const [purchasesPage, setPurchasesPage] = useState(1)
+  const [movementsPage, setMovementsPage] = useState(1)
+  const pageSize = 15
 
   // Product modal / form state
   const [isProductFormOpen, setIsProductFormOpen] = useState(false)
@@ -279,7 +306,7 @@ export default function AdminInventory() {
         duration: 5000
       })
       setArchivedSession(null)
-      await loadAll()
+      setTransactions([])
     } catch (err: unknown) {
       console.error('Failed to zero balance history', err)
       setError('Failed to clear transaction history. Please try again.')
@@ -295,7 +322,7 @@ export default function AdminInventory() {
       const [prods, locs, txs] = await Promise.all([
         getProducts(),
         getLocations(),
-        getTransactions()
+        getTransactions({ startDate: effectiveStartDate, endDate: effectiveEndDate })
       ])
       setProducts(prods)
       setLocations(locs)
@@ -309,8 +336,31 @@ export default function AdminInventory() {
   }
 
   useEffect(() => {
-    loadAll()
-  }, [])
+    let ignore = false
+    Promise.all([
+      getProducts(),
+      getLocations(),
+      getTransactions({ startDate: effectiveStartDate, endDate: effectiveEndDate })
+    ])
+      .then(([prods, locs, txs]) => {
+        if (!ignore) {
+          setProducts(prods)
+          setLocations(locs)
+          setTransactions(txs)
+          setLoading(false)
+        }
+      })
+      .catch((err: unknown) => {
+        if (!ignore) {
+          console.error('Failed to load inventory data', err)
+          setError('Unable to load inventory data. Please try again.')
+          setLoading(false)
+        }
+      })
+    return () => {
+      ignore = true
+    }
+  }, [effectiveStartDate, effectiveEndDate])
 
   // Helper map for locations
   const locationMap = useMemo(() => {
@@ -454,9 +504,18 @@ export default function AdminInventory() {
     return displayTransactions.filter((tx) => {
       const catMatch = selectedCategory === 'All' || tx.category === selectedCategory
       const metalMatch = selectedMetal === 'All' || tx.metal === selectedMetal
-      return tx.type === 'purchase' && catMatch && metalMatch
+      const dateMatch =
+        (!effectiveStartDate || tx.date >= effectiveStartDate) &&
+        (!effectiveEndDate || tx.date <= effectiveEndDate)
+      return tx.type === 'purchase' && catMatch && metalMatch && dateMatch
     })
-  }, [displayTransactions, selectedCategory, selectedMetal])
+  }, [displayTransactions, selectedCategory, selectedMetal, effectiveStartDate, effectiveEndDate])
+
+  const paginatedPurchases = useMemo(() => {
+    const start = (purchasesPage - 1) * pageSize
+    return filteredPurchases.slice(start, start + pageSize)
+  }, [filteredPurchases, purchasesPage, pageSize])
+  const totalPurchasesPages = Math.max(1, Math.ceil(filteredPurchases.length / pageSize))
 
   // Filtered movements with subtype support
   const filteredMovements = useMemo(() => {
@@ -465,9 +524,18 @@ export default function AdminInventory() {
       const typeMatch = movementTypeFilter === 'All' || tx.type === movementTypeFilter
       const catMatch = selectedCategory === 'All' || tx.category === selectedCategory
       const metalMatch = selectedMetal === 'All' || tx.metal === selectedMetal
-      return movementTypes.includes(tx.type) && typeMatch && catMatch && metalMatch
+      const dateMatch =
+        (!effectiveStartDate || tx.date >= effectiveStartDate) &&
+        (!effectiveEndDate || tx.date <= effectiveEndDate)
+      return movementTypes.includes(tx.type) && typeMatch && catMatch && metalMatch && dateMatch
     })
-  }, [displayTransactions, movementTypeFilter, selectedCategory, selectedMetal])
+  }, [displayTransactions, movementTypeFilter, selectedCategory, selectedMetal, effectiveStartDate, effectiveEndDate])
+
+  const paginatedMovements = useMemo(() => {
+    const start = (movementsPage - 1) * pageSize
+    return filteredMovements.slice(start, start + pageSize)
+  }, [filteredMovements, movementsPage, pageSize])
+  const totalMovementsPages = Math.max(1, Math.ceil(filteredMovements.length / pageSize))
 
   // Selected product in purchase modal
   const selectedPurchaseProduct = useMemo(() => {
@@ -481,11 +549,13 @@ export default function AdminInventory() {
   }, [selectedPurchaseProduct])
 
   // Sync purchase qty with piece count if product is an Idol
-  useEffect(() => {
+  const [prevPurchasePieceCount, setPrevPurchasePieceCount] = useState({ isIdol: isPurchaseProductAnIdol, count: purchasePieceWeights.length })
+  if (prevPurchasePieceCount.isIdol !== isPurchaseProductAnIdol || prevPurchasePieceCount.count !== purchasePieceWeights.length) {
+    setPrevPurchasePieceCount({ isIdol: isPurchaseProductAnIdol, count: purchasePieceWeights.length })
     if (isPurchaseProductAnIdol) {
       setPurchaseQty(purchasePieceWeights.length > 0 ? String(purchasePieceWeights.length) : '1')
     }
-  }, [isPurchaseProductAnIdol, purchasePieceWeights.length])
+  }
 
   // Selected product in movement modal
   const selectedMovementProduct = useMemo(() => {
@@ -530,7 +600,10 @@ export default function AdminInventory() {
   }, [selectedMovementProduct, movementToLocationId])
 
   // Auto-select valid destination if source matches or is unselected
-  useEffect(() => {
+  const [prevTransferKey, setPrevTransferKey] = useState('')
+  const transferKey = `${movementType}_${movementLocationId}_${destinationLocationOptions.map((d) => d.value).join(',')}`
+  if (transferKey !== prevTransferKey) {
+    setPrevTransferKey(transferKey)
     if (movementType === 'transfer' && movementLocationId) {
       if (movementToLocationId === movementLocationId || !destinationLocationOptions.some((d) => d.value === movementToLocationId)) {
         const firstAlt = destinationLocationOptions[0]
@@ -539,14 +612,17 @@ export default function AdminInventory() {
         }
       }
     }
-  }, [movementType, movementLocationId, movementToLocationId, destinationLocationOptions])
+  }
 
   // Auto-set current weight when selecting a product for repair
-  useEffect(() => {
+  const [prevRepairKey, setPrevRepairKey] = useState('')
+  const repairKey = `${movementType}_${movementProductId}`
+  if (repairKey !== prevRepairKey) {
+    setPrevRepairKey(repairKey)
     if (movementType === 'repair' && selectedMovementProduct) {
       setMovementNewWeight(String(selectedMovementProduct.weight || ''))
     }
-  }, [movementType, selectedMovementProduct])
+  }
 
   // Piece Weight Handlers for Product Catalog
   const handleAddProdPieceWeight = (rawInput?: string) => {
@@ -610,7 +686,10 @@ export default function AdminInventory() {
     return selectedMovementProduct.pieceWeightsByLocation?.[movementLocationId] || []
   }, [selectedMovementProduct, movementLocationId])
 
-  useEffect(() => {
+  const [prevMovementPieceKey, setPrevMovementPieceKey] = useState('')
+  const movementPieceKey = `${movementProductId}_${movementLocationId}_${availableMovementPieces.join(',')}`
+  if (movementPieceKey !== prevMovementPieceKey) {
+    setPrevMovementPieceKey(movementPieceKey)
     if (isMovementProductAnIdol && availableMovementPieces.length > 0) {
       if (!movementPieceWeight || !availableMovementPieces.includes(Number(movementPieceWeight))) {
         setMovementPieceWeight(String(availableMovementPieces[0]))
@@ -618,7 +697,7 @@ export default function AdminInventory() {
     } else if (isMovementProductAnIdol && availableMovementPieces.length === 0) {
       setMovementPieceWeight('')
     }
-  }, [isMovementProductAnIdol, availableMovementPieces, movementPieceWeight])
+  }
 
   // Handlers for Products
   const handleOpenAddProduct = () => {
@@ -716,11 +795,29 @@ export default function AdminInventory() {
           purity: prodPurity,
           pieceWeights: isIdol ? prodPieceWeights : undefined
         })
+        setProducts((prev) =>
+          prev.map((p) =>
+            p.id === editingProductId
+              ? {
+                  ...p,
+                  name: prodName,
+                  category: prodCategory,
+                  brand: effectiveBrand,
+                  metal: prodMetal,
+                  sku: cleanSku,
+                  weight: weightNum,
+                  purity: prodPurity,
+                  ...(isIdol ? { pieceWeights: prodPieceWeights } : {}),
+                  updatedAt: new Date().toISOString()
+                }
+              : p
+          )
+        )
       } else {
         const effectiveInitLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : prodInitialLocationId
         const initLocName = locationMap.get(effectiveInitLocId) || adminUser?.assignedLocationName || ''
         const initStock = isIdol ? prodPieceWeights.length : (Number(prodInitialStock) || 0)
-        await addProduct({
+        const newId = await addProduct({
           name: prodName,
           category: prodCategory,
           brand: effectiveBrand,
@@ -733,10 +830,47 @@ export default function AdminInventory() {
           initialLocationId: effectiveInitLocId || undefined,
           initialLocationName: initLocName || undefined
         })
+        const newProductItem: Product = {
+          id: newId,
+          name: prodName,
+          category: prodCategory,
+          brand: effectiveBrand,
+          metal: prodMetal,
+          sku: cleanSku,
+          weight: weightNum,
+          purity: prodPurity,
+          stock: initStock,
+          stockByLocation: effectiveInitLocId ? { [effectiveInitLocId]: initStock } : {},
+          isArchived: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          ...(isIdol && prodPieceWeights.length > 0 ? {
+            pieceWeights: prodPieceWeights,
+            pieceWeightsByLocation: effectiveInitLocId ? { [effectiveInitLocId]: prodPieceWeights } : {}
+          } : {})
+        }
+        setProducts((prev) => [newProductItem, ...prev])
+        if (initStock > 0 && effectiveInitLocId) {
+          const initTx: Transaction = {
+            id: `tx-${Date.now()}`,
+            type: 'purchase',
+            productId: newId,
+            productName: prodName,
+            category: prodCategory,
+            metal: prodMetal,
+            quantity: initStock,
+            locationId: effectiveInitLocId,
+            locationName: initLocName,
+            date: getTodayIST(),
+            notes: 'Opening stock upon product creation',
+            createdAt: new Date().toISOString(),
+            ...(isIdol ? { pieceWeights: prodPieceWeights } : {})
+          }
+          setTransactions((prev) => [initTx, ...prev])
+        }
       }
       setIsProductFormOpen(false)
       toast.success(editingProductId ? 'Product updated successfully' : 'Product added to catalog')
-      await loadAll()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save product'
       setProductFormError(msg)
@@ -754,11 +888,13 @@ export default function AdminInventory() {
     if (!deleteProductTarget) return
     try {
       await deleteProduct(deleteProductTarget.id)
+      setProducts((prev) =>
+        prev.map((p) => (p.id === deleteProductTarget.id ? { ...p, isArchived: true } : p))
+      )
       toast.success(`Product "${deleteProductTarget.name}" archived`, {
         description: 'Product hidden from active sales and stock movements. Ledger history preserved.'
       })
       setDeleteProductTarget(null)
-      await loadAll()
     } catch (err: unknown) {
       console.error(err)
       const msg = err instanceof Error ? err.message : 'Failed to archive product'
@@ -811,7 +947,7 @@ export default function AdminInventory() {
     setPurchaseError(null)
     try {
       const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
-      await recordTransaction({
+      const res = await recordTransaction({
         type: 'purchase',
         productId: prod.id,
         productName: prod.name,
@@ -825,9 +961,40 @@ export default function AdminInventory() {
         date: purchaseDate,
         notes: purchaseNotes
       })
+
+      if (res?.transaction) {
+        setTransactions((prev) => [res.transaction, ...prev])
+      }
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.id !== prod.id) return p
+          const newStock = (p.stock || 0) + qty
+          const newStockByLoc = {
+            ...(p.stockByLocation || {}),
+            [effectiveLocId]: (p.stockByLocation?.[effectiveLocId] || 0) + qty
+          }
+          let newPieces = p.pieceWeights ? [...p.pieceWeights] : []
+          const newPiecesByLoc = p.pieceWeightsByLocation ? { ...p.pieceWeightsByLocation } : {}
+          if (isIdol && purchasePieceWeights.length > 0) {
+            newPieces = [...newPieces, ...purchasePieceWeights]
+            const locPieces = newPiecesByLoc[effectiveLocId] ? [...newPiecesByLoc[effectiveLocId]] : []
+            newPiecesByLoc[effectiveLocId] = [...locPieces, ...purchasePieceWeights]
+          }
+          return {
+            ...p,
+            stock: newStock,
+            stockByLocation: newStockByLoc,
+            ...(isIdol ? {
+              pieceWeights: newPieces,
+              pieceWeightsByLocation: newPiecesByLoc,
+              weight: newPieces.length > 0 ? Number((newPieces.reduce((a, b) => a + b, 0) / newPieces.length).toFixed(3)) : p.weight
+            } : {})
+          }
+        })
+      )
+
       setIsPurchaseFormOpen(false)
       toast.success('Purchase recorded successfully')
-      await loadAll()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record purchase'
       setPurchaseError(msg)
@@ -876,6 +1043,7 @@ export default function AdminInventory() {
     try {
       const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
       const toLocName = movementToLocationId ? locationMap.get(movementToLocationId) : undefined
+      let res: { id: string; transaction: Transaction } | undefined
 
       if (movementType === 'repair') {
         const oldW = Number(prod.weight || 0)
@@ -883,7 +1051,7 @@ export default function AdminInventory() {
         if (isNaN(newW) || newW <= 0) {
           throw new Error('Please enter a valid new weight in grams')
         }
-        await recordTransaction({
+        res = await recordTransaction({
           type: 'repair',
           productId: prod.id,
           productName: prod.name,
@@ -897,6 +1065,9 @@ export default function AdminInventory() {
           date: movementDate,
           notes: movementNotes
         })
+        setProducts((prev) =>
+          prev.map((p) => (p.id === prod.id ? { ...p, weight: newW } : p))
+        )
       } else if (movementType === 'melt') {
         const isIdol = prod.category === 'Idols'
         if (isIdol && !movementPieceWeight) {
@@ -904,7 +1075,7 @@ export default function AdminInventory() {
         }
         const qty = isIdol ? 1 : Number(movementQty)
         if (isNaN(qty) || qty <= 0) throw new Error('Quantity to melt must be > 0')
-        await recordTransaction({
+        res = await recordTransaction({
           type: 'melt',
           productId: prod.id,
           productName: prod.name,
@@ -918,6 +1089,37 @@ export default function AdminInventory() {
           date: movementDate,
           notes: movementNotes
         })
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.id !== prod.id) return p
+            const newStock = Math.max(0, (p.stock || 0) - qty)
+            const newStockByLoc = {
+              ...(p.stockByLocation || {}),
+              [effectiveLocId]: Math.max(0, (p.stockByLocation?.[effectiveLocId] || 0) - qty)
+            }
+            const newPieces = p.pieceWeights ? [...p.pieceWeights] : []
+            const newPiecesByLoc = p.pieceWeightsByLocation ? { ...p.pieceWeightsByLocation } : {}
+            if (isIdol && movementPieceWeight) {
+              const numPW = Number(movementPieceWeight)
+              const idx = newPieces.indexOf(numPW)
+              if (idx !== -1) newPieces.splice(idx, 1)
+              const locPieces = newPiecesByLoc[effectiveLocId] ? [...newPiecesByLoc[effectiveLocId]] : []
+              const lIdx = locPieces.indexOf(numPW)
+              if (lIdx !== -1) locPieces.splice(lIdx, 1)
+              newPiecesByLoc[effectiveLocId] = locPieces
+            }
+            return {
+              ...p,
+              stock: newStock,
+              stockByLocation: newStockByLoc,
+              ...(isIdol ? {
+                pieceWeights: newPieces,
+                pieceWeightsByLocation: newPiecesByLoc,
+                weight: newPieces.length > 0 ? Number((newPieces.reduce((a, b) => a + b, 0) / newPieces.length).toFixed(3)) : 0
+              } : {})
+            }
+          })
+        )
       } else if (movementType === 'transfer') {
         const isIdol = prod.category === 'Idols'
         if (isIdol && !movementPieceWeight) {
@@ -928,7 +1130,7 @@ export default function AdminInventory() {
         if (effectiveLocId === movementToLocationId) {
           throw new Error('Source and destination locations cannot be identical')
         }
-        await recordTransaction({
+        res = await recordTransaction({
           type: 'transfer',
           productId: prod.id,
           productName: prod.name,
@@ -943,10 +1145,35 @@ export default function AdminInventory() {
           date: movementDate,
           notes: movementNotes
         })
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.id !== prod.id) return p
+            const newStockByLoc = {
+              ...(p.stockByLocation || {}),
+              [effectiveLocId]: Math.max(0, (p.stockByLocation?.[effectiveLocId] || 0) - qty),
+              [movementToLocationId]: (p.stockByLocation?.[movementToLocationId] || 0) + qty
+            }
+            const newPiecesByLoc = p.pieceWeightsByLocation ? { ...p.pieceWeightsByLocation } : {}
+            if (isIdol && movementPieceWeight) {
+              const numPW = Number(movementPieceWeight)
+              const srcPieces = newPiecesByLoc[effectiveLocId] ? [...newPiecesByLoc[effectiveLocId]] : []
+              const sIdx = srcPieces.indexOf(numPW)
+              if (sIdx !== -1) srcPieces.splice(sIdx, 1)
+              newPiecesByLoc[effectiveLocId] = srcPieces
+              const destPieces = newPiecesByLoc[movementToLocationId] ? [...newPiecesByLoc[movementToLocationId]] : []
+              newPiecesByLoc[movementToLocationId] = [...destPieces, numPW]
+            }
+            return {
+              ...p,
+              stockByLocation: newStockByLoc,
+              ...(isIdol ? { pieceWeightsByLocation: newPiecesByLoc } : {})
+            }
+          })
+        )
       } else if (movementType === 'adjustment') {
         const qty = Number(movementQty)
         if (isNaN(qty) || qty === 0) throw new Error('Adjustment quantity cannot be 0')
-        await recordTransaction({
+        res = await recordTransaction({
           type: 'adjustment',
           productId: prod.id,
           productName: prod.name,
@@ -958,11 +1185,28 @@ export default function AdminInventory() {
           date: movementDate,
           notes: movementNotes
         })
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.id !== prod.id) return p
+            const newStock = Math.max(0, (p.stock || 0) + qty)
+            const newStockByLoc = {
+              ...(p.stockByLocation || {}),
+              [effectiveLocId]: Math.max(0, (p.stockByLocation?.[effectiveLocId] || 0) + qty)
+            }
+            return {
+              ...p,
+              stock: newStock,
+              stockByLocation: newStockByLoc
+            }
+          })
+        )
       }
 
+      if (res?.transaction) {
+        setTransactions((prev) => [res.transaction, ...prev])
+      }
       setIsMovementFormOpen(false)
       toast.success(`${movementType.charAt(0).toUpperCase() + movementType.slice(1)} recorded successfully`)
-      await loadAll()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record movement'
       setMovementError(msg)
@@ -979,10 +1223,58 @@ export default function AdminInventory() {
     }
     if (!deleteTxTarget) return
     try {
-      await deleteTransaction(deleteTxTarget)
+      const res = await deleteTransaction(deleteTxTarget)
+      setTransactions((prev) => {
+        const updated = prev.map((t) => (t.id === deleteTxTarget.id ? { ...t, isReversed: true } : t))
+        if (res.reversingEntry) {
+          return [res.reversingEntry, ...updated]
+        }
+        return updated
+      })
+
+      // Invert stock effect in products
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.id !== deleteTxTarget.productId) return p
+          const qty = Number(deleteTxTarget.quantity || 0)
+          const locId = deleteTxTarget.locationId
+          const toLocId = deleteTxTarget.toLocationId
+
+          if (deleteTxTarget.type === 'purchase') {
+            const newStock = Math.max(0, (p.stock || 0) - qty)
+            const newStockByLoc = {
+              ...(p.stockByLocation || {}),
+              [locId]: Math.max(0, (p.stockByLocation?.[locId] || 0) - qty)
+            }
+            return { ...p, stock: newStock, stockByLocation: newStockByLoc }
+          } else if (deleteTxTarget.type === 'transfer' && toLocId) {
+            const newStockByLoc = {
+              ...(p.stockByLocation || {}),
+              [locId]: (p.stockByLocation?.[locId] || 0) + qty,
+              [toLocId]: Math.max(0, (p.stockByLocation?.[toLocId] || 0) - qty)
+            }
+            return { ...p, stockByLocation: newStockByLoc }
+          } else if (deleteTxTarget.type === 'adjustment') {
+            const newStock = Math.max(0, (p.stock || 0) - qty)
+            const newStockByLoc = {
+              ...(p.stockByLocation || {}),
+              [locId]: Math.max(0, (p.stockByLocation?.[locId] || 0) - qty)
+            }
+            return { ...p, stock: newStock, stockByLocation: newStockByLoc }
+          } else if (deleteTxTarget.type === 'melt') {
+            const newStock = (p.stock || 0) + qty
+            const newStockByLoc = {
+              ...(p.stockByLocation || {}),
+              [locId]: (p.stockByLocation?.[locId] || 0) + qty
+            }
+            return { ...p, stock: newStock, stockByLocation: newStockByLoc }
+          }
+          return p
+        })
+      )
+
       toast.success('Reversing entry posted successfully')
       setDeleteTxTarget(null)
-      await loadAll()
     } catch (err: unknown) {
       console.error('Failed to reverse transaction', err)
       const msg = err instanceof Error ? err.message : 'Failed to reverse transaction'
@@ -1164,6 +1456,68 @@ export default function AdminInventory() {
           Stock Movements ({filteredMovements.length})
         </button>
       </div>
+
+      {/* Date Range Filter Bar for Purchases and Movements */}
+      {(activeTab === 'purchases' || activeTab === 'movements') && (
+        <div className="flex flex-wrap items-center justify-between gap-4 p-3.5 mb-6 bg-white border border-gray-200 rounded-xl">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500 mr-1">
+              <Calendar size={14} className="text-gray-400" />
+              Date Range:
+            </span>
+            {([
+              { id: 'all', label: 'All Dates' },
+              { id: 'today', label: 'Today' },
+              { id: 'week', label: 'Last 7 Days' },
+              { id: 'month', label: 'Last 30 Days' },
+              { id: 'custom', label: 'Custom' },
+            ] as const).map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => {
+                  setDateRangePreset(preset.id)
+                  setPurchasesPage(1)
+                  setMovementsPage(1)
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${dateRangePreset === preset.id
+                  ? 'bg-black text-white border border-black shadow-xs'
+                  : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
+                  }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          {dateRangePreset === 'custom' && (
+            <div className="flex items-center gap-2">
+              <div className="w-36">
+                <CustomDatePicker
+                  value={customStartDate}
+                  onChange={(d) => {
+                    setCustomStartDate(d)
+                    setPurchasesPage(1)
+                    setMovementsPage(1)
+                  }}
+                  placeholder="Start Date"
+                />
+              </div>
+              <span className="text-xs text-gray-400">to</span>
+              <div className="w-36">
+                <CustomDatePicker
+                  value={customEndDate}
+                  onChange={(d) => {
+                    setCustomEndDate(d)
+                    setPurchasesPage(1)
+                    setMovementsPage(1)
+                  }}
+                  placeholder="End Date"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Dual Filter Pills (Category + Metal) & Sort Controls */}
       <div className="flex flex-col gap-3 mb-6">
@@ -2526,7 +2880,7 @@ export default function AdminInventory() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredPurchases.map((tx) => {
+                  {paginatedPurchases.map((tx) => {
                     const totalVal = tx.price ? tx.price * tx.quantity : 0
                     return (
                       <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
@@ -2591,6 +2945,46 @@ export default function AdminInventory() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {filteredPurchases.length > pageSize && (
+              <div className="px-6 py-3.5 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                <span>
+                  Showing{' '}
+                  <strong className="text-black font-semibold">
+                    {(purchasesPage - 1) * pageSize + 1}
+                  </strong>{' '}
+                  to{' '}
+                  <strong className="text-black font-semibold">
+                    {Math.min(purchasesPage * pageSize, filteredPurchases.length)}
+                  </strong>{' '}
+                  of{' '}
+                  <strong className="text-black font-semibold">
+                    {filteredPurchases.length}
+                  </strong>{' '}
+                  purchases
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPurchasesPage((p) => Math.max(1, p - 1))}
+                    disabled={purchasesPage <= 1}
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="font-medium text-black">
+                    Page {purchasesPage} of {totalPurchasesPages}
+                  </span>
+                  <button
+                    onClick={() => setPurchasesPage((p) => Math.min(totalPurchasesPages, p + 1))}
+                    disabled={purchasesPage >= totalPurchasesPages}
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )
       ) : (
@@ -2636,7 +3030,7 @@ export default function AdminInventory() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredMovements.map((tx) => {
+                  {paginatedMovements.map((tx) => {
                     return (
                       <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
                         <td className="px-6 py-4 text-xs font-mono text-gray-500">
@@ -2756,6 +3150,46 @@ export default function AdminInventory() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {filteredMovements.length > pageSize && (
+              <div className="px-6 py-3.5 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                <span>
+                  Showing{' '}
+                  <strong className="text-black font-semibold">
+                    {(movementsPage - 1) * pageSize + 1}
+                  </strong>{' '}
+                  to{' '}
+                  <strong className="text-black font-semibold">
+                    {Math.min(movementsPage * pageSize, filteredMovements.length)}
+                  </strong>{' '}
+                  of{' '}
+                  <strong className="text-black font-semibold">
+                    {filteredMovements.length}
+                  </strong>{' '}
+                  movements
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setMovementsPage((p) => Math.max(1, p - 1))}
+                    disabled={movementsPage <= 1}
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="font-medium text-black">
+                    Page {movementsPage} of {totalMovementsPages}
+                  </span>
+                  <button
+                    onClick={() => setMovementsPage((p) => Math.min(totalMovementsPages, p + 1))}
+                    disabled={movementsPage >= totalMovementsPages}
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )
       )}

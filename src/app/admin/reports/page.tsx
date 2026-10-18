@@ -76,26 +76,40 @@ export default function AdminReportsPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        setLoading(true)
-        const [prods, locs, txs] = await Promise.all([
-          getProducts(),
-          getLocations(),
-          getTransactions()
-        ])
-        setProducts(prods)
-        setLocations(locs)
-        setTransactions(txs)
-      } catch (err: unknown) {
-        console.error('Failed to load reports data', err)
-        setError('Unable to load reports data. Please try again.')
-      } finally {
-        setLoading(false)
-      }
+    let ignore = false
+    const startDate =
+      dateRange === 'today'
+        ? getTodayIST()
+        : dateRange === 'week'
+          ? getDaysAgoIST(7)
+          : dateRange === 'month'
+            ? getDaysAgoIST(30)
+            : undefined
+
+    Promise.all([
+      getProducts(),
+      getLocations(),
+      getTransactions({ startDate, type: 'sale' })
+    ])
+      .then(([prods, locs, txs]) => {
+        if (!ignore) {
+          setProducts(prods)
+          setLocations(locs)
+          setTransactions(txs)
+          setLoading(false)
+        }
+      })
+      .catch((err: unknown) => {
+        if (!ignore) {
+          console.error('Failed to load reports data', err)
+          setError('Unable to load reports data. Please try again.')
+          setLoading(false)
+        }
+      })
+    return () => {
+      ignore = true
     }
-    loadData()
-  }, [])
+  }, [dateRange])
 
   // -------------------------------------------------------------
   // TOP SELLING PRODUCTS COMPUTATION

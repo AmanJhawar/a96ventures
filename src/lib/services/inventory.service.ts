@@ -4,14 +4,20 @@ import {
   getFirestore,
   collection,
   getDocs,
+  getDoc,
   doc,
   addDoc,
   setDoc,
   deleteDoc,
-  serverTimestamp
+  query,
+  where,
+  orderBy,
+  limit,
+  startAfter,
+  serverTimestamp,
+  QueryConstraint
 } from 'firebase/firestore/lite';
 import { Location, Product, Transaction, TransactionType, ProductCategory, MetalType } from '@/lib/types';
-import { withTimeout } from './utils';
 
 const db = getFirestore(app);
 
@@ -33,9 +39,9 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 // ==========================================
 
 export async function getLocations(): Promise<Location[]> {
-  const querySnapshot = await withTimeout(getDocs(collection(db, 'locations')));
+  const querySnapshot = await getDocs(collection(db, 'locations'));
   const items: Location[] = [];
-  querySnapshot.forEach((docSnap) => {
+  querySnapshot.forEach((docSnap: { data: () => Record<string, unknown>; id: string }) => {
     items.push({ ...docSnap.data(), id: docSnap.id } as Location);
   });
   return items.sort((a, b) => a.name.localeCompare(b.name));
@@ -90,51 +96,7 @@ function getTimestampMs(ts: unknown): number {
 }
 
 export async function getProducts(): Promise<Product[]> {
-  const [prodsSnap, txsSnap] = await Promise.all([
-    withTimeout(getDocs(collection(db, 'products'))),
-    withTimeout(getDocs(collection(db, 'transactions'))).catch(() => null)
-  ]);
-
-  // Derive stock directly and authoritatively from the transaction ledger
-  const ledgerMap = new Map<string, { total: number; byLocation: Record<string, number>; hasLedger: boolean }>();
-
-  if (txsSnap && !txsSnap.empty) {
-    txsSnap.forEach((docSnap) => {
-      const tx = docSnap.data();
-      const pId = tx.productId;
-      if (!pId) return;
-
-      if (!ledgerMap.has(pId)) {
-        ledgerMap.set(pId, { total: 0, byLocation: {}, hasLedger: true });
-      }
-      const record = ledgerMap.get(pId)!;
-      const qty = Number(tx.quantity || 0);
-      const locId = tx.locationId;
-
-      switch (tx.type) {
-        case 'purchase':
-        case 'return':
-          if (locId) record.byLocation[locId] = (record.byLocation[locId] || 0) + qty;
-          record.total += qty;
-          break;
-        case 'sale':
-        case 'melt':
-          if (locId) record.byLocation[locId] = (record.byLocation[locId] || 0) - qty;
-          record.total -= qty;
-          break;
-        case 'transfer':
-          if (locId) record.byLocation[locId] = (record.byLocation[locId] || 0) - qty;
-          if (tx.toLocationId) {
-            record.byLocation[tx.toLocationId] = (record.byLocation[tx.toLocationId] || 0) + qty;
-          }
-          break;
-        case 'adjustment':
-          if (locId) record.byLocation[locId] = (record.byLocation[locId] || 0) + qty;
-          record.total += qty;
-          break;
-      }
-    });
-  }
+  const prodsSnap = await getDocs(collection(db, 'products'));
 
   const items: Product[] = [];
   prodsSnap.forEach((docSnap) => {
@@ -153,11 +115,8 @@ export async function getProducts(): Promise<Product[]> {
       if (!brand) brand = 'Local';
     }
 
-    const derived = ledgerMap.get(docSnap.id);
-
-    // If transactions exist for this product, use the derived ledger stock
-    const finalStock = derived?.hasLedger ? derived.total : Number(data.stock || 0);
-    const finalStockByLoc = derived?.hasLedger ? derived.byLocation : (data.stockByLocation || {});
+    const finalStock = Number(data.stock || 0);
+    const finalStockByLoc = (data.stockByLocation || {}) as Record<string, number>;
 
       const wMg = data.weightMg !== undefined ? Number(data.weightMg) : Math.round(Number(data.weight || 0) * 1000);
       const pieceWs = Array.isArray(data.pieceWeightsMg)
@@ -281,9 +240,51 @@ export async function deleteProduct(id: string): Promise<void> {
 // TRANSACTIONS & STOCK LOGIC (SERVER-PROCESSED)
 // ==========================================
 
-export async function getTransactions(): Promise<Transaction[]> {
-  const querySnapshot = await withTimeout(getDocs(collection(db, 'transactions')));
-  const items: Transaction[] = [];
+export interface TransactionFilterOptions {
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string;   // YYYY-MM-DD
+  type?: TransactionType | 'All';
+  limitCount?: number;
+  cursorDocId?: string | null;
+}
+
+export interface PaginatedTransactions {
+  transactions: Transaction[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export async function getTransactionsPage(options: TransactionFilterOptions = {}): Promise<PaginatedTransactions> {
+  const constraints: QueryConstraint[] = [];
+
+  if (options.startDate && options.endDate) {
+    constraints.push(where('date', '>=', options.startDate));
+    constraints.push(where('date', '<=', options.endDate));
+    constraints.push(orderBy('date', 'desc'));
+  } else if (options.startDate) {
+    constraints.push(where('date', '>=', options.startDate));
+    constraints.push(orderBy('date', 'desc'));
+  } else if (options.endDate) {
+    constraints.push(where('date', '<=', options.endDate));
+    constraints.push(orderBy('date', 'desc'));
+  } else {
+    constraints.push(orderBy('date', 'desc'));
+  }
+
+  if (options.cursorDocId) {
+    const cursorDoc = await getDoc(doc(db, 'transactions', options.cursorDocId));
+    if (cursorDoc.exists()) {
+      constraints.push(startAfter(cursorDoc));
+    }
+  }
+
+  const pageSize = options.limitCount || 30;
+  constraints.push(limit(pageSize));
+
+  const q = query(collection(db, 'transactions'), ...constraints);
+  const querySnapshot = await getDocs(q);
+
+  let items: Transaction[] = [];
   querySnapshot.forEach((docSnap) => {
     const data = docSnap.data();
     items.push({
@@ -302,8 +303,20 @@ export async function getTransactions(): Promise<Transaction[]> {
           : undefined,
     } as Transaction);
   });
-  // Sort by date descending, then createdAt descending
-  return items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  if (options.type && options.type !== 'All') {
+    items = items.filter((t) => t.type === options.type);
+  }
+
+  const nextCursor = querySnapshot.docs.length === pageSize ? querySnapshot.docs[querySnapshot.docs.length - 1].id : null;
+  const hasMore = querySnapshot.docs.length === pageSize;
+
+  return { transactions: items, nextCursor, hasMore };
+}
+
+export async function getTransactions(options?: TransactionFilterOptions): Promise<Transaction[]> {
+  const res = await getTransactionsPage({ limitCount: options?.limitCount || 100, ...options });
+  return res.transactions;
 }
 
 export interface RecordTransactionParams {
@@ -333,7 +346,7 @@ export interface RecordTransactionParams {
  * Record a transaction (purchase, sale, return, transfer, adjustment, repair, melt)
  * via server API with ACID atomic stock validation and verification.
  */
-export async function recordTransaction(params: RecordTransactionParams): Promise<string> {
+export async function recordTransaction(params: RecordTransactionParams): Promise<{ id: string; transaction: Transaction }> {
   const headers = await getAuthHeaders();
   const res = await fetch('/api/admin/transactions', {
     method: 'POST',
@@ -347,13 +360,37 @@ export async function recordTransaction(params: RecordTransactionParams): Promis
   }
 
   const resData = await res.json();
-  return resData.id;
+  const createdTx: Transaction = resData.transaction || {
+    id: resData.id,
+    type: params.type,
+    productId: params.productId,
+    productName: params.productName,
+    category: params.category,
+    brand: params.brand,
+    metal: params.metal,
+    quantity: params.quantity,
+    price: params.price,
+    locationId: params.locationId,
+    locationName: params.locationName,
+    toLocationId: params.toLocationId,
+    toLocationName: params.toLocationName,
+    customerName: params.customerName,
+    notes: params.notes,
+    previousWeight: params.previousWeight,
+    newWeight: params.newWeight,
+    recoveredWeight: params.recoveredWeight,
+    pieceWeights: params.pieceWeights,
+    pieceWeight: params.pieceWeight,
+    date: params.date,
+    createdAt: new Date().toISOString()
+  };
+  return { id: resData.id, transaction: createdTx };
 }
 
 /**
  * Reverse a transaction via server API by posting a linked reversing entry (never deletes).
  */
-export async function reverseTransaction(tx: Transaction): Promise<void> {
+export async function reverseTransaction(tx: Transaction): Promise<{ reversingTransactionId: string; reversingEntry?: Transaction }> {
   const headers = await getAuthHeaders();
   const res = await fetch(`/api/admin/transactions?id=${encodeURIComponent(tx.id)}`, {
     method: 'DELETE',
@@ -364,6 +401,12 @@ export async function reverseTransaction(tx: Transaction): Promise<void> {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Failed to reverse transaction (${res.status})`);
   }
+
+  const resData = await res.json();
+  return {
+    reversingTransactionId: resData.reversingTransactionId,
+    reversingEntry: resData.reversingEntry
+  };
 }
 
 export const deleteTransaction = reverseTransaction;

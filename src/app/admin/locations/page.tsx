@@ -50,7 +50,34 @@ export default function AdminLocations() {
   }
 
   useEffect(() => {
-    loadData()
+    let ignore = false
+    Promise.all([getLocations(), getProducts()])
+      .then(([locs, prods]) => {
+        if (!ignore) {
+          setLocations(locs)
+          const counts: Record<string, number> = {}
+          locs.forEach(l => { counts[l.id] = 0 })
+          prods.forEach(p => {
+            if (p.stockByLocation) {
+              Object.entries(p.stockByLocation).forEach(([locId, qty]) => {
+                counts[locId] = (counts[locId] || 0) + Number(qty || 0)
+              })
+            }
+          })
+          setStockCounts(counts)
+          setLoading(false)
+        }
+      })
+      .catch((err: unknown) => {
+        if (!ignore) {
+          console.error('Failed to load locations', err)
+          setError('Could not load locations. Please check your connection.')
+          setLoading(false)
+        }
+      })
+    return () => {
+      ignore = true
+    }
   }, [])
 
   const handleOpenAdd = () => {
@@ -88,11 +115,13 @@ export default function AdminLocations() {
     try {
       if (editingId) {
         await updateLocation(editingId, { name, description })
+        setLocations((prev) => prev.map((l) => (l.id === editingId ? { ...l, name, description } : l)))
       } else {
-        await addLocation({ name, description })
+        const newId = await addLocation({ name, description })
+        setLocations((prev) => [...prev, { id: newId, name, description }])
+        setStockCounts((prev) => ({ ...prev, [newId]: 0 }))
       }
       handleCancel()
-      await loadData()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save location'
       setError(msg)
@@ -106,8 +135,8 @@ export default function AdminLocations() {
     setDeleteError(null)
     try {
       await deleteLocation(deleteId)
+      setLocations((prev) => prev.filter((l) => l.id !== deleteId))
       setDeleteId(null)
-      await loadData()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to delete location'
       setDeleteError(msg)
