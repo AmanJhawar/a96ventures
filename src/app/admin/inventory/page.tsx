@@ -472,12 +472,29 @@ export default function AdminInventory() {
   }
 
   const locationOptions: SelectOption[] = useMemo(() => {
-    return locations.map((l) => ({ value: l.id, label: l.name }))
+    return locations
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
+      .map((l) => ({ value: l.id, label: l.name }))
   }, [locations])
 
   const productOptions: SelectOption[] = useMemo(() => {
+    const metalOrder = (m?: string) => {
+      const lower = (m || '').toLowerCase()
+      if (lower === 'gold') return 1
+      if (lower === 'silver') return 2
+      return 3
+    }
+
     return products
       .filter((p) => !p.isArchived)
+      .slice()
+      .sort((a, b) => {
+        const orderA = metalOrder(a.metal)
+        const orderB = metalOrder(b.metal)
+        if (orderA !== orderB) return orderA - orderB
+        return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+      })
       .map((p) => {
         const weightLabel = p.category === 'Idols' && p.weight && p.weight > 0 ? `~${formatWeight(p.weight)} avg` : formatWeight(p.weight)
         const brandLabel = p.brand ? ` · ${p.brand}` : ''
@@ -485,7 +502,8 @@ export default function AdminInventory() {
           value: p.id,
           label: p.name,
           sublabel: `${p.metal} · ${p.category}${brandLabel} · ${weightLabel} · ${p.sku}`,
-          badge: `${p.stock} in stock`
+          badge: `${p.stock} in stock`,
+          group: p.metal || 'Silver'
         }
       })
   }, [products])
@@ -1004,16 +1022,15 @@ export default function AdminInventory() {
 
   // Handlers for Purchases
   const handleOpenAddPurchase = () => {
-    const firstP = products[0]
-    setPurchaseLocationId(userAssignedLocationId || locations[0]?.id || '')
-    setPurchaseDate(getTodayIST())
+    setPurchaseLocationId(isLocationLocked && userAssignedLocationId ? userAssignedLocationId : '')
+    setPurchaseDate('')
     setPurchaseNotes('')
     setPurchaseError(null)
     setPurchaseItems([
       {
         id: String(Date.now()),
-        productId: firstP?.id || '',
-        quantity: '1',
+        productId: '',
+        quantity: '',
         price: '',
         pieceWeights: [],
         pieceInput: ''
@@ -1023,13 +1040,12 @@ export default function AdminInventory() {
   }
 
   const handleAddPurchaseItem = () => {
-    const firstP = products[0]
     setPurchaseItems((prev) => [
       ...prev,
       {
         id: String(Date.now() + Math.random()),
-        productId: firstP?.id || '',
-        quantity: '1',
+        productId: '',
+        quantity: '',
         price: '',
         pieceWeights: [],
         pieceInput: ''
@@ -1052,7 +1068,8 @@ export default function AdminInventory() {
         if (updates.productId && updates.productId !== it.productId) {
           next.pieceWeights = []
           next.pieceInput = ''
-          next.quantity = '1'
+          const newP = products.find((p) => p.id === updates.productId)
+          next.quantity = newP?.category === 'Idols' ? '0' : ''
         }
         return next
       })
@@ -1063,7 +1080,12 @@ export default function AdminInventory() {
     e.preventDefault()
     const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : purchaseLocationId
     if (!effectiveLocId) {
-      setPurchaseError('Please select a location')
+      setPurchaseError('Please select a receiving location')
+      return
+    }
+
+    if (!purchaseDate) {
+      setPurchaseError('Please select a purchase date')
       return
     }
 
@@ -1198,20 +1220,17 @@ export default function AdminInventory() {
       ? type
       : (allowedMovementTypes[0] || 'transfer')
     setMovementType(targetType)
-    setMovementProductId(products[0]?.id || '')
-    const defaultSource = userAssignedLocationId || locations[0]?.id || ''
-    setMovementLocationId(defaultSource)
-    const otherLoc = locations.find((l) => l.id !== defaultSource)?.id || locations[1]?.id || ''
-    setMovementToLocationId(otherLoc)
-    setMovementQty('1')
-    setMovementDate(getTodayIST())
+    setMovementProductId('')
+    setMovementLocationId(isLocationLocked && userAssignedLocationId ? userAssignedLocationId : '')
+    setMovementToLocationId('')
+    setMovementQty('')
+    setMovementDate('')
     setMovementNotes('')
     setMovementRepairCharge('')
     setMovementRecoveredWeight('')
     setMovementPieceWeight('')
     setMovementAdjustmentMode('deficit')
-    const firstP = products[0]
-    setMovementNewWeight(firstP ? String(firstP.weight || '') : '')
+    setMovementNewWeight('')
     setMovementError(null)
     setIsMovementFormOpen(true)
   }
@@ -1229,7 +1248,11 @@ export default function AdminInventory() {
     }
     const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : movementLocationId
     if (!effectiveLocId) {
-      setMovementError('Please select a location')
+      setMovementError('Please select a source location')
+      return
+    }
+    if (!movementDate) {
+      setMovementError('Please select a movement date')
       return
     }
 
@@ -2460,9 +2483,13 @@ export default function AdminInventory() {
                               options={productOptions}
                               placeholder="Select product to restock..."
                             />
-                            {prod && (
+                            {prod ? (
                               <div className="text-[11px] text-gray-500 mt-1">
                                 Current stock at location: <strong>{prod.stockByLocation?.[purchaseLocationId] || 0} units</strong>
+                              </div>
+                            ) : (
+                              <div className="text-[11px] text-gray-400 mt-1">
+                                Select a product to view stock
                               </div>
                             )}
                           </div>
@@ -2475,9 +2502,10 @@ export default function AdminInventory() {
                               type="number"
                               min="1"
                               disabled={isIdol}
+                              placeholder={isIdol ? '0' : 'Qty'}
                               value={isIdol ? String(item.pieceWeights.length || 0) : item.quantity}
                               onChange={(e) => handleUpdatePurchaseItem(item.id, { quantity: e.target.value })}
-                              className={`w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
+                              className={`w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150 ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
                               required
                             />
                           </div>

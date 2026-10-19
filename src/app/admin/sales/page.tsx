@@ -253,8 +253,22 @@ export default function AdminSales() {
   }, [returnsList, selectedCategory, selectedMetal])
 
   const saleProductOptions: SelectOption[] = useMemo(() => {
+    const metalOrder = (m?: string) => {
+      const lower = (m || '').toLowerCase()
+      if (lower === 'gold') return 1
+      if (lower === 'silver') return 2
+      return 3
+    }
+
     return products
       .filter((p) => !p.isArchived)
+      .slice()
+      .sort((a, b) => {
+        const orderA = metalOrder(a.metal)
+        const orderB = metalOrder(b.metal)
+        if (orderA !== orderB) return orderA - orderB
+        return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+      })
       .map((p) => {
         const weightLabel = p.category === 'Idols' && p.weight && p.weight > 0 ? `~${formatWeight(p.weight)} avg` : formatWeight(p.weight)
         const brandLabel = p.brand ? ` · ${p.brand}` : ''
@@ -262,7 +276,8 @@ export default function AdminSales() {
           value: p.id,
           label: p.name,
           sublabel: `${p.category}${brandLabel} · ${weightLabel} · ${p.sku}`,
-          badge: `${p.stock} in stock`
+          badge: `${p.stock} in stock`,
+          group: p.metal || 'Silver'
         }
       })
   }, [products])
@@ -300,59 +315,54 @@ export default function AdminSales() {
   }, [selectedReturnProduct])
 
   const saleLocationOptions: SelectOption[] = useMemo(() => {
-    return locations.map((l) => ({
-      value: l.id,
-      label: l.name
-    }))
+    return locations
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
+      .map((l) => ({
+        value: l.id,
+        label: l.name
+      }))
   }, [locations])
 
   const returnLocationOptions: SelectOption[] = useMemo(() => {
-    return locations.map((l) => ({
-      value: l.id,
-      label: l.name
-    }))
+    return locations
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
+      .map((l) => ({
+        value: l.id,
+        label: l.name
+      }))
   }, [locations])
 
   // Open Sale modal (multi-item)
   const handleOpenSaleForm = () => {
-    const firstP = products.find((p) => p.stock > 0) || products[0]
-    let defaultLoc = userAssignedLocationId || locations[0]?.id || ''
-    if (!userAssignedLocationId && firstP?.stockByLocation) {
-      const locWithStock = Object.keys(firstP.stockByLocation).find((id) => (firstP.stockByLocation[id] || 0) > 0)
-      if (locWithStock) defaultLoc = locWithStock
-    }
-    setSaleLocationId(defaultLoc)
+    setSaleLocationId(isLocationLocked && userAssignedLocationId ? userAssignedLocationId : '')
     setSaleCustomerName('')
-    setSaleDate(getTodayIST())
+    setSaleDate('')
     setSaleNotes('')
     setSaleError(null)
 
-    const isFirstIdol = firstP?.category === 'Idols'
-    const locPieces = firstP?.pieceWeightsByLocation?.[defaultLoc] || []
     setSaleItems([
       {
         id: String(Date.now()),
-        productId: firstP?.id || '',
-        quantity: '1',
+        productId: '',
+        quantity: '',
         price: '',
-        pieceWeight: isFirstIdol && locPieces.length > 0 ? String(locPieces[0]) : ''
+        pieceWeight: ''
       }
     ])
     setIsSaleFormOpen(true)
   }
 
   const handleAddSaleItem = () => {
-    const firstP = products.find((p) => p.stock > 0) || products[0]
-    const isIdol = firstP?.category === 'Idols'
-    const locPieces = firstP?.pieceWeightsByLocation?.[saleLocationId] || []
     setSaleItems((prev) => [
       ...prev,
       {
         id: String(Date.now() + Math.random()),
-        productId: firstP?.id || '',
-        quantity: '1',
+        productId: '',
+        quantity: '',
         price: '',
-        pieceWeight: isIdol && locPieces.length > 0 ? String(locPieces[0]) : ''
+        pieceWeight: ''
       }
     ])
   }
@@ -372,9 +382,8 @@ export default function AdminSales() {
         if (updates.productId && updates.productId !== item.productId) {
           const newProd = products.find((p) => p.id === updates.productId)
           const isIdol = newProd?.category === 'Idols'
-          const locPieces = newProd?.pieceWeightsByLocation?.[saleLocationId] || []
-          updated.pieceWeight = isIdol && locPieces.length > 0 ? String(locPieces[0]) : ''
-          updated.quantity = isIdol ? '1' : '1'
+          updated.pieceWeight = ''
+          updated.quantity = isIdol ? '1' : ''
         }
         return updated
       })
@@ -383,13 +392,13 @@ export default function AdminSales() {
 
   // Open Return modal
   const handleOpenReturnForm = () => {
-    setReturnProductId(products[0]?.id || '')
-    setReturnLocationId(userAssignedLocationId || locations[0]?.id || '')
-    setReturnQty('1')
+    setReturnProductId('')
+    setReturnLocationId(isLocationLocked && userAssignedLocationId ? userAssignedLocationId : '')
+    setReturnQty('')
     setReturnPieceWeight('')
     setReturnPrice('')
     setReturnCustomerName('')
-    setReturnDate(getTodayIST())
+    setReturnDate('')
     setReturnNotes('')
     setReturnError(null)
     setIsReturnFormOpen(true)
@@ -401,6 +410,11 @@ export default function AdminSales() {
     const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : saleLocationId
     if (!effectiveLocId) {
       setSaleError('Please select a selling location')
+      return
+    }
+
+    if (!saleDate) {
+      setSaleError('Please select a sale date')
       return
     }
 
@@ -576,6 +590,11 @@ export default function AdminSales() {
     const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : returnLocationId
     if (!effectiveLocId) {
       setReturnError('Please select a location to receive the return')
+      return
+    }
+
+    if (!returnDate) {
+      setReturnError('Please select a return date')
       return
     }
 
@@ -1172,9 +1191,13 @@ export default function AdminSales() {
                             />
                             <div className="flex items-center justify-between text-[11px] text-gray-500 mt-1">
                               <span>Available in store:</span>
-                              <strong className={availableForThisLine > 0 ? 'text-black' : 'text-red-600'}>
-                                {availableForThisLine} units
-                              </strong>
+                              {prod ? (
+                                <strong className={availableForThisLine > 0 ? 'text-black' : 'text-red-600'}>
+                                  {availableForThisLine} units
+                                </strong>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
                             </div>
                           </div>
 
@@ -1187,9 +1210,10 @@ export default function AdminSales() {
                               min="1"
                               max={Math.max(1, availableForThisLine)}
                               disabled={isIdol}
+                              placeholder={isIdol ? '1' : 'Qty'}
                               value={isIdol ? '1' : item.quantity}
                               onChange={(e) => handleUpdateSaleItem(item.id, { quantity: e.target.value })}
-                              className={`w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
+                              className={`w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150 ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
                               required
                             />
                           </div>

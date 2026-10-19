@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, KeyboardEvent, Fragment } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 
 export interface SelectOption {
@@ -8,6 +8,7 @@ export interface SelectOption {
   label: string
   sublabel?: string
   badge?: string
+  group?: string
 }
 
 export interface CustomSelectProps {
@@ -156,38 +157,58 @@ export default function CustomSelect({
             role="listbox"
             className="py-1 m-0 list-none max-h-64 overflow-y-auto divide-y divide-gray-50"
           >
-            {options.map((option, idx) => {
-              const isSelected = value === option.value
-              return (
-                <li key={option.value} role="option" aria-selected={isSelected}>
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => handleSelect(option.value)}
-                    className={`w-full text-left px-3.5 py-2.5 text-sm transition-[background-color,color] duration-150 ease-[var(--ease-out)] flex items-center justify-between gap-2 hover:bg-gray-100 ${
-                      focusedIndex === idx ? 'bg-gray-100' : ''
-                    } ${isSelected ? 'bg-gray-50 font-semibold text-black' : 'text-gray-700'}`}
-                  >
-                    <div className="flex flex-col min-w-0">
-                      <span className="truncate">{option.label}</span>
-                      {option.sublabel && (
-                        <span className="text-xs text-gray-400 font-normal truncate mt-0.5">
-                          {option.sublabel}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {option.badge && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">
-                          {option.badge}
-                        </span>
-                      )}
-                      {isSelected && <Check size={14} className="text-black" />}
-                    </div>
-                  </button>
-                </li>
-              )
-            })}
+            {options.length === 0 ? (
+              <li className="px-3.5 py-4 text-xs text-gray-400 text-center select-none">
+                No options available
+              </li>
+            ) : (
+              options.map((option, idx) => {
+                const isSelected = value === option.value
+                const prevOption = idx > 0 ? options[idx - 1] : null
+                const isNewGroup = Boolean(option.group && (!prevOption || prevOption.group !== option.group))
+
+                return (
+                  <Fragment key={option.value || idx}>
+                    {isNewGroup && (
+                      <li
+                        className="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-gray-50/95 border-y border-gray-100 select-none sticky top-0 z-10 backdrop-blur-xs flex items-center justify-between"
+                        role="presentation"
+                        aria-hidden="true"
+                      >
+                        <span>{option.group}</span>
+                      </li>
+                    )}
+                    <li role="option" aria-selected={isSelected}>
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        onClick={() => handleSelect(option.value)}
+                        className={`w-full text-left px-3.5 py-2.5 text-sm transition-[background-color,color] duration-150 ease-[var(--ease-out)] flex items-center justify-between gap-2 hover:bg-gray-100 ${
+                          focusedIndex === idx ? 'bg-gray-100' : ''
+                        } ${isSelected ? 'bg-gray-50 font-semibold text-black' : 'text-gray-700'}`}
+                      >
+                        <div className="flex flex-col min-w-0">
+                          <span className="truncate">{option.label}</span>
+                          {option.sublabel && (
+                            <span className="text-xs text-gray-400 font-normal truncate mt-0.5">
+                              {option.sublabel}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {option.badge && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">
+                              {option.badge}
+                            </span>
+                          )}
+                          {isSelected && <Check size={14} className="text-black" />}
+                        </div>
+                      </button>
+                    </li>
+                  </Fragment>
+                )
+              })
+            )}
           </ul>
         </div>
       )}
