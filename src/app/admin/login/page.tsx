@@ -223,7 +223,7 @@ function LoginForm() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div id="login-recaptcha-container"></div>
       <div className="max-w-md w-full bg-white p-10 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.06)] border border-gray-100">
-        
+
         {/* Idle session timeout warning banner */}
         {isIdle && step === 'login' && (
           <div className="mb-6 p-4 bg-gray-100 border border-gray-300 rounded-lg text-xs text-gray-800 flex items-start gap-2.5">
@@ -262,7 +262,7 @@ function LoginForm() {
                   spellCheck={false}
                   {...register('identifier')}
                   className={`w-full px-4 py-3 rounded-lg border focus:border-black focus:ring-4 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] ${errors.identifier ? 'border-gray-900' : 'border-gray-200'}`}
-                  placeholder="e.g. aman or aman@a96ventures.com"
+                  placeholder="e.g. username or email"
                 />
                 {errors.identifier && <p className="text-gray-500 font-medium text-sm mt-1">{errors.identifier.message}</p>}
               </div>
@@ -431,7 +431,7 @@ function LoginForm() {
                     type="text"
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
-                    placeholder="e.g. aman or aman@a96ventures.com"
+                    placeholder="e.g. username or email"
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:border-black focus:ring-4 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 text-sm"
                     autoFocus
                   />
