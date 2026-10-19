@@ -12,8 +12,17 @@ import {
   TrendingUp,
   PackageCheck,
   Lock,
-  Calendar
+  Calendar,
+  Trash2
 } from 'lucide-react'
+
+export interface SaleLineItem {
+  id: string
+  productId: string
+  quantity: string
+  price: string
+  pieceWeight?: string
+}
 import { Product, Location, Transaction, ProductCategory, MetalType, TransactionStats } from '@/lib/types'
 import {
   getProducts,
@@ -70,16 +79,15 @@ export default function AdminSales() {
   })
   const [loading, setLoading] = useState(true)
 
-  // Sale form state
+  // Sale form state (multi-item)
   const [isSaleFormOpen, setIsSaleFormOpen] = useState(false)
-  const [saleProductId, setSaleProductId] = useState('')
   const [saleLocationId, setSaleLocationId] = useState('')
-  const [saleQty, setSaleQty] = useState('1')
-  const [salePieceWeight, setSalePieceWeight] = useState('')
-  const [salePrice, setSalePrice] = useState('')
   const [saleCustomerName, setSaleCustomerName] = useState('')
   const [saleDate, setSaleDate] = useState(() => getTodayIST())
   const [saleNotes, setSaleNotes] = useState('')
+  const [saleItems, setSaleItems] = useState<SaleLineItem[]>([
+    { id: '1', productId: '', quantity: '1', price: '', pieceWeight: '' }
+  ])
   const [saleSubmitting, setSaleSubmitting] = useState(false)
   const [saleError, setSaleError] = useState<string | null>(null)
 
@@ -244,17 +252,6 @@ export default function AdminSales() {
     )
   }, [returnsList, selectedCategory, selectedMetal])
 
-  // Selected product in sale form
-  const selectedSaleProduct = useMemo(() => {
-    return products.find((p) => p.id === saleProductId)
-  }, [products, saleProductId])
-
-  // Stock available at selected location for sale form
-  const availableStockAtSaleLocation = useMemo(() => {
-    if (!selectedSaleProduct || !saleLocationId) return 0
-    return selectedSaleProduct.stockByLocation?.[saleLocationId] || 0
-  }, [selectedSaleProduct, saleLocationId])
-
   const saleProductOptions: SelectOption[] = useMemo(() => {
     return products
       .filter((p) => !p.isArchived)
@@ -270,27 +267,29 @@ export default function AdminSales() {
       })
   }, [products])
 
-  const isSaleProductAnIdol = useMemo(() => {
-    return selectedSaleProduct?.category === 'Idols'
-  }, [selectedSaleProduct])
+  const saleTotals = useMemo(() => {
+    let totalUnits = 0
+    let totalWeightGrams = 0
+    let grandTotal = 0
 
-  const availableSalePieces = useMemo(() => {
-    if (!selectedSaleProduct || !saleLocationId) return []
-    return selectedSaleProduct.pieceWeightsByLocation?.[saleLocationId] || []
-  }, [selectedSaleProduct, saleLocationId])
+    saleItems.forEach((item) => {
+      const prod = products.find((p) => p.id === item.productId)
+      const qty = Number(item.quantity) || 0
+      const price = Number(item.price) || 0
+      totalUnits += qty
+      grandTotal += qty * price
 
-  const [prevSaleKey, setPrevSaleKey] = useState('')
-  const saleKey = `${saleProductId}_${saleLocationId}_${availableSalePieces.join(',')}`
-  if (saleKey !== prevSaleKey) {
-    setPrevSaleKey(saleKey)
-    if (isSaleProductAnIdol && availableSalePieces.length > 0) {
-      if (!salePieceWeight || !availableSalePieces.includes(Number(salePieceWeight))) {
-        setSalePieceWeight(String(availableSalePieces[0]))
+      if (prod) {
+        if (prod.category === 'Idols' && item.pieceWeight) {
+          totalWeightGrams += Number(item.pieceWeight) || 0
+        } else if (prod.weight) {
+          totalWeightGrams += prod.weight * qty
+        }
       }
-    } else if (isSaleProductAnIdol && availableSalePieces.length === 0) {
-      setSalePieceWeight('')
-    }
-  }
+    })
+
+    return { totalUnits, totalWeightGrams, grandTotal }
+  }, [saleItems, products])
 
   const selectedReturnProduct = useMemo(() => {
     return products.find((p) => p.id === returnProductId)
@@ -301,15 +300,11 @@ export default function AdminSales() {
   }, [selectedReturnProduct])
 
   const saleLocationOptions: SelectOption[] = useMemo(() => {
-    return locations.map((l) => {
-      const stock = selectedSaleProduct?.stockByLocation?.[l.id] || 0
-      return {
-        value: l.id,
-        label: l.name,
-        badge: `${stock} available`
-      }
-    })
-  }, [locations, selectedSaleProduct])
+    return locations.map((l) => ({
+      value: l.id,
+      label: l.name
+    }))
+  }, [locations])
 
   const returnLocationOptions: SelectOption[] = useMemo(() => {
     return locations.map((l) => ({
@@ -318,31 +313,77 @@ export default function AdminSales() {
     }))
   }, [locations])
 
-  // Open Sale modal
+  // Open Sale modal (multi-item)
   const handleOpenSaleForm = () => {
     const firstP = products.find((p) => p.stock > 0) || products[0]
-    setSaleProductId(firstP?.id || '')
-    // Default and lock to assigned store if staff has an assignment
     let defaultLoc = userAssignedLocationId || locations[0]?.id || ''
     if (!userAssignedLocationId && firstP?.stockByLocation) {
       const locWithStock = Object.keys(firstP.stockByLocation).find((id) => (firstP.stockByLocation[id] || 0) > 0)
       if (locWithStock) defaultLoc = locWithStock
     }
     setSaleLocationId(defaultLoc)
-    setSaleQty('1')
-    setSalePieceWeight('')
-    setSalePrice('')
     setSaleCustomerName('')
     setSaleDate(getTodayIST())
     setSaleNotes('')
     setSaleError(null)
+
+    const isFirstIdol = firstP?.category === 'Idols'
+    const locPieces = firstP?.pieceWeightsByLocation?.[defaultLoc] || []
+    setSaleItems([
+      {
+        id: String(Date.now()),
+        productId: firstP?.id || '',
+        quantity: '1',
+        price: '',
+        pieceWeight: isFirstIdol && locPieces.length > 0 ? String(locPieces[0]) : ''
+      }
+    ])
     setIsSaleFormOpen(true)
+  }
+
+  const handleAddSaleItem = () => {
+    const firstP = products.find((p) => p.stock > 0) || products[0]
+    const isIdol = firstP?.category === 'Idols'
+    const locPieces = firstP?.pieceWeightsByLocation?.[saleLocationId] || []
+    setSaleItems((prev) => [
+      ...prev,
+      {
+        id: String(Date.now() + Math.random()),
+        productId: firstP?.id || '',
+        quantity: '1',
+        price: '',
+        pieceWeight: isIdol && locPieces.length > 0 ? String(locPieces[0]) : ''
+      }
+    ])
+  }
+
+  const handleRemoveSaleItem = (id: string) => {
+    setSaleItems((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((item) => item.id !== id)
+    })
+  }
+
+  const handleUpdateSaleItem = (id: string, updates: Partial<SaleLineItem>) => {
+    setSaleItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+        const updated = { ...item, ...updates }
+        if (updates.productId && updates.productId !== item.productId) {
+          const newProd = products.find((p) => p.id === updates.productId)
+          const isIdol = newProd?.category === 'Idols'
+          const locPieces = newProd?.pieceWeightsByLocation?.[saleLocationId] || []
+          updated.pieceWeight = isIdol && locPieces.length > 0 ? String(locPieces[0]) : ''
+          updated.quantity = isIdol ? '1' : '1'
+        }
+        return updated
+      })
+    )
   }
 
   // Open Return modal
   const handleOpenReturnForm = () => {
     setReturnProductId(products[0]?.id || '')
-    // Default and lock to assigned store if staff has an assignment
     setReturnLocationId(userAssignedLocationId || locations[0]?.id || '')
     setReturnQty('1')
     setReturnPieceWeight('')
@@ -354,41 +395,83 @@ export default function AdminSales() {
     setIsReturnFormOpen(true)
   }
 
-  // Submit Sale
+  // Submit Multi-Item Sale
   const handleSaveSale = async (e: React.FormEvent) => {
     e.preventDefault()
-    const prod = products.find((p) => p.id === saleProductId)
-    if (!prod) {
-      setSaleError('Please select a valid product')
-      return
-    }
     const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : saleLocationId
     if (!effectiveLocId) {
       setSaleError('Please select a selling location')
       return
     }
 
-    const isIdol = prod.category === 'Idols'
-    if (isIdol && !salePieceWeight) {
-      setSaleError('Please select which specific piece weight is being sold')
-      return
-    }
-    const qty = isIdol ? 1 : Number(saleQty)
-
-    if (isNaN(qty) || qty <= 0) {
-      setSaleError('Quantity must be at least 1')
+    if (saleItems.length === 0) {
+      setSaleError('Please add at least one item to the sale')
       return
     }
 
-    if (!salePrice || isNaN(Number(salePrice)) || Number(salePrice) <= 0) {
-      setSaleError('Selling price per unit is required and must be greater than ₹0')
-      return
-    }
+    // Validate each line item
+    const validatedItems: Array<{
+      prod: Product
+      qty: number
+      price: number
+      pieceWeight?: number
+    }> = []
 
-    const stockAvailable = prod.stockByLocation?.[effectiveLocId] || 0
-    if (qty > stockAvailable) {
-      setSaleError(`Insufficient stock at this location. Available: ${stockAvailable}, Requested: ${qty}`)
-      return
+    const requiredStockPerProduct: Record<string, number> = {}
+    const chosenPiecesPerProduct: Record<string, Set<number>> = {}
+
+    for (let i = 0; i < saleItems.length; i++) {
+      const item = saleItems[i]
+      const itemNum = i + 1
+      const prod = products.find((p) => p.id === item.productId)
+      if (!prod) {
+        setSaleError(`Item #${itemNum}: Please select a valid product`)
+        return
+      }
+
+      const isIdol = prod.category === 'Idols'
+      if (isIdol && !item.pieceWeight) {
+        setSaleError(`Item #${itemNum} (${prod.name}): Please select which piece weight is being sold`)
+        return
+      }
+
+      const qty = isIdol ? 1 : Number(item.quantity)
+      if (isNaN(qty) || qty <= 0) {
+        setSaleError(`Item #${itemNum} (${prod.name}): Quantity must be at least 1`)
+        return
+      }
+
+      const unitPrice = Number(item.price)
+      if (isNaN(unitPrice) || unitPrice <= 0) {
+        setSaleError(`Item #${itemNum} (${prod.name}): Selling price per unit is required and must be greater than ₹0`)
+        return
+      }
+
+      if (isIdol && item.pieceWeight) {
+        const pw = Number(item.pieceWeight)
+        if (!chosenPiecesPerProduct[prod.id]) {
+          chosenPiecesPerProduct[prod.id] = new Set()
+        }
+        if (chosenPiecesPerProduct[prod.id].has(pw)) {
+          setSaleError(`Item #${itemNum}: Piece weight ${formatWeight(pw)} is already selected in another row`)
+          return
+        }
+        chosenPiecesPerProduct[prod.id].add(pw)
+      }
+
+      requiredStockPerProduct[prod.id] = (requiredStockPerProduct[prod.id] || 0) + qty
+      const available = prod.stockByLocation?.[effectiveLocId] || 0
+      if (requiredStockPerProduct[prod.id] > available) {
+        setSaleError(`Insufficient stock for "${prod.name}" at this location. Available: ${available}, Total in sale: ${requiredStockPerProduct[prod.id]}`)
+        return
+      }
+
+      validatedItems.push({
+        prod,
+        qty,
+        price: unitPrice,
+        pieceWeight: isIdol && item.pieceWeight ? Number(item.pieceWeight) : undefined
+      })
     }
 
     setSaleSubmitting(true)
@@ -396,66 +479,83 @@ export default function AdminSales() {
 
     try {
       const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
-      const { transaction: createdTx } = await recordTransaction({
-        type: 'sale',
-        productId: prod.id,
-        productName: prod.name,
-        category: prod.category,
-        brand: prod.brand,
-        metal: prod.metal,
-        quantity: qty,
-        pieceWeight: isIdol ? Number(salePieceWeight) : undefined,
-        price: Number(salePrice),
-        locationId: effectiveLocId,
-        locationName: locName,
-        customerName: saleCustomerName,
-        date: saleDate,
-        notes: saleNotes
-      })
-      setIsSaleFormOpen(false)
-      toast.success('Sale recorded successfully')
+      const invoiceRef = saleNotes.trim() || `INV-${Date.now().toString(36).toUpperCase()}`
 
-      // Optimistically update local transactions & product stock without network reloads
-      setSalesList((prev) => [createdTx, ...prev])
-      const saleAmt = (Number(salePrice) || 0) * qty
+      const createdTransactions: Transaction[] = []
+      for (const it of validatedItems) {
+        const { transaction: createdTx } = await recordTransaction({
+          type: 'sale',
+          productId: it.prod.id,
+          productName: it.prod.name,
+          category: it.prod.category,
+          brand: it.prod.brand,
+          metal: it.prod.metal,
+          quantity: it.qty,
+          pieceWeight: it.pieceWeight,
+          price: it.price,
+          locationId: effectiveLocId,
+          locationName: locName,
+          customerName: saleCustomerName,
+          date: saleDate,
+          notes: invoiceRef
+        })
+        createdTransactions.push(createdTx)
+      }
+
+      setIsSaleFormOpen(false)
+      toast.success(
+        validatedItems.length === 1
+          ? 'Sale recorded successfully'
+          : `Recorded sale with ${validatedItems.length} items successfully`
+      )
+
+      setSalesList((prev) => [...createdTransactions, ...prev])
+      const totalSaleAmt = validatedItems.reduce((sum, it) => sum + it.price * it.qty, 0)
+      const totalUnits = validatedItems.reduce((sum, it) => sum + it.qty, 0)
+
       setStats((prev) => ({
         ...prev,
-        salesCount: prev.salesCount + 1,
-        salesUnits: prev.salesUnits + qty,
-        salesRevenue: prev.salesRevenue + saleAmt,
-        netRevenue: prev.netRevenue + saleAmt
+        salesCount: prev.salesCount + validatedItems.length,
+        salesUnits: prev.salesUnits + totalUnits,
+        salesRevenue: prev.salesRevenue + totalSaleAmt,
+        netRevenue: prev.netRevenue + totalSaleAmt
       }))
-      setProducts((prev) =>
-        prev.map((p) => {
-          if (p.id !== prod.id) return p
-          const currentLocStock = p.stockByLocation?.[effectiveLocId] || 0
-          const updatedLocStock = Math.max(0, currentLocStock - qty)
-          const updatedStockByLoc = { ...p.stockByLocation, [effectiveLocId]: updatedLocStock }
-          const updatedTotalStock = Math.max(0, (p.stock || 0) - qty)
 
-          let updatedPieces = p.pieceWeights
-          let updatedPiecesByLoc = p.pieceWeightsByLocation
-          if (isIdol && salePieceWeight) {
-            const soldWeight = Number(salePieceWeight)
-            const locPieces = p.pieceWeightsByLocation?.[effectiveLocId] || []
-            const idxInLoc = locPieces.indexOf(soldWeight)
-            const newLocPieces = idxInLoc >= 0 ? [...locPieces.slice(0, idxInLoc), ...locPieces.slice(idxInLoc + 1)] : locPieces
-            updatedPiecesByLoc = { ...p.pieceWeightsByLocation, [effectiveLocId]: newLocPieces }
+      setProducts((prev) => {
+        let updated = [...prev]
+        for (const it of validatedItems) {
+          updated = updated.map((p) => {
+            if (p.id !== it.prod.id) return p
+            const currentLocStock = p.stockByLocation?.[effectiveLocId] || 0
+            const updatedLocStock = Math.max(0, currentLocStock - it.qty)
+            const updatedStockByLoc = { ...p.stockByLocation, [effectiveLocId]: updatedLocStock }
+            const updatedTotalStock = Math.max(0, (p.stock || 0) - it.qty)
 
-            const allPieces = p.pieceWeights || []
-            const idxInAll = allPieces.indexOf(soldWeight)
-            updatedPieces = idxInAll >= 0 ? [...allPieces.slice(0, idxInAll), ...allPieces.slice(idxInAll + 1)] : allPieces
-          }
+            let updatedPieces = p.pieceWeights
+            let updatedPiecesByLoc = p.pieceWeightsByLocation
+            if (it.pieceWeight) {
+              const soldWeight = it.pieceWeight
+              const locPieces = p.pieceWeightsByLocation?.[effectiveLocId] || []
+              const idxInLoc = locPieces.indexOf(soldWeight)
+              const newLocPieces = idxInLoc >= 0 ? [...locPieces.slice(0, idxInLoc), ...locPieces.slice(idxInLoc + 1)] : locPieces
+              updatedPiecesByLoc = { ...p.pieceWeightsByLocation, [effectiveLocId]: newLocPieces }
 
-          return {
-            ...p,
-            stock: updatedTotalStock,
-            stockByLocation: updatedStockByLoc,
-            pieceWeights: updatedPieces,
-            pieceWeightsByLocation: updatedPiecesByLoc
-          }
-        })
-      )
+              const allPieces = p.pieceWeights || []
+              const idxInAll = allPieces.indexOf(soldWeight)
+              updatedPieces = idxInAll >= 0 ? [...allPieces.slice(0, idxInAll), ...allPieces.slice(idxInAll + 1)] : allPieces
+            }
+
+            return {
+              ...p,
+              stock: updatedTotalStock,
+              stockByLocation: updatedStockByLoc,
+              pieceWeights: updatedPieces,
+              pieceWeightsByLocation: updatedPiecesByLoc
+            }
+          })
+        }
+        return updated
+      })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record sale'
       setSaleError(msg)
@@ -903,8 +1003,14 @@ export default function AdminSales() {
             className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
           >
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-black">Record Customer Sale</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-black">Record Customer Sale</h2>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                  {saleItems.length} {saleItems.length === 1 ? 'item' : 'items'}
+                </span>
+              </div>
               <button
+                type="button"
                 onClick={() => setIsSaleFormOpen(false)}
                 className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
               >
@@ -914,146 +1020,42 @@ export default function AdminSales() {
 
             {saleError && (
               <div className="mb-4 p-3 bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg flex items-center gap-2">
-                <AlertCircle size={14} className="text-gray-600" />
-                {saleError}
+                <AlertCircle size={14} className="text-gray-600 shrink-0" />
+                <span>{saleError}</span>
               </div>
             )}
 
-            <form onSubmit={handleSaveSale} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Select Product <span className="text-red-500">*</span>
-                  </label>
-                  <CustomSelect
-                    value={saleProductId}
-                    onValueChange={setSaleProductId}
-                    options={saleProductOptions}
-                    placeholder="Select product to sell..."
-                  />
-                </div>
-
+            <form onSubmit={handleSaveSale} className="space-y-5">
+              {/* Common Sale Metadata Header */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50/70 border border-gray-200 rounded-xl">
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Fulfill from Location <span className="text-red-500">*</span>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700">
+                      Location <span className="text-red-500">*</span>
                     </label>
                     {isLocationLocked && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
-                        <Lock className="w-3 h-3 text-gray-500" />
-                        Assigned Store
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
+                        <Lock className="w-2.5 h-2.5 text-gray-500" />
+                        Locked
                       </span>
                     )}
                   </div>
                   {isLocationLocked ? (
-                    <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-black flex items-center justify-between">
-                      <span className="font-semibold text-black">
-                        {locationMap.get(saleLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
-                      </span>
-                      <span className="text-xs text-gray-500 font-medium">
-                        Default & Locked
-                      </span>
+                    <div className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-xs font-semibold text-black">
+                      {locationMap.get(saleLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
                     </div>
                   ) : (
                     <CustomSelect
                       value={saleLocationId}
                       onValueChange={setSaleLocationId}
                       options={saleLocationOptions}
-                      placeholder="Select selling location..."
+                      placeholder="Select location..."
                     />
                   )}
-                  <div className="text-xs text-gray-500 mt-1">
-                    Available at selected location:{' '}
-                    <strong className={availableStockAtSaleLocation > 0 ? 'text-black' : 'text-gray-400'}>
-                      {availableStockAtSaleLocation} units
-                    </strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* Idol Piece Selection for Sale */}
-              {isSaleProductAnIdol && (
-                <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Select Piece Weight to Sell <span className="text-red-500">*</span>
-                    </label>
-                    <span className="text-[11px] text-gray-500 font-medium">
-                      {availableSalePieces.length} available at this location
-                    </span>
-                  </div>
-                  {availableSalePieces.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
-                      {availableSalePieces.map((pw, i) => (
-                        <button
-                          key={`${pw}-${i}`}
-                          type="button"
-                          onClick={() => setSalePieceWeight(String(pw))}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${String(salePieceWeight) === String(pw)
-                            ? 'bg-black text-white shadow-xs'
-                            : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
-                            }`}
-                        >
-                          #{i + 1}: {formatWeight(pw)}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-black font-semibold">
-                      No idol pieces in stock at this location.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Quantity Sold <span className="text-red-500">*</span>
-                    </label>
-                    {isSaleProductAnIdol && salePieceWeight && (
-                      <span className="text-[11px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
-                        Piece: {formatWeight(salePieceWeight)}
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    type="number"
-                    min="1"
-                    max={availableStockAtSaleLocation}
-                    disabled={isSaleProductAnIdol}
-                    value={isSaleProductAnIdol ? '1' : saleQty}
-                    onChange={(e) => setSaleQty(e.target.value)}
-                    className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isSaleProductAnIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''
-                      }`}
-                    required
-                  />
-                  {isSaleProductAnIdol && (
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      Idols are sold 1 unique piece at a time.
-                    </p>
-                  )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Selling Price per Unit (₹) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    placeholder="e.g. 78500"
-                    value={salePrice}
-                    onChange={(e) => setSalePrice(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                     Sale Date <span className="text-red-500">*</span>
                   </label>
                   <CustomDatePicker
@@ -1062,52 +1064,252 @@ export default function AdminSales() {
                     placeholder="Select sale date"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                     Customer Name / Entity
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Rajesh Kumar / Sterling Jewellers"
+                    placeholder="e.g. Rajesh Kumar"
                     value={saleCustomerName}
                     onChange={(e) => setSaleCustomerName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Invoice / Reference / Notes
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Invoice / Notes
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Tax Invoice #INV-2026-081"
+                    placeholder="e.g. Tax Invoice #INV-001"
                     value={saleNotes}
                     onChange={(e) => setSaleNotes(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsSaleFormOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saleSubmitting || availableStockAtSaleLocation === 0}
-                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-                >
-                  <Check size={16} />
-                  {saleSubmitting ? 'Recording...' : 'Complete Sale & Deduct Stock'}
-                </button>
+              {/* Line Items List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    Items to Sell ({saleItems.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddSaleItem}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-black bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    <Plus size={13} />
+                    Add Another Item
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {saleItems.map((item, idx) => {
+                    const prod = products.find((p) => p.id === item.productId)
+                    const isIdol = prod?.category === 'Idols'
+                    const availableInStore = prod?.stockByLocation?.[saleLocationId] || 0
+                    const usedInOtherLines = saleItems
+                      .filter((other) => other.id !== item.id && other.productId === item.productId)
+                      .reduce((sum, other) => sum + (Number(other.quantity) || 0), 0)
+                    const availableForThisLine = Math.max(0, availableInStore - usedInOtherLines)
+
+                    const locPieces = prod?.pieceWeightsByLocation?.[saleLocationId] || []
+                    const chosenInOtherLines = new Set(
+                      saleItems
+                        .filter((other) => other.id !== item.id && other.productId === item.productId && other.pieceWeight)
+                        .map((other) => Number(other.pieceWeight))
+                    )
+                    const availableLinePieces = locPieces.filter((pw) => !chosenInOtherLines.has(pw))
+                    const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0)
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3 relative"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center">
+                              {idx + 1}
+                            </span>
+                            <span className="text-xs font-semibold text-gray-800">
+                              Item #{idx + 1}
+                            </span>
+                            {prod && (
+                              <span className="text-[11px] font-mono text-gray-500">
+                                ({prod.category} · {prod.metal || 'Silver'})
+                              </span>
+                            )}
+                          </div>
+
+                          {saleItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSaleItem(item.id)}
+                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                              title="Remove item"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+                          <div className="sm:col-span-6">
+                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
+                              Product <span className="text-red-500">*</span>
+                            </label>
+                            <CustomSelect
+                              value={item.productId}
+                              onValueChange={(val) => handleUpdateSaleItem(item.id, { productId: val })}
+                              options={saleProductOptions}
+                              placeholder="Select product..."
+                            />
+                            <div className="flex items-center justify-between text-[11px] text-gray-500 mt-1">
+                              <span>Available in store:</span>
+                              <strong className={availableForThisLine > 0 ? 'text-black' : 'text-red-600'}>
+                                {availableForThisLine} units
+                              </strong>
+                            </div>
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
+                              Qty <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max={Math.max(1, availableForThisLine)}
+                              disabled={isIdol}
+                              value={isIdol ? '1' : item.quantity}
+                              onChange={(e) => handleUpdateSaleItem(item.id, { quantity: e.target.value })}
+                              className={`w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
+                              required
+                            />
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
+                              Unit Price (₹) <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              placeholder="e.g. 78500"
+                              value={item.price}
+                              onChange={(e) => handleUpdateSaleItem(item.id, { price: e.target.value })}
+                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                              required
+                            />
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
+                              Total
+                            </label>
+                            <div className="h-[34px] px-3 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-end font-bold text-xs text-black tabular-nums">
+                              {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN')}` : '—'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Idol piece weight selector */}
+                        {isIdol && (
+                          <div className="pt-2 border-t border-gray-200/60">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-700">
+                                Select Piece Weight <span className="text-red-500">*</span>
+                              </span>
+                              <span className="text-[11px] text-gray-500">
+                                {availableLinePieces.length} available
+                              </span>
+                            </div>
+                            {availableLinePieces.length > 0 ? (
+                              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                                {availableLinePieces.map((pw, i) => (
+                                  <button
+                                    key={`${pw}-${i}`}
+                                    type="button"
+                                    onClick={() => handleUpdateSaleItem(item.id, { pieceWeight: String(pw) })}
+                                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${
+                                      String(item.pieceWeight) === String(pw)
+                                        ? 'bg-black text-white shadow-xs'
+                                        : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                                    }`}
+                                  >
+                                    #{i + 1}: {formatWeight(pw)}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-red-600 font-semibold">
+                                No available idol pieces in stock at this location.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Order Summary Footer */}
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-6 divide-x divide-gray-200 text-xs">
+                  <div>
+                    <span className="text-gray-500 block">Total Items</span>
+                    <span className="font-bold text-sm text-black tabular-nums">
+                      {saleItems.length} {saleItems.length === 1 ? 'item' : 'items'} ({saleTotals.totalUnits} units)
+                    </span>
+                  </div>
+                  {saleTotals.totalWeightGrams > 0 && (
+                    <div className="pl-6">
+                      <span className="text-gray-500 block">Total Weight</span>
+                      <span className="font-bold text-sm text-black tabular-nums">
+                        {formatWeight(saleTotals.totalWeightGrams)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="pl-6">
+                    <span className="text-gray-500 block">Grand Total</span>
+                    <span className="font-extrabold text-base text-black tabular-nums">
+                      ₹{saleTotals.grandTotal.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsSaleFormOpen(false)}
+                    className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saleSubmitting || saleTotals.totalUnits === 0}
+                    className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-black/85 rounded-lg shadow-xs transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    <Check size={14} />
+                    {saleSubmitting ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      `Record Sale (${saleItems.length} ${saleItems.length === 1 ? 'item' : 'items'})`
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </motion.div>

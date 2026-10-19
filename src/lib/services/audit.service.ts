@@ -55,7 +55,7 @@ export async function recordAuditLog(params: RecordAuditParams): Promise<string>
   try {
     const currentUser = auth.currentUser
     const now = new Date().toISOString()
-    const docRef = await addDoc(collection(db, 'audit_logs'), {
+    const docRef = await addDoc(collection(db, 'audit_logs'), cleanUndefined({
       timestamp: now,
       createdAt: now,
       userId: params.userId || currentUser?.uid || '',
@@ -70,7 +70,7 @@ export async function recordAuditLog(params: RecordAuditParams): Promise<string>
       description: params.description,
       diffs: params.diffs || [],
       metadata: params.metadata || {}
-    })
+    }))
     return docRef.id
   } catch (clientErr) {
     console.warn('Client audit log write failed:', clientErr)
@@ -126,6 +126,27 @@ export async function exportFullAuditTrail(options?: {
   URL.revokeObjectURL(url)
 
   return { count }
+}
+
+function cleanUndefined<T>(value: T): T {
+  if (value === null || value === undefined) {
+    return value
+  }
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => cleanUndefined(item)) as unknown as T
+  }
+  if (typeof value === 'object' && !(value instanceof Date)) {
+    const res: Record<string, any> = {}
+    for (const [k, v] of Object.entries(value as Record<string, any>)) {
+      if (v !== undefined) {
+        res[k] = cleanUndefined(v)
+      }
+    }
+    return res as T
+  }
+  return value
 }
 
 function toIsoString(val: unknown): string {

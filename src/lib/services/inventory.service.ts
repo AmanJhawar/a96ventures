@@ -225,6 +225,27 @@ function toIsoString(val: unknown): string {
   return String(val || '');
 }
 
+function cleanUndefined<T>(value: T): T {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => cleanUndefined(item)) as unknown as T;
+  }
+  if (typeof value === 'object' && !(value instanceof Date)) {
+    const res: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value as Record<string, any>)) {
+      if (v !== undefined) {
+        res[k] = cleanUndefined(v);
+      }
+    }
+    return res as T;
+  }
+  return value;
+}
+
 export async function getProducts(): Promise<Product[]> {
   const prodsSnap = await getDocs(collection(db, 'products'));
 
@@ -695,11 +716,11 @@ export async function recordTransaction(params: RecordTransactionParams): Promis
 
   // Client Firestore fallback:
   const now = new Date().toISOString();
-  const txData = {
+  const txData = cleanUndefined({
     ...params,
     createdAt: now,
     updatedAt: now
-  };
+  });
   const docRef = await addDoc(collection(db, 'transactions'), txData);
 
   // Update stock on client if product exists

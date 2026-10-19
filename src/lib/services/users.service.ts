@@ -24,42 +24,26 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   }
 }
 
-/**
- * Fetch all admin users via the server Admin API with client Firestore fallback.
- */
-export async function getAdminUsers(): Promise<AdminUser[]> {
-  try {
-    const headers = await getAuthHeaders()
-    const res = await fetch('/api/admin/users', {
-      method: 'GET',
-      headers
-    })
-
-    if (res.ok) {
-      const data = await res.json()
-      return data.users || []
+function cleanUndefined<T>(value: T): T {
+  if (value === null || value === undefined) {
+    return value
+  }
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => cleanUndefined(item)) as unknown as T
+  }
+  if (typeof value === 'object' && !(value instanceof Date)) {
+    const res: Record<string, any> = {}
+    for (const [k, v] of Object.entries(value as Record<string, any>)) {
+      if (v !== undefined) {
+        res[k] = cleanUndefined(v)
+      }
     }
-  } catch (apiErr) {
-    console.warn('Users API failed, falling back to direct Firestore:', apiErr)
+    return res as T
   }
-
-  // Client Firestore fallback
-  const now = new Date().toISOString()
-  const defaultPermissions: UserPermissions = {
-    products: { view: true, add: false, edit: false, delete: false },
-    purchases: { view: false, add: false, delete: false },
-    movements: { view: false, transfer: false, adjustment: false, repair: false, melt: false, delete: false },
-    sales: { view: false, add: false, delete: false },
-    returns: { view: false, add: false, delete: false },
-    inquiries: { view: false, edit: false, delete: false },
-    locations: { view: false, add: false, edit: false, delete: false },
-    brands: { view: false, add: false, edit: false, delete: false },
-    team: { view: false, add: false, edit: false, delete: false },
-    portfolio: { view: false, add: false, edit: false, delete: false },
-    reports: { view: false, export: false },
-    archive: { zeroBalance: false, uploadArchive: false },
-    users: { view: false, add: false, edit: false, delete: false }
-  }
+  return value
+}
 
 function toIsoString(val: unknown): string {
   if (!val) return ''
@@ -99,6 +83,43 @@ function toIsoString(val: unknown): string {
   }
   return String(val || '')
 }
+
+/**
+ * Fetch all admin users via the server Admin API with client Firestore fallback.
+ */
+export async function getAdminUsers(): Promise<AdminUser[]> {
+  try {
+    const headers = await getAuthHeaders()
+    const res = await fetch('/api/admin/users', {
+      method: 'GET',
+      headers
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      return data.users || []
+    }
+  } catch (apiErr) {
+    console.warn('Users API failed, falling back to direct Firestore:', apiErr)
+  }
+
+  // Client Firestore fallback
+  const now = new Date().toISOString()
+  const defaultPermissions: UserPermissions = {
+    products: { view: true, add: false, edit: false, delete: false },
+    purchases: { view: false, add: false, delete: false },
+    movements: { view: false, transfer: false, adjustment: false, repair: false, melt: false, delete: false },
+    sales: { view: false, add: false, delete: false },
+    returns: { view: false, add: false, delete: false },
+    inquiries: { view: false, edit: false, delete: false },
+    locations: { view: false, add: false, edit: false, delete: false },
+    brands: { view: false, add: false, edit: false, delete: false },
+    team: { view: false, add: false, edit: false, delete: false },
+    portfolio: { view: false, add: false, edit: false, delete: false },
+    reports: { view: false, export: false },
+    archive: { zeroBalance: false, uploadArchive: false },
+    users: { view: false, add: false, edit: false, delete: false }
+  }
 
   const snap = await getDocs(collection(db, 'admins'))
   const users: AdminUser[] = []
@@ -214,12 +235,12 @@ export async function updateAdminUser(
   }
 
   // Client Firestore fallback
-  const cleanUpdates = { ...updates }
+  const cleanUpdates = cleanUndefined({ ...updates })
   delete cleanUpdates.password
-  await updateDoc(doc(db, 'admins', id), {
+  await updateDoc(doc(db, 'admins', id), cleanUndefined({
     ...cleanUpdates,
     updatedAt: new Date().toISOString()
-  })
+  }))
 }
 
 /**

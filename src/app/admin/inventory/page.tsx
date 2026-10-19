@@ -20,8 +20,18 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  History
+  History,
+  Trash2
 } from 'lucide-react'
+
+export interface PurchaseLineItem {
+  id: string
+  productId: string
+  quantity: string
+  price: string
+  pieceWeights: number[]
+  pieceInput: string
+}
 import { auth } from '@/lib/firebase/auth'
 import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
 import { useArchive } from '@/lib/context/ArchiveContext'
@@ -185,16 +195,14 @@ export default function AdminInventory() {
   const [productFormError, setProductFormError] = useState<string | null>(null)
   const [isProductCategoryMetalLocked, setIsProductCategoryMetalLocked] = useState(false)
 
-  // Purchase modal / form state
+  // Purchase modal / form state (multi-item)
   const [isPurchaseFormOpen, setIsPurchaseFormOpen] = useState(false)
-  const [purchaseProductId, setPurchaseProductId] = useState('')
   const [purchaseLocationId, setPurchaseLocationId] = useState('')
-  const [purchaseQty, setPurchaseQty] = useState('1')
-  const [purchasePrice, setPurchasePrice] = useState('')
   const [purchaseDate, setPurchaseDate] = useState(() => getTodayIST())
   const [purchaseNotes, setPurchaseNotes] = useState('')
-  const [purchasePieceWeights, setPurchasePieceWeights] = useState<number[]>([])
-  const [purchasePieceInput, setPurchasePieceInput] = useState('')
+  const [purchaseItems, setPurchaseItems] = useState<PurchaseLineItem[]>([
+    { id: '1', productId: '', quantity: '1', price: '', pieceWeights: [], pieceInput: '' }
+  ])
   const [purchaseSubmitting, setPurchaseSubmitting] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
@@ -588,25 +596,30 @@ export default function AdminInventory() {
   }, [filteredMovements, movementsPage, pageSize])
   const totalMovementsPages = Math.max(1, Math.ceil(filteredMovements.length / pageSize))
 
-  // Selected product in purchase modal
-  const selectedPurchaseProduct = useMemo(() => {
-    return products.find((p) => p.id === purchaseProductId)
-  }, [products, purchaseProductId])
+  const purchaseTotals = useMemo(() => {
+    let totalUnits = 0
+    let totalWeightGrams = 0
+    let grandTotal = 0
 
-  // Check if purchase product is an Idol
-  const isPurchaseProductAnIdol = useMemo(() => {
-    if (!selectedPurchaseProduct) return false
-    return selectedPurchaseProduct.category === 'Idols'
-  }, [selectedPurchaseProduct])
+    purchaseItems.forEach((item) => {
+      const prod = products.find((p) => p.id === item.productId)
+      const isIdol = prod?.category === 'Idols'
+      const qty = isIdol && item.pieceWeights.length > 0 ? item.pieceWeights.length : (Number(item.quantity) || 0)
+      const price = Number(item.price) || 0
+      totalUnits += qty
+      grandTotal += qty * price
 
-  // Sync purchase qty with piece count if product is an Idol
-  const [prevPurchasePieceCount, setPrevPurchasePieceCount] = useState({ isIdol: isPurchaseProductAnIdol, count: purchasePieceWeights.length })
-  if (prevPurchasePieceCount.isIdol !== isPurchaseProductAnIdol || prevPurchasePieceCount.count !== purchasePieceWeights.length) {
-    setPrevPurchasePieceCount({ isIdol: isPurchaseProductAnIdol, count: purchasePieceWeights.length })
-    if (isPurchaseProductAnIdol) {
-      setPurchaseQty(purchasePieceWeights.length > 0 ? String(purchasePieceWeights.length) : '1')
-    }
-  }
+      if (prod) {
+        if (isIdol && item.pieceWeights.length > 0) {
+          totalWeightGrams += item.pieceWeights.reduce((a, b) => a + b, 0)
+        } else if (prod.weight) {
+          totalWeightGrams += prod.weight * qty
+        }
+      }
+    })
+
+    return { totalUnits, totalWeightGrams, grandTotal }
+  }, [purchaseItems, products])
 
   // Selected product in movement modal
   const selectedMovementProduct = useMemo(() => {
@@ -703,9 +716,11 @@ export default function AdminInventory() {
     }
   }
 
-  // Piece Weight Handlers for Restock / Purchases
-  const handleAddPurchasePieceWeight = (rawInput?: string) => {
-    const text = rawInput !== undefined ? rawInput : purchasePieceInput
+  // Piece Weight Handlers for Multi-Item Purchases
+  const handleAddPurchasePieceWeight = (itemId: string, rawInput?: string) => {
+    const item = purchaseItems.find((it) => it.id === itemId)
+    if (!item) return
+    const text = rawInput !== undefined ? rawInput : item.pieceInput
     if (!text.trim()) return
     const nums = text
       .split(/[\s,]+/)
@@ -715,16 +730,32 @@ export default function AdminInventory() {
       })
       .filter((n) => !isNaN(n) && n > 0)
     if (nums.length === 0) return
-    const updated = [...purchasePieceWeights, ...nums]
-    setPurchasePieceWeights(updated)
-    setPurchaseQty(String(updated.length))
-    setPurchasePieceInput('')
+    const combined = [...item.pieceWeights, ...nums]
+    setPurchaseItems((prev) =>
+      prev.map((it) => {
+        if (it.id !== itemId) return it
+        return {
+          ...it,
+          pieceWeights: combined,
+          quantity: String(combined.length),
+          pieceInput: ''
+        }
+      })
+    )
   }
 
-  const handleRemovePurchasePieceWeight = (index: number) => {
-    const updated = purchasePieceWeights.filter((_, i) => i !== index)
-    setPurchasePieceWeights(updated)
-    setPurchaseQty(String(updated.length))
+  const handleRemovePurchasePieceWeight = (itemId: string, index: number) => {
+    setPurchaseItems((prev) =>
+      prev.map((it) => {
+        if (it.id !== itemId) return it
+        const updated = it.pieceWeights.filter((_, i) => i !== index)
+        return {
+          ...it,
+          pieceWeights: updated,
+          quantity: updated.length > 0 ? String(updated.length) : '1'
+        }
+      })
+    )
   }
 
   // Movement Idol Piece Selection
@@ -974,96 +1005,184 @@ export default function AdminInventory() {
   // Handlers for Purchases
   const handleOpenAddPurchase = () => {
     const firstP = products[0]
-    setPurchaseProductId(firstP?.id || '')
     setPurchaseLocationId(userAssignedLocationId || locations[0]?.id || '')
-    setPurchaseQty('1')
-    setPurchasePrice('')
     setPurchaseDate(getTodayIST())
     setPurchaseNotes('')
-    setPurchasePieceWeights([])
-    setPurchasePieceInput('')
     setPurchaseError(null)
+    setPurchaseItems([
+      {
+        id: String(Date.now()),
+        productId: firstP?.id || '',
+        quantity: '1',
+        price: '',
+        pieceWeights: [],
+        pieceInput: ''
+      }
+    ])
     setIsPurchaseFormOpen(true)
+  }
+
+  const handleAddPurchaseItem = () => {
+    const firstP = products[0]
+    setPurchaseItems((prev) => [
+      ...prev,
+      {
+        id: String(Date.now() + Math.random()),
+        productId: firstP?.id || '',
+        quantity: '1',
+        price: '',
+        pieceWeights: [],
+        pieceInput: ''
+      }
+    ])
+  }
+
+  const handleRemovePurchaseItem = (id: string) => {
+    setPurchaseItems((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((it) => it.id !== id)
+    })
+  }
+
+  const handleUpdatePurchaseItem = (id: string, updates: Partial<PurchaseLineItem>) => {
+    setPurchaseItems((prev) =>
+      prev.map((it) => {
+        if (it.id !== id) return it
+        const next = { ...it, ...updates }
+        if (updates.productId && updates.productId !== it.productId) {
+          next.pieceWeights = []
+          next.pieceInput = ''
+          next.quantity = '1'
+        }
+        return next
+      })
+    )
   }
 
   const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault()
-    const prod = products.find((p) => p.id === purchaseProductId)
-    if (!prod) {
-      setPurchaseError('Please select a valid product')
-      return
-    }
     const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : purchaseLocationId
     if (!effectiveLocId) {
       setPurchaseError('Please select a location')
       return
     }
 
-    const isIdol = prod.category === 'Idols'
-    const qty = isIdol ? purchasePieceWeights.length : Number(purchaseQty)
-
-    if (isIdol && purchasePieceWeights.length === 0) {
-      setPurchaseError('Please enter at least one piece weight for this Idol purchase batch')
+    if (purchaseItems.length === 0) {
+      setPurchaseError('Please add at least one item')
       return
     }
 
-    if (isNaN(qty) || qty <= 0) {
-      setPurchaseError('Quantity must be at least 1')
-      return
+    const validatedItems: Array<{
+      prod: Product
+      qty: number
+      price?: number
+      pieceWeights?: number[]
+    }> = []
+
+    for (let i = 0; i < purchaseItems.length; i++) {
+      const item = purchaseItems[i]
+      const itemNum = i + 1
+      const prod = products.find((p) => p.id === item.productId)
+      if (!prod) {
+        setPurchaseError(`Item #${itemNum}: Please select a valid product`)
+        return
+      }
+
+      const isIdol = prod.category === 'Idols'
+      const qty = isIdol ? item.pieceWeights.length : Number(item.quantity)
+
+      if (isIdol && item.pieceWeights.length === 0) {
+        setPurchaseError(`Item #${itemNum} (${prod.name}): Please enter at least one piece weight for this Idol purchase batch`)
+        return
+      }
+
+      if (isNaN(qty) || qty <= 0) {
+        setPurchaseError(`Item #${itemNum} (${prod.name}): Quantity must be at least 1`)
+        return
+      }
+
+      const unitPrice = item.price ? Number(item.price) : undefined
+      if (unitPrice !== undefined && (isNaN(unitPrice) || unitPrice < 0)) {
+        setPurchaseError(`Item #${itemNum} (${prod.name}): Please enter a valid purchase price`)
+        return
+      }
+
+      validatedItems.push({
+        prod,
+        qty,
+        price: unitPrice,
+        pieceWeights: isIdol ? item.pieceWeights : undefined
+      })
     }
 
     setPurchaseSubmitting(true)
     setPurchaseError(null)
     try {
       const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
-      const res = await recordTransaction({
-        type: 'purchase',
-        productId: prod.id,
-        productName: prod.name,
-        category: prod.category,
-        metal: prod.metal,
-        quantity: qty,
-        pieceWeights: isIdol ? purchasePieceWeights : undefined,
-        price: purchasePrice ? Number(purchasePrice) : undefined,
-        locationId: effectiveLocId,
-        locationName: locName,
-        date: purchaseDate,
-        notes: purchaseNotes
+      const invoiceRef = purchaseNotes.trim() || `PUR-${Date.now().toString(36).toUpperCase()}`
+
+      const createdTransactions: Transaction[] = []
+      for (const it of validatedItems) {
+        const res = await recordTransaction({
+          type: 'purchase',
+          productId: it.prod.id,
+          productName: it.prod.name,
+          category: it.prod.category,
+          metal: it.prod.metal,
+          quantity: it.qty,
+          pieceWeights: it.pieceWeights,
+          price: it.price,
+          locationId: effectiveLocId,
+          locationName: locName,
+          date: purchaseDate,
+          notes: invoiceRef
+        })
+
+        if (res?.transaction) {
+          createdTransactions.push(res.transaction)
+        }
+      }
+
+      setTransactions((prev) => [...createdTransactions, ...prev])
+
+      setProducts((prev) => {
+        let updated = [...prev]
+        for (const it of validatedItems) {
+          updated = updated.map((p) => {
+            if (p.id !== it.prod.id) return p
+            const newStock = (p.stock || 0) + it.qty
+            const newStockByLoc = {
+              ...(p.stockByLocation || {}),
+              [effectiveLocId]: (p.stockByLocation?.[effectiveLocId] || 0) + it.qty
+            }
+            let newPieces = p.pieceWeights ? [...p.pieceWeights] : []
+            const newPiecesByLoc = p.pieceWeightsByLocation ? { ...p.pieceWeightsByLocation } : {}
+            if (it.pieceWeights && it.pieceWeights.length > 0) {
+              newPieces = [...newPieces, ...it.pieceWeights]
+              const locPieces = newPiecesByLoc[effectiveLocId] ? [...newPiecesByLoc[effectiveLocId]] : []
+              newPiecesByLoc[effectiveLocId] = [...locPieces, ...it.pieceWeights]
+            }
+            return {
+              ...p,
+              stock: newStock,
+              stockByLocation: newStockByLoc,
+              ...(it.pieceWeights ? {
+                pieceWeights: newPieces,
+                pieceWeightsByLocation: newPiecesByLoc,
+                weight: newPieces.length > 0 ? Number((newPieces.reduce((a, b) => a + b, 0) / newPieces.length).toFixed(3)) : p.weight
+              } : {})
+            }
+          })
+        }
+        return updated
       })
 
-      if (res?.transaction) {
-        setTransactions((prev) => [res.transaction, ...prev])
-      }
-      setProducts((prev) =>
-        prev.map((p) => {
-          if (p.id !== prod.id) return p
-          const newStock = (p.stock || 0) + qty
-          const newStockByLoc = {
-            ...(p.stockByLocation || {}),
-            [effectiveLocId]: (p.stockByLocation?.[effectiveLocId] || 0) + qty
-          }
-          let newPieces = p.pieceWeights ? [...p.pieceWeights] : []
-          const newPiecesByLoc = p.pieceWeightsByLocation ? { ...p.pieceWeightsByLocation } : {}
-          if (isIdol && purchasePieceWeights.length > 0) {
-            newPieces = [...newPieces, ...purchasePieceWeights]
-            const locPieces = newPiecesByLoc[effectiveLocId] ? [...newPiecesByLoc[effectiveLocId]] : []
-            newPiecesByLoc[effectiveLocId] = [...locPieces, ...purchasePieceWeights]
-          }
-          return {
-            ...p,
-            stock: newStock,
-            stockByLocation: newStockByLoc,
-            ...(isIdol ? {
-              pieceWeights: newPieces,
-              pieceWeightsByLocation: newPiecesByLoc,
-              weight: newPieces.length > 0 ? Number((newPieces.reduce((a, b) => a + b, 0) / newPieces.length).toFixed(3)) : p.weight
-            } : {})
-          }
-        })
-      )
-
       setIsPurchaseFormOpen(false)
-      toast.success('Purchase recorded successfully')
+      toast.success(
+        validatedItems.length === 1
+          ? 'Purchase recorded successfully'
+          : `Recorded purchase with ${validatedItems.length} items successfully`
+      )
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record purchase'
       setPurchaseError(msg)
@@ -2200,8 +2319,14 @@ export default function AdminInventory() {
             className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
           >
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-black">Record Purchase</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-black">Record Purchase</h2>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                  {purchaseItems.length} {purchaseItems.length === 1 ? 'item' : 'items'}
+                </span>
+              </div>
               <button
+                type="button"
                 onClick={() => setIsPurchaseFormOpen(false)}
                 className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
               >
@@ -2211,43 +2336,29 @@ export default function AdminInventory() {
 
             {purchaseError && (
               <div className="mb-4 p-3 bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg flex items-center gap-2">
-                <AlertCircle size={14} className="text-gray-600" />
-                {purchaseError}
+                <AlertCircle size={14} className="text-gray-600 shrink-0" />
+                <span>{purchaseError}</span>
               </div>
             )}
 
-            <form onSubmit={handleSavePurchase} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Product <span className="text-red-500">*</span>
-                  </label>
-                  <CustomSelect
-                    value={purchaseProductId}
-                    onValueChange={setPurchaseProductId}
-                    options={productOptions}
-                    placeholder="Select product to restock..."
-                  />
-                </div>
-
+            <form onSubmit={handleSavePurchase} className="space-y-5">
+              {/* Common Purchase Header */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50/70 border border-gray-200 rounded-xl">
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700">
                       Receiving Location <span className="text-red-500">*</span>
                     </label>
                     {isLocationLocked && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
-                        <Lock className="w-3 h-3 text-gray-500" />
-                        Assigned Store
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
+                        <Lock className="w-2.5 h-2.5 text-gray-500" />
+                        Locked
                       </span>
                     )}
                   </div>
                   {isLocationLocked ? (
-                    <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-black flex items-center justify-between">
-                      <span className="font-semibold text-black">
-                        {locationMap.get(purchaseLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
-                      </span>
-                      <span className="text-xs text-gray-500 font-medium">Default & Locked</span>
+                    <div className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-xs font-semibold text-black">
+                      {locationMap.get(purchaseLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
                     </div>
                   ) : (
                     <CustomSelect
@@ -2258,131 +2369,9 @@ export default function AdminInventory() {
                     />
                   )}
                 </div>
-              </div>
-
-              {/* Idol Batch Piece Weights Registry */}
-              {isPurchaseProductAnIdol && (
-                <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-semibold uppercase tracking-wider text-gray-800">
-                        Piece Weights for this Purchase Batch
-                      </div>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        Enter weights for each idol piece in this batch (e.g. 20 pieces with different weights). Press Enter or Add.
-                      </p>
-                    </div>
-                    {purchasePieceWeights.length > 0 && (
-                      <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-black text-white">
-                        {purchasePieceWeights.length} pcs
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="e.g. 48.250, 51.600, 49.825 (or paste comma/space separated)"
-                      value={purchasePieceInput}
-                      onChange={(e) => setPurchasePieceInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleAddPurchasePieceWeight()
-                        }
-                      }}
-                      className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleAddPurchasePieceWeight()}
-                      className="px-4 py-2 bg-black text-white text-xs font-semibold rounded-lg hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-                    >
-                      + Add Piece
-                    </button>
-                  </div>
-
-                  {purchasePieceWeights.length > 0 ? (
-                    <div className="space-y-2 pt-1">
-                      <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-white rounded-lg border border-gray-200">
-                        {purchasePieceWeights.map((w, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 hover:bg-gray-200/80 border border-gray-200 text-xs font-semibold text-gray-800 transition-[background-color] duration-100"
-                          >
-                            <span>#{idx + 1}: <strong>{formatWeight(w)}</strong></span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemovePurchasePieceWeight(idx)}
-                              className="text-gray-400 hover:text-red-600 transition-colors duration-100 ml-0.5"
-                              title="Remove piece"
-                            >
-                              ✕
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-gray-600 px-1 pt-1 border-t border-gray-200">
-                        <span>Total: <strong>{formatWeight(purchasePieceWeights.reduce((a, b) => a + b, 0))}</strong></span>
-                        <span>Average: <strong>{formatWeight(purchasePieceWeights.reduce((a, b) => a + b, 0) / purchasePieceWeights.length)}</strong></span>
-                        <span>Batch Size: <strong>{purchasePieceWeights.length} pcs</strong></span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-3 bg-white/60 border border-dashed border-gray-200 rounded-lg text-xs text-gray-400">
-                      Add the weights of the idol pieces being purchased.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Quantity <span className="text-red-500">*</span>
-                    </label>
-                    {isPurchaseProductAnIdol && (
-                      <span className="text-[11px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
-                        {purchasePieceWeights.length} pieces
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    type="number"
-                    min="1"
-                    disabled={isPurchaseProductAnIdol}
-                    value={isPurchaseProductAnIdol ? String(purchasePieceWeights.length) : purchaseQty}
-                    onChange={(e) => setPurchaseQty(e.target.value)}
-                    className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isPurchaseProductAnIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''
-                      }`}
-                    required
-                  />
-                  {isPurchaseProductAnIdol && (
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      Calculated automatically from registered piece weights above.
-                    </p>
-                  )}
-                </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Unit Purchase Price (₹)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="e.g. 75000"
-                    value={purchasePrice}
-                    onChange={(e) => setPurchasePrice(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                     Purchase Date <span className="text-red-500">*</span>
                   </label>
                   <CustomDatePicker
@@ -2391,37 +2380,249 @@ export default function AdminInventory() {
                     placeholder="Select purchase date"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Notes / Supplier Ref (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Supplier Invoice #9821, MMTC lot 44"
+                    value={purchaseNotes}
+                    onChange={(e) => setPurchaseNotes(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Notes / Supplier Ref (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Supplier Invoice #9821, MMTC lot 44"
-                  value={purchaseNotes}
-                  onChange={(e) => setPurchaseNotes(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                />
+              {/* Purchase Line Items List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-700">
+                    Purchase Line Items ({purchaseItems.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddPurchaseItem}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-black bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    <Plus size={13} />
+                    Add Another Item
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {purchaseItems.map((item, idx) => {
+                    const prod = products.find((p) => p.id === item.productId)
+                    const isIdol = prod?.category === 'Idols'
+                    const lineTotal = (Number(item.price) || 0) * (isIdol ? item.pieceWeights.length : Number(item.quantity) || 0)
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3 relative"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center">
+                              {idx + 1}
+                            </span>
+                            <span className="text-xs font-semibold text-gray-800">
+                              Item #{idx + 1}
+                            </span>
+                            {prod && (
+                              <span className="text-[11px] font-mono text-gray-500">
+                                ({prod.category} · {prod.metal})
+                              </span>
+                            )}
+                          </div>
+
+                          {purchaseItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePurchaseItem(item.id)}
+                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                              title="Remove item"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+                          <div className="sm:col-span-6">
+                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
+                              Product <span className="text-red-500">*</span>
+                            </label>
+                            <CustomSelect
+                              value={item.productId}
+                              onValueChange={(val) => handleUpdatePurchaseItem(item.id, { productId: val })}
+                              options={productOptions}
+                              placeholder="Select product to restock..."
+                            />
+                            {prod && (
+                              <div className="text-[11px] text-gray-500 mt-1">
+                                Current stock at location: <strong>{prod.stockByLocation?.[purchaseLocationId] || 0} units</strong>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
+                              Qty <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              disabled={isIdol}
+                              value={isIdol ? String(item.pieceWeights.length || 0) : item.quantity}
+                              onChange={(e) => handleUpdatePurchaseItem(item.id, { quantity: e.target.value })}
+                              className={`w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
+                              required
+                            />
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
+                              Unit Cost (₹)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="e.g. 75000"
+                              value={item.price}
+                              onChange={(e) => handleUpdatePurchaseItem(item.id, { price: e.target.value })}
+                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                            />
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
+                              Total
+                            </label>
+                            <div className="h-[34px] px-3 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-end font-bold text-xs text-black tabular-nums">
+                              {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN')}` : '—'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Idol piece weight batch registration */}
+                        {isIdol && (
+                          <div className="pt-2 border-t border-gray-200/60 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-700">
+                                Register Piece Weights for this Idol Batch
+                              </span>
+                              {item.pieceWeights.length > 0 && (
+                                <span className="text-[11px] font-bold text-black bg-gray-200 px-2 py-0.5 rounded">
+                                  {item.pieceWeights.length} pcs ({formatWeight(item.pieceWeights.reduce((a, b) => a + b, 0))})
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder="e.g. 48.250, 51.600, 49.825"
+                                value={item.pieceInput}
+                                onChange={(e) => handleUpdatePurchaseItem(item.id, { pieceInput: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    handleAddPurchasePieceWeight(item.id)
+                                  }
+                                }}
+                                className="flex-1 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleAddPurchasePieceWeight(item.id)}
+                                className="px-3 py-1.5 bg-black text-white text-xs font-semibold rounded-lg hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                              >
+                                + Add Piece
+                              </button>
+                            </div>
+
+                            {item.pieceWeights.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-white rounded-lg border border-gray-200">
+                                {item.pieceWeights.map((w, pieceIdx) => (
+                                  <span
+                                    key={pieceIdx}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 border border-gray-200 text-xs font-medium text-gray-800"
+                                  >
+                                    <span>#{pieceIdx + 1}: {formatWeight(w)}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemovePurchasePieceWeight(item.id, pieceIdx)}
+                                      className="text-gray-400 hover:text-red-600 transition-colors ml-0.5"
+                                      title="Remove piece"
+                                    >
+                                      ✕
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsPurchaseFormOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={purchaseSubmitting}
-                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-                >
-                  <Check size={16} />
-                  {purchaseSubmitting ? 'Recording...' : 'Add Stock'}
-                </button>
+              {/* Purchase Summary Footer */}
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-6 divide-x divide-gray-200 text-xs">
+                  <div>
+                    <span className="text-gray-500 block">Total Items</span>
+                    <span className="font-bold text-sm text-black tabular-nums">
+                      {purchaseItems.length} {purchaseItems.length === 1 ? 'item' : 'items'} ({purchaseTotals.totalUnits} units)
+                    </span>
+                  </div>
+                  {purchaseTotals.totalWeightGrams > 0 && (
+                    <div className="pl-6">
+                      <span className="text-gray-500 block">Total Weight</span>
+                      <span className="font-bold text-sm text-black tabular-nums">
+                        {formatWeight(purchaseTotals.totalWeightGrams)}
+                      </span>
+                    </div>
+                  )}
+                  {purchaseTotals.grandTotal > 0 && (
+                    <div className="pl-6">
+                      <span className="text-gray-500 block">Total Value</span>
+                      <span className="font-extrabold text-base text-black tabular-nums">
+                        ₹{purchaseTotals.grandTotal.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsPurchaseFormOpen(false)}
+                    className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={purchaseSubmitting || purchaseTotals.totalUnits === 0}
+                    className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-black/85 rounded-lg shadow-xs transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    <Check size={14} />
+                    {purchaseSubmitting ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      `Record Purchase (${purchaseItems.length} ${purchaseItems.length === 1 ? 'item' : 'items'})`
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </motion.div>
