@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react'
 import { Transaction, AuditLogEntry, ProductCategory } from '@/lib/types'
 import { verifyArchiveIntegrity, ArchiveVerificationResult } from '@/lib/utils/archive-checksum'
+import { getAuthHeaders } from '@/lib/services/inventory.service'
 import { toast } from 'sonner'
 
 export interface ArchivedSession {
@@ -68,18 +69,53 @@ export function ArchiveProvider({ children }: { children: React.ReactNode }) {
       const parsedRecord = (Array.isArray(parsed) ? { transactions: parsed } : parsed) as Record<string, unknown>
       const verification = await verifyArchiveIntegrity(parsedRecord)
 
+      // Validate against server secret and system_archives
+      if (verification.status === 'verified' || parsedRecord.checksum || parsedRecord.signature || parsedRecord.archiveId) {
+        try {
+          const authHeaders = await getAuthHeaders().catch(() => ({}))
+          const verifyRes = await fetch('/api/admin/transactions/archive/verify', {
+            method: 'POST',
+            headers: {
+              ...authHeaders,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              checksum: typeof parsedRecord.checksum === 'string' ? parsedRecord.checksum : verification.computedChecksum,
+              signature: typeof parsedRecord.signature === 'string' ? parsedRecord.signature : undefined,
+              archiveId: typeof parsedRecord.archiveId === 'string' ? parsedRecord.archiveId : undefined
+            })
+          })
+
+          if (verifyRes.ok) {
+            const serverResult = await verifyRes.json()
+            if (serverResult.status === 'tampered') {
+              verification.status = 'tampered'
+              verification.message = serverResult.message
+            } else if (serverResult.status === 'unverified') {
+              verification.status = 'unverified'
+              verification.message = serverResult.message
+            } else if (serverResult.status === 'verified') {
+              verification.status = 'verified'
+              verification.message = serverResult.message
+            }
+          }
+        } catch (serverVerifErr) {
+          console.warn('Server archive verification check unavailable:', serverVerifErr)
+        }
+      }
+
       if (verification.status === 'tampered') {
-        toast.error('TAMPER WARNING: Archive checksum mismatch!', {
-          description: 'This archive file has been modified or edited after export and cannot be trusted.',
-          duration: 8000
+        toast.error('TAMPER WARNING: Archive checksum or signature invalid!', {
+          description: verification.message || 'This archive file has been modified or edited after export and cannot be trusted.',
+          duration: 9000
         })
       } else if (verification.status === 'verified') {
         toast.success(`Cryptographically Verified Archive "${filename}"`, {
-          description: `SHA-256 integrity verified (${loadedTxs.length} txs, ${loadedAuditLogs.length} audit logs).`
+          description: verification.message || `Integrity and server authority verified (${loadedTxs.length} txs, ${loadedAuditLogs.length} audit logs).`
         })
       } else {
-        toast.warning(`Loaded Legacy Archive "${filename}"`, {
-          description: `No checksum found in archive. ${loadedTxs.length} txs, ${loadedAuditLogs.length} audit logs.`
+        toast.warning(`Unverified Archive "${filename}"`, {
+          description: verification.message || `No valid server cryptographic signature or system archive record found. ${loadedTxs.length} txs, ${loadedAuditLogs.length} audit logs.`
         })
       }
 

@@ -36,7 +36,8 @@ import {
   recordTransaction,
   deleteTransaction,
   clearTransactionHistory,
-  getTransactionsPage
+  getTransactionsPage,
+  downloadArchiveById
 } from '@/lib/services/inventory.service'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
@@ -47,7 +48,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatWeight } from '@/lib/utils/weight'
-import { getTodayIST, getDaysAgoIST, getDefaultFiscalCutoffIST, getNextDayIST, formatDisplayDateIST } from '@/lib/utils/date'
+import { getTodayIST, getDaysAgoIST, getDefaultFiscalCutoffIST, getNextDayIST, formatDisplayDateIST, isValidDateStringIST } from '@/lib/utils/date'
 
 const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
 const BULLION_BRANDS: ProductBrand[] = ['MMTC PAMP', 'Local']
@@ -279,8 +280,13 @@ export default function AdminInventory() {
       toast.error('Master Zero Balance cannot be executed while viewing an offline archive')
       return
     }
-    if (!zeroBalanceCutoffDate) {
-      toast.error('Please specify a valid closing fiscal cutoff date')
+    if (!zeroBalanceCutoffDate || !isValidDateStringIST(zeroBalanceCutoffDate)) {
+      toast.error('Please specify a valid closing fiscal cutoff date (YYYY-MM-DD)')
+      return
+    }
+    const today = getTodayIST()
+    if (zeroBalanceCutoffDate > today) {
+      toast.error(`Cutoff date cannot be in the future (today is ${today})`)
       return
     }
     if (zeroBalanceConfirmText.trim() !== 'CONFIRM ZERO BALANCE') {
@@ -316,17 +322,18 @@ export default function AdminInventory() {
       })
 
       // 3. Automatically download the server-verified archive with embedded checksum
-      if (res.archive) {
-        const blob = new Blob([JSON.stringify(res.archive, null, 2)], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
+      if (res.archiveId) {
+        toast.loading('Downloading verified server archive...', { id: 'zero-balance' })
         const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-        a.download = `a96-audit-archive-cutoff-${zeroBalanceCutoffDate}-${dateStr}.json`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
+        const filename = `a96-audit-archive-cutoff-${zeroBalanceCutoffDate}-${dateStr}.json`
+        try {
+          await downloadArchiveById(res.archiveId, filename)
+        } catch (downloadErr) {
+          console.error('Failed to automatically download archive:', downloadErr)
+          toast.warning('Archive saved on server, but auto-download failed. You can download it from System Archives.', {
+            duration: 8000
+          })
+        }
       }
 
       setIsZeroBalanceModalOpen(false)
@@ -559,7 +566,7 @@ export default function AdminInventory() {
 
   // Filtered movements with subtype support
   const filteredMovements = useMemo(() => {
-    const movementTypes: TransactionType[] = ['transfer', 'adjustment', 'repair', 'melt']
+    const movementTypes: TransactionType[] = ['transfer', 'adjustment', 'repair', 'melt', 'opening']
     return displayTransactions.filter((tx) => {
       // Reversals have their own type and must not mix into Movements with stock-take corrections
       if (tx.isReversal || Boolean(tx.reversalOf) || tx.isReversed || (tx.type as string) === 'reversal') {
@@ -1502,18 +1509,27 @@ export default function AdminInventory() {
               <div className="text-sm font-bold text-black flex items-center gap-2 flex-wrap">
                 Viewing Offline Archive: {archivedSession.filename}
                 {archivedSession.verification.status === 'verified' && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    ✓ Cryptographically Verified (SHA-256)
+                  <span
+                    className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300"
+                    title={archivedSession.verification.message}
+                  >
+                    ✓ Cryptographically Verified (Server Sealed)
                   </span>
                 )}
                 {archivedSession.verification.status === 'tampered' && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-300 animate-pulse">
-                    ⚠️ TAMPER WARNING: Checksum Mismatch (Altered File)
+                  <span
+                    className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-300 animate-pulse"
+                    title={archivedSession.verification.message}
+                  >
+                    ⚠️ TAMPER WARNING: Altered Archive (Invalid Signature / Hash)
                   </span>
                 )}
                 {archivedSession.verification.status === 'unverified' && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300">
-                    ⚠️ Legacy Archive (No Checksum)
+                  <span
+                    className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300"
+                    title={archivedSession.verification.message}
+                  >
+                    ⚠️ Unverified Archive (Unsigned / Not in System Registry)
                   </span>
                 )}
               </div>
@@ -3397,6 +3413,22 @@ export default function AdminInventory() {
                               <span className="text-[11px] text-gray-400 block font-normal">was {formatWeight(tx.previousWeight)}</span>
                             </div>
                           )}
+                          {tx.type === 'opening' && (
+                            <div>
+                              <span className="font-semibold text-black">{tx.quantity} unit{tx.quantity === 1 ? '' : 's'}</span>
+                              {tx.weight !== undefined && (
+                                <span className="text-[11px] font-mono text-gray-600 block font-normal">
+                                  {formatWeight(tx.weight)}
+                                </span>
+                              )}
+                              {Array.isArray(tx.pieceWeights) && tx.pieceWeights.length > 0 && (
+                                <span className="text-[10px] font-mono text-gray-500 block font-normal" title={tx.pieceWeights.map((w) => formatWeight(w)).join(', ')}>
+                                  {tx.pieceWeights.length} pcs ({tx.pieceWeights.slice(0, 2).map((w) => formatWeight(w)).join(', ')}{tx.pieceWeights.length > 2 ? '…' : ''})
+                                </span>
+                              )}
+                              <span className="text-[11px] text-blue-600 block font-normal">opening baseline</span>
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-xs text-gray-600">
                           {tx.type === 'repair' && (
@@ -3665,6 +3697,7 @@ export default function AdminInventory() {
               <input
                 type="date"
                 value={zeroBalanceCutoffDate}
+                max={getTodayIST()}
                 disabled={zeroBalanceSubmitting}
                 onChange={(e) => setZeroBalanceCutoffDate(e.target.value)}
                 className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 disabled:opacity-50"

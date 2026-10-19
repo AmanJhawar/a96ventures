@@ -569,3 +569,227 @@ export function applyReverseTransaction(params: ReverseLedgerParams): ReverseLed
     productUpdates
   }
 }
+
+export interface TransactionEffectInput {
+  productId?: string
+  locationId?: string
+  toLocationId?: string
+  quantity?: number
+  type?: string
+  isReversed?: boolean
+  isReversal?: boolean
+  reversalOf?: string
+}
+
+/**
+ * Calculates the net quantity effect of a single transaction on each location.
+ * Positive value means stock increased at that location; negative means stock decreased.
+ */
+export function getTransactionLocationEffect(tx: TransactionEffectInput): Record<string, number> {
+  // If transaction is reversed, or is a reversal entry, it does not represent an active stock mutation
+  if (tx.isReversed || tx.isReversal || Boolean(tx.reversalOf) || tx.type === 'reversal') {
+    return {}
+  }
+
+  const qty = Number(tx.quantity || 0)
+  const locId = String(tx.locationId || '')
+  const toLocId = tx.toLocationId ? String(tx.toLocationId) : undefined
+  const effects: Record<string, number> = {}
+
+  switch (tx.type) {
+    case 'purchase':
+    case 'return':
+    case 'opening':
+      if (locId) effects[locId] = (effects[locId] || 0) + qty
+      break
+    case 'sale':
+    case 'melt':
+      if (locId) effects[locId] = (effects[locId] || 0) - qty
+      break
+    case 'adjustment':
+      // Adjustment quantity can be positive (surplus) or negative (deficit)
+      if (locId) effects[locId] = (effects[locId] || 0) + qty
+      break
+    case 'transfer':
+      if (locId) effects[locId] = (effects[locId] || 0) - qty
+      if (toLocId) effects[toLocId] = (effects[toLocId] || 0) + qty
+      break
+    case 'repair':
+      // Repair only adjusts item weight, not piece quantity
+      break
+    default:
+      break
+  }
+
+  return effects
+}
+
+/**
+ * Aggregates net effects across an array of transactions, grouped by productId and locationId.
+ * returns Record<productId, Record<locationId, netQuantityDelta>>
+ */
+export function calculateNetTransactionsEffect(
+  transactions: TransactionEffectInput[]
+): Record<string, Record<string, number>> {
+  const result: Record<string, Record<string, number>> = {}
+
+  for (const tx of transactions) {
+    const pId = String(tx.productId || '')
+    if (!pId) continue
+
+    const locEffects = getTransactionLocationEffect(tx)
+    if (Object.keys(locEffects).length === 0) continue
+
+    if (!result[pId]) {
+      result[pId] = {}
+    }
+
+    for (const [locId, delta] of Object.entries(locEffects)) {
+      result[pId][locId] = (result[pId][locId] || 0) + delta
+    }
+  }
+
+  return result
+}
+
+export interface OpeningBalanceResult {
+  productId: string
+  productName: string
+  category: string
+  metal: string
+  locationId: string
+  quantity: number
+  weight?: number // total weight in grams
+  weightMg?: number // total weight in milligrams
+  pieceWeight?: number // per-piece weight in grams
+  pieceWeightMg?: number // per-piece weight in milligrams
+  pieceWeights?: number[] // For Idols: individual piece weights in grams
+  pieceWeightsMg?: number[] // For Idols: individual piece weights in mg
+}
+
+/**
+ * Computes opening balances per location for products following a fiscal cutoff:
+ * Opening = today's stock minus the net effect of entries dated after the cutoff, per location.
+ * Emits real weights for Bullions and complete individual piece weights for Idols.
+ * Only positive opening balances (> 0) are emitted.
+ */
+export function calculateOpeningBalances(
+  products: Array<{
+    id: string
+    name?: string
+    category?: string
+    metal?: string
+    stock?: number
+    weight?: number
+    weightMg?: number
+    pieceWeights?: number[]
+    pieceWeightsMg?: number[]
+    pieceWeightsByLocation?: Record<string, number[]>
+    pieceWeightsByLocationMg?: Record<string, number[]>
+    stockByLocation?: Record<string, number>
+  }>,
+  netEffectsByProduct: Record<string, Record<string, number>>
+): OpeningBalanceResult[] {
+  const results: OpeningBalanceResult[] = []
+
+  for (const product of products) {
+    const pId = product.id
+    const pLocMap = product.stockByLocation || {}
+    const pNetEffects = netEffectsByProduct[pId] || {}
+    const isIdol = product.category === 'Idols'
+
+    // Find all unique locations: both present in current stock and affected by post-cutoff transactions
+    const allLocations = new Set<string>([
+      ...Object.keys(pLocMap),
+      ...Object.keys(pNetEffects)
+    ])
+
+    for (const locId of allLocations) {
+      if (!locId) continue
+      const todayStock = Number(pLocMap[locId] || 0)
+      const netEffect = Number(pNetEffects[locId] || 0)
+      const openingStock = todayStock - netEffect
+
+      if (openingStock > 0) {
+        if (isIdol) {
+          // Idols: assign individual piece weights
+          let locPiecesMg: number[] = []
+          if (product.pieceWeightsByLocationMg && Array.isArray(product.pieceWeightsByLocationMg[locId])) {
+            locPiecesMg = [...product.pieceWeightsByLocationMg[locId]]
+          } else if (product.pieceWeightsByLocation && Array.isArray(product.pieceWeightsByLocation[locId])) {
+            locPiecesMg = product.pieceWeightsByLocation[locId].map((w) => gramsToMg(Number(w)))
+          } else if (Array.isArray(product.pieceWeightsMg) && product.pieceWeightsMg.length > 0) {
+            locPiecesMg = [...product.pieceWeightsMg]
+          } else if (Array.isArray(product.pieceWeights) && product.pieceWeights.length > 0) {
+            locPiecesMg = product.pieceWeights.map((w) => gramsToMg(Number(w)))
+          }
+
+          let selectedPiecesMg: number[] = []
+          if (locPiecesMg.length >= openingStock) {
+            selectedPiecesMg = locPiecesMg.slice(0, openingStock)
+          } else {
+            const unitMg = product.weightMg !== undefined
+              ? Number(product.weightMg)
+              : gramsToMg(Number(product.weight || 0))
+            const avgMg = locPiecesMg.length > 0
+              ? Math.round(locPiecesMg.reduce((a, b) => a + b, 0) / locPiecesMg.length)
+              : unitMg
+            selectedPiecesMg = [...locPiecesMg]
+            while (selectedPiecesMg.length < openingStock) {
+              selectedPiecesMg.push(avgMg > 0 ? avgMg : 0)
+            }
+          }
+
+          const hasWeight = product.weightMg !== undefined || product.weight !== undefined || selectedPiecesMg.length > 0
+          const totalWeightMg = selectedPiecesMg.reduce((a, b) => a + b, 0)
+          const selectedPiecesGrams = selectedPiecesMg.map(mgToGrams)
+
+          results.push({
+            productId: pId,
+            productName: product.name || 'Unnamed Product',
+            category: product.category || 'Idols',
+            metal: product.metal || 'Gold',
+            locationId: locId,
+            quantity: openingStock,
+            ...(hasWeight && totalWeightMg > 0
+              ? {
+                  weight: mgToGrams(totalWeightMg),
+                  weightMg: totalWeightMg,
+                  pieceWeight: selectedPiecesGrams.length === 1 ? selectedPiecesGrams[0] : undefined,
+                  pieceWeightMg: selectedPiecesMg.length === 1 ? selectedPiecesMg[0] : undefined,
+                  pieceWeights: selectedPiecesGrams,
+                  pieceWeightsMg: selectedPiecesMg
+                }
+              : {})
+          })
+        } else {
+          // Bullions / standard products: assign unit and total weight
+          const hasWeight = product.weightMg !== undefined || product.weight !== undefined
+          const unitMg = product.weightMg !== undefined
+            ? Number(product.weightMg)
+            : gramsToMg(Number(product.weight || 0))
+          const totalWeightMg = unitMg * openingStock
+
+          results.push({
+            productId: pId,
+            productName: product.name || 'Unnamed Product',
+            category: product.category || 'Bullions',
+            metal: product.metal || 'Gold',
+            locationId: locId,
+            quantity: openingStock,
+            ...(hasWeight && totalWeightMg > 0
+              ? {
+                  weight: mgToGrams(totalWeightMg),
+                  weightMg: totalWeightMg,
+                  pieceWeight: mgToGrams(unitMg),
+                  pieceWeightMg: unitMg
+                }
+              : {})
+          })
+        }
+      }
+    }
+  }
+
+  return results
+}

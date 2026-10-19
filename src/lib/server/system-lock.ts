@@ -11,6 +11,40 @@ export interface CallerInfo {
   callerEmail: string
 }
 
+export class SystemLockedError extends Error {
+  statusCode: number
+  constructor(message: string) {
+    super(message)
+    this.name = 'SystemLockedError'
+    this.statusCode = 423
+  }
+}
+
+export function getZeroBalanceLockRef(): FirebaseFirestore.DocumentReference {
+  return adminDb.collection(SYSTEM_CONTROL_COLLECTION).doc(RUN_LOCK_DOC)
+}
+
+/**
+ * Asserts inside a Firestore transaction that Master Zero-Balance is not currently locked.
+ * Throws SystemLockedError if locked.
+ */
+export function assertNotZeroBalanceLocked(snap: FirebaseFirestore.DocumentSnapshot): void {
+  if (!snap.exists) return
+  const data = snap.data()
+  if (!data?.isLocked) return
+
+  const now = Date.now()
+  const expiresAt = Number(data.expiresAt || 0)
+  if (expiresAt > 0 && now >= expiresAt) {
+    return // lease has expired
+  }
+
+  const lockedByName = data.lockedByName || data.lockedByEmail || 'Another administrator'
+  throw new SystemLockedError(
+    `Master Zero-Balance / Archive run is currently in progress by ${lockedByName}. Operations are temporarily paused.`
+  )
+}
+
 /**
  * Checks whether the Master Zero-Balance / Archive run lock is currently active.
  */

@@ -1,5 +1,6 @@
 import { adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { createHmac } from 'crypto'
 import { getNextDayIST } from '@/lib/utils/date'
 import { computeArchiveChecksum } from '@/lib/utils/archive-checksum'
 
@@ -8,12 +9,15 @@ export interface MasterArchivePayload {
   type: string
   version: string
   exportedAt: string
+  archiveId?: string
   cutoffDate?: string
   openingDate?: string
   totalTransactions: number
   totalAuditLogs: number
   checksum?: string
   checksumAlgorithm?: string
+  signature?: string
+  signatureAlgorithm?: string
   breakdown: {
     sales: number
     purchases: number
@@ -22,6 +26,7 @@ export interface MasterArchivePayload {
     repairs: number
     melts: number
     returns: number
+    openings?: number
   }
   productsSnapshot: Array<Record<string, unknown>>
   transactions: Array<Record<string, unknown>>
@@ -33,6 +38,7 @@ export interface MasterArchiveResult {
   count: number
   auditCount: number
   checksum: string
+  signature?: string
   cutoffDate?: string
   openingDate?: string
 }
@@ -52,9 +58,38 @@ export interface ServerSavedArchive {
   productCount: number
   checksum: string
   checksumAlgorithm: string
+  signature?: string
+  signatureAlgorithm?: string
   byteSize: number
   totalChunks: number
   status: string
+  stage?: string
+  progress?: {
+    purgedTransactions?: number
+    openingsPosted?: boolean
+    openingTransactionCount?: number
+    scrubbedAuditLogs?: number
+  }
+}
+
+export function getArchiveSigningSecret(): string {
+  return (
+    process.env.ARCHIVE_SIGNING_SECRET ||
+    process.env.NEXTAUTH_SECRET ||
+    process.env.FIREBASE_PROJECT_ID ||
+    'a96-secure-vault-archive-secret-2026'
+  )
+}
+
+export function signArchiveChecksum(checksum: string): string {
+  const secret = getArchiveSigningSecret()
+  return createHmac('sha256', secret).update(checksum).digest('hex')
+}
+
+export function verifyArchiveSignature(checksum: string, signature: string): boolean {
+  if (!checksum || !signature) return false
+  const expected = signArchiveChecksum(checksum)
+  return expected.toLowerCase() === signature.trim().toLowerCase()
 }
 
 function toIsoString(ts: unknown): string {
@@ -177,7 +212,8 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
     adjustments: transactions.filter((t) => t.type === 'adjustment').length,
     repairs: transactions.filter((t) => t.type === 'repair').length,
     melts: transactions.filter((t) => t.type === 'melt').length,
-    returns: transactions.filter((t) => t.type === 'return').length
+    returns: transactions.filter((t) => t.type === 'return').length,
+    openings: transactions.filter((t) => t.type === 'opening').length
   }
 
   // Compute canonical SHA-256 checksum over the payload content
@@ -191,10 +227,12 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
     productsSnapshot
   })
 
+  const signature = signArchiveChecksum(checksum)
+
   const archive: MasterArchivePayload = {
     system: 'A96 Ventures Unified Inventory System',
     type: 'Master Audit Archive (All History & Activity Trail)',
-    version: '1.3',
+    version: '1.4',
     exportedAt: new Date().toISOString(),
     cutoffDate,
     openingDate,
@@ -202,6 +240,8 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
     totalAuditLogs,
     checksum,
     checksumAlgorithm: 'SHA-256',
+    signature,
+    signatureAlgorithm: 'HMAC-SHA256',
     breakdown,
     productsSnapshot,
     transactions,
@@ -213,6 +253,7 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
     count: totalTransactions,
     auditCount: totalAuditLogs,
     checksum,
+    signature,
     cutoffDate,
     openingDate
   }
@@ -230,6 +271,11 @@ export async function saveArchiveServerSide(
   const dateTag = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
   const randTag = Math.random().toString(36).substring(2, 8)
   const archiveId = `arc_${archiveResult.cutoffDate ? `cutoff_${archiveResult.cutoffDate}_` : ''}${dateTag}_${randTag}`
+
+  const signature = archiveResult.signature || signArchiveChecksum(archiveResult.checksum)
+  archiveResult.archive.archiveId = archiveId
+  archiveResult.archive.signature = signature
+  archiveResult.archive.signatureAlgorithm = 'HMAC-SHA256'
 
   const jsonString = JSON.stringify(archiveResult.archive)
   const CHUNK_SIZE = 600 * 1024 // 600KB chunks
@@ -264,9 +310,18 @@ export async function saveArchiveServerSide(
     productCount: archiveResult.archive.productsSnapshot?.length || 0,
     checksum: archiveResult.checksum,
     checksumAlgorithm: 'SHA-256',
+    signature,
+    signatureAlgorithm: 'HMAC-SHA256',
     byteSize: jsonString.length,
     totalChunks,
-    status: 'verified_and_saved'
+    status: 'in_progress',
+    stage: 'archive_saved',
+    progress: {
+      purgedTransactions: 0,
+      openingsPosted: false,
+      openingTransactionCount: 0,
+      scrubbedAuditLogs: 0
+    }
   }
 
   await archiveRef.set(metadata)
@@ -290,6 +345,7 @@ export async function saveArchiveServerSide(
         count: archiveResult.count,
         auditCount: archiveResult.auditCount,
         checksum: archiveResult.checksum,
+        signature,
         byteSize: jsonString.length
       }
     })
@@ -312,14 +368,97 @@ export async function saveArchiveServerSide(
     productCount: archiveResult.archive.productsSnapshot?.length || 0,
     checksum: archiveResult.checksum,
     checksumAlgorithm: 'SHA-256',
+    signature,
+    signatureAlgorithm: 'HMAC-SHA256',
     byteSize: jsonString.length,
     totalChunks,
-    status: 'verified_and_saved'
+    status: 'in_progress',
+    stage: 'archive_saved',
+    progress: {
+      purgedTransactions: 0,
+      openingsPosted: false,
+      openingTransactionCount: 0,
+      scrubbedAuditLogs: 0
+    }
+  }
+}
+
+/**
+ * Updates execution progress on an archive record to facilitate resumes from interrupted zero-balance runs.
+ */
+export async function updateArchiveProgress(
+  archiveId: string,
+  updates: {
+    stage?: string
+    status?: string
+    progress?: {
+      purgedTransactions?: number
+      openingsPosted?: boolean
+      openingTransactionCount?: number
+      scrubbedAuditLogs?: number
+    }
+  }
+): Promise<void> {
+  const archiveRef = adminDb.collection('system_archives').doc(archiveId)
+  const patch: Record<string, unknown> = {
+    updatedAt: FieldValue.serverTimestamp()
+  }
+  if (updates.stage) patch.stage = updates.stage
+  if (updates.status) patch.status = updates.status
+  if (updates.progress) {
+    Object.entries(updates.progress).forEach(([k, v]) => {
+      patch[`progress.${k}`] = v
+    })
+  }
+  await archiveRef.update(patch)
+}
+
+/**
+ * Finds any existing incomplete archive run for the given cutoff date.
+ * If a prior run was interrupted, returns its metadata so execution can resume from that point.
+ */
+export async function findIncompleteArchiveForCutoff(cutoffDate: string): Promise<ServerSavedArchive | null> {
+  if (!cutoffDate) return null
+  try {
+    const snap = await adminDb
+      .collection('system_archives')
+      .where('cutoffDate', '==', cutoffDate)
+      .get()
+
+    for (const doc of snap.docs) {
+      const data = doc.data()
+      if (data.status !== 'completed' && data.stage !== 'completed') {
+        return {
+          archiveId: doc.id,
+          createdAt: toIsoString(data.createdAt),
+          createdBy: data.createdBy || { uid: '', name: 'System', email: '' },
+          cutoffDate: data.cutoffDate || null,
+          openingDate: data.openingDate || null,
+          count: Number(data.count || 0),
+          auditCount: Number(data.auditCount || 0),
+          productCount: Number(data.productCount || 0),
+          checksum: String(data.checksum || ''),
+          checksumAlgorithm: String(data.checksumAlgorithm || 'SHA-256'),
+          signature: data.signature ? String(data.signature) : undefined,
+          signatureAlgorithm: data.signatureAlgorithm ? String(data.signatureAlgorithm) : undefined,
+          byteSize: Number(data.byteSize || 0),
+          totalChunks: Number(data.totalChunks || 1),
+          status: String(data.status || 'in_progress'),
+          stage: data.stage ? String(data.stage) : 'archive_saved',
+          progress: data.progress || {}
+        }
+      }
+    }
+    return null
+  } catch (err) {
+    console.warn('Notice: Error searching for incomplete archive for cutoff:', err)
+    return null
   }
 }
 
 /**
  * Retrieves a saved archive from the server by archiveId, reassembling chunks and verifying checksum.
+ * Throws an error if the recomputed SHA-256 checksum or server signature does not match the stored metadata.
  */
 export async function getSavedArchiveServer(archiveId: string): Promise<MasterArchivePayload> {
   const archiveDoc = await adminDb.collection('system_archives').doc(archiveId).get()
@@ -340,6 +479,40 @@ export async function getSavedArchiveServer(archiveId: string): Promise<MasterAr
 
   const fullJson = chunksSnap.docs.map((d) => d.data().data || '').join('')
   const parsed = JSON.parse(fullJson) as MasterArchivePayload
+  const metadata = archiveDoc.data() || {}
+  parsed.archiveId = archiveId
+  if (parsed.checksum && !parsed.signature) {
+    parsed.signature = metadata.signature || signArchiveChecksum(parsed.checksum)
+    parsed.signatureAlgorithm = 'HMAC-SHA256'
+  }
+
+  // Re-check cryptographic checksum on read to verify storage integrity
+  const recomputedChecksum = await computeArchiveChecksum({
+    cutoffDate: parsed.cutoffDate || null,
+    openingDate: parsed.openingDate || null,
+    totalTransactions: Number(parsed.totalTransactions ?? parsed.transactions?.length ?? 0),
+    totalAuditLogs: Number(parsed.totalAuditLogs ?? parsed.auditLogs?.length ?? 0),
+    transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
+    auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
+    productsSnapshot: Array.isArray(parsed.productsSnapshot) ? parsed.productsSnapshot : []
+  })
+
+  const expectedChecksum = String(metadata.checksum || parsed.checksum || '').trim().toLowerCase()
+  if (expectedChecksum && recomputedChecksum.toLowerCase() !== expectedChecksum) {
+    throw new Error(
+      `Cryptographic integrity failure for server archive "${archiveId}": recomputed SHA-256 checksum (${recomputedChecksum}) does not match recorded checksum (${expectedChecksum}). Storage chunks may be corrupted or modified.`
+    )
+  }
+
+  if (metadata.signature || parsed.signature) {
+    const sig = String(metadata.signature || parsed.signature || '').trim()
+    if (!verifyArchiveSignature(recomputedChecksum, sig)) {
+      throw new Error(
+        `Cryptographic signature failure for server archive "${archiveId}": HMAC signature validation failed against server authority secret.`
+      )
+    }
+  }
+
   return parsed
 }
 
@@ -366,9 +539,113 @@ export async function listSavedArchivesServer(limitCount = 20): Promise<ServerSa
       productCount: Number(data.productCount || 0),
       checksum: String(data.checksum || ''),
       checksumAlgorithm: String(data.checksumAlgorithm || 'SHA-256'),
+      signature: data.signature ? String(data.signature) : undefined,
+      signatureAlgorithm: data.signatureAlgorithm ? String(data.signatureAlgorithm) : undefined,
       byteSize: Number(data.byteSize || 0),
       totalChunks: Number(data.totalChunks || 1),
-      status: String(data.status || 'unknown')
+      status: String(data.status || 'unknown'),
+      stage: data.stage ? String(data.stage) : undefined,
+      progress: data.progress || {}
     }
   })
+}
+
+export interface ServerArchiveVerificationResult {
+  verified: boolean
+  status: 'verified' | 'tampered' | 'unverified'
+  verifiedBy?: 'system_archives' | 'server_signature'
+  message: string
+  serverChecksum?: string
+}
+
+/**
+ * Validates an archive against the server's authoritative system_archives collection
+ * and verifies its cryptographic HMAC-SHA256 signature signed with the server secret.
+ */
+export async function verifyArchiveAgainstServer(params: {
+  checksum?: string
+  signature?: string
+  archiveId?: string
+}): Promise<ServerArchiveVerificationResult> {
+  const { checksum, signature, archiveId } = params
+
+  if (!checksum) {
+    return {
+      verified: false,
+      status: 'unverified',
+      message: 'Unverified archive: No cryptographic checksum found.'
+    }
+  }
+
+  const cleanChecksum = checksum.trim().toLowerCase()
+
+  // 1. Check against authoritative record in system_archives by archiveId
+  if (archiveId) {
+    const archiveDoc = await adminDb.collection('system_archives').doc(archiveId).get()
+    if (archiveDoc.exists) {
+      const data = archiveDoc.data()
+      const savedChecksum = String(data?.checksum || '').trim().toLowerCase()
+      if (savedChecksum === cleanChecksum) {
+        return {
+          verified: true,
+          status: 'verified',
+          verifiedBy: 'system_archives',
+          message: `Cryptographically verified: Checksum matches authoritative system archive record (${archiveId}).`,
+          serverChecksum: savedChecksum
+        }
+      } else {
+        return {
+          verified: false,
+          status: 'tampered',
+          message: `TAMPER DETECTED: This archive claims ID "${archiveId}", but its checksum does not match the authoritative record saved in system_archives.`,
+          serverChecksum: savedChecksum
+        }
+      }
+    }
+  }
+
+  // 2. Check if checksum matches any record in system_archives
+  const matchSnap = await adminDb
+    .collection('system_archives')
+    .where('checksum', '==', cleanChecksum)
+    .limit(1)
+    .get()
+
+  if (!matchSnap.empty) {
+    const matchedDoc = matchSnap.docs[0]
+    return {
+      verified: true,
+      status: 'verified',
+      verifiedBy: 'system_archives',
+      message: `Cryptographically verified: Checksum matches authoritative system archive (${matchedDoc.id}).`,
+      serverChecksum: cleanChecksum
+    }
+  }
+
+  // 3. Verify server HMAC signature
+  if (signature) {
+    const isSigValid = verifyArchiveSignature(cleanChecksum, signature)
+    if (isSigValid) {
+      return {
+        verified: true,
+        status: 'verified',
+        verifiedBy: 'server_signature',
+        message: 'Cryptographically verified: Signed with server authority key.',
+        serverChecksum: cleanChecksum
+      }
+    } else {
+      return {
+        verified: false,
+        status: 'tampered',
+        message: 'TAMPER DETECTED: Invalid server signature. The archive content or checksum has been modified or recalculated.'
+      }
+    }
+  }
+
+  // 4. No server match and no valid signature
+  return {
+    verified: false,
+    status: 'unverified',
+    message: 'Unverified archive: Checksum is not registered in system_archives and lacks a valid server signature.'
+  }
 }

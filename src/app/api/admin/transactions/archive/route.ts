@@ -5,6 +5,8 @@ import {
   getSavedArchiveServer,
   listSavedArchivesServer
 } from '@/lib/server/archive'
+import { getClosedFiscalCutoff } from '@/lib/server/system-lock'
+import { getTodayIST, isValidDateStringIST } from '@/lib/utils/date'
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,7 +28,8 @@ export async function GET(req: NextRequest) {
     // 1. List saved server archives
     if (searchParams.get('list') === 'true') {
       const archives = await listSavedArchivesServer()
-      return NextResponse.json({ success: true, archives })
+      const lastClosedCutoff = await getClosedFiscalCutoff()
+      return NextResponse.json({ success: true, archives, lastClosedCutoff })
     }
 
     // 2. Fetch specific server archive by archiveId
@@ -43,12 +46,33 @@ export async function GET(req: NextRequest) {
           }
         })
       }
-      return NextResponse.json({ success: true, archive })
+      const lastClosedCutoff = await getClosedFiscalCutoff()
+      return NextResponse.json({ success: true, archive, lastClosedCutoff })
     }
 
     // 3. Build live server archive up to cutoff date
-    const cutoffDate = searchParams.get('cutoffDate') || undefined
+    const rawCutoff = searchParams.get('cutoffDate') || undefined
+    let cutoffDate: string | undefined = undefined
+    if (rawCutoff) {
+      const trimmed = rawCutoff.trim()
+      if (!isValidDateStringIST(trimmed)) {
+        return NextResponse.json(
+          { error: `Invalid cutoffDate parameter: "${rawCutoff}". Date must be in YYYY-MM-DD format.` },
+          { status: 400 }
+        )
+      }
+      const today = getTodayIST()
+      if (trimmed > today) {
+        return NextResponse.json(
+          { error: `Cutoff date (${trimmed}) cannot be in the future. It must be on or before today (${today}).` },
+          { status: 400 }
+        )
+      }
+      cutoffDate = trimmed
+    }
+
     const { archive, count, auditCount, openingDate, checksum } = await buildMasterArchiveServer({ cutoffDate })
+    const lastClosedCutoff = await getClosedFiscalCutoff()
 
     if (searchParams.get('download') === 'true') {
       const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
@@ -71,6 +95,7 @@ export async function GET(req: NextRequest) {
       checksum,
       cutoffDate,
       openingDate,
+      lastClosedCutoff,
       archive
     })
   } catch (err: unknown) {
@@ -97,9 +122,28 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}))
     const { searchParams } = new URL(req.url)
-    const cutoffDate = body.cutoffDate || searchParams.get('cutoffDate') || undefined
+    const rawCutoff = body.cutoffDate || searchParams.get('cutoffDate') || undefined
+    let cutoffDate: string | undefined = undefined
+    if (rawCutoff) {
+      const trimmed = String(rawCutoff).trim()
+      if (!isValidDateStringIST(trimmed)) {
+        return NextResponse.json(
+          { error: `Invalid cutoffDate parameter: "${rawCutoff}". Date must be in YYYY-MM-DD format.` },
+          { status: 400 }
+        )
+      }
+      const today = getTodayIST()
+      if (trimmed > today) {
+        return NextResponse.json(
+          { error: `Cutoff date (${trimmed}) cannot be in the future. It must be on or before today (${today}).` },
+          { status: 400 }
+        )
+      }
+      cutoffDate = trimmed
+    }
 
     const { archive, count, auditCount, openingDate, checksum } = await buildMasterArchiveServer({ cutoffDate })
+    const lastClosedCutoff = await getClosedFiscalCutoff()
 
     return NextResponse.json({
       success: true,
@@ -108,6 +152,7 @@ export async function POST(req: NextRequest) {
       checksum,
       cutoffDate,
       openingDate,
+      lastClosedCutoff,
       archive
     })
   } catch (err: unknown) {

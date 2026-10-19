@@ -10,7 +10,7 @@ import { Location, Product, Transaction, TransactionType, ProductCategory, Metal
 const db = getFirestore(app);
 
 // Helper to get authenticated bearer token
-async function getAuthHeaders(): Promise<Record<string, string>> {
+export async function getAuthHeaders(): Promise<Record<string, string>> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
     throw new Error('Authentication required');
@@ -430,6 +430,7 @@ export async function fetchMasterArchive(options?: { cutoffDate?: string }): Pro
   auditCount: number;
   cutoffDate?: string;
   openingDate?: string;
+  lastClosedCutoff?: string | null;
 }> {
   const headers = await getAuthHeaders();
   const params = new URLSearchParams();
@@ -451,7 +452,8 @@ export async function fetchMasterArchive(options?: { cutoffDate?: string }): Pro
     count: Number(resData.count || 0),
     auditCount: Number(resData.auditCount || 0),
     cutoffDate: resData.cutoffDate,
-    openingDate: resData.openingDate
+    openingDate: resData.openingDate,
+    lastClosedCutoff: resData.lastClosedCutoff ?? null
   };
 }
 
@@ -501,4 +503,30 @@ export async function clearTransactionHistory(params?: {
     checksum: resData.checksum,
     archive: resData.archive
   };
+}
+
+/**
+ * Downloads a saved master archive by archiveId from the server.
+ */
+export async function downloadArchiveById(archiveId: string, filename?: string): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/admin/transactions/archive?archiveId=${encodeURIComponent(archiveId)}&download=true`, {
+    method: 'GET',
+    headers
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to download archive (${res.status})`);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || `${archiveId}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

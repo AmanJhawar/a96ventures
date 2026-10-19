@@ -129,3 +129,82 @@ export function getDefaultFiscalCutoffIST(): string {
   return march31ThisYear
 }
 
+/**
+ * Validates that a string is strictly in YYYY-MM-DD format and corresponds to a real calendar date.
+ */
+export function isValidDateStringIST(dateStr: unknown): dateStr is string {
+  if (typeof dateStr !== 'string') return false
+  const trimmed = dateStr.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false
+
+  const [yStr, mStr, dStr] = trimmed.split('-')
+  const y = parseInt(yStr, 10)
+  const m = parseInt(mStr, 10)
+  const d = parseInt(dStr, 10)
+
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return false
+  if (m < 1 || m > 12) return false
+  if (d < 1 || d > 31) return false
+
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  return (
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() === m - 1 &&
+    dt.getUTCDate() === d
+  )
+}
+
+export interface CutoffValidationResult {
+  isValid: boolean
+  error?: string
+  cutoffDate?: string
+}
+
+/**
+ * Validates a cutoff date for fiscal year closing / zero-balance run.
+ * Rules:
+ * - Must be present in strict YYYY-MM-DD format.
+ * - Must be a valid calendar date.
+ * - Must be on or before today (in IST).
+ * - Must be strictly later than the last closed fiscal cutoff date.
+ */
+export function validateFiscalCutoffDate(
+  rawCutoff: unknown,
+  lastClosedCutoff: string | null
+): CutoffValidationResult {
+  if (!rawCutoff || typeof rawCutoff !== 'string' || !rawCutoff.trim()) {
+    return {
+      isValid: false,
+      error: 'Closing fiscal cutoff date is required and must be in YYYY-MM-DD format.'
+    }
+  }
+
+  const cutoff = rawCutoff.trim()
+  if (!isValidDateStringIST(cutoff)) {
+    return {
+      isValid: false,
+      error: `Invalid cutoff date format: "${cutoff}". Cutoff date must be a valid calendar date in YYYY-MM-DD format.`
+    }
+  }
+
+  const today = getTodayIST()
+  if (cutoff > today) {
+    return {
+      isValid: false,
+      error: `Cutoff date (${cutoff}) cannot be in the future. It must be on or before today (${today}).`
+    }
+  }
+
+  if (lastClosedCutoff && cutoff <= lastClosedCutoff) {
+    return {
+      isValid: false,
+      error: `Refusing run: Cutoff date (${cutoff}) must be strictly later than the last closed cutoff date (${lastClosedCutoff}). Period up to ${lastClosedCutoff} is already closed.`
+    }
+  }
+
+  return {
+    isValid: true,
+    cutoffDate: cutoff
+  }
+}
+

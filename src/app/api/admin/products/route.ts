@@ -5,6 +5,11 @@ import { getAuthenticatedCaller, hasModulePermission } from '@/lib/firebase/serv
 import { ProductCategory, MetalType, Product } from '@/lib/types'
 import { gramsToMg, mgToGrams, calculateAverageWeight } from '@/lib/utils/weight'
 import { getTodayIST } from '@/lib/utils/date'
+import {
+  getZeroBalanceLockRef,
+  assertNotZeroBalanceLocked,
+  SystemLockedError
+} from '@/lib/server/system-lock'
 
 const ALLOWED_PURITIES_BY_METAL: Record<MetalType, string[]> = {
   Gold: ['999.9', '999', '995', '916', '750'],
@@ -135,8 +140,7 @@ export async function POST(req: NextRequest) {
     }
     const cleanName = String(name).trim()
 
-    // Create Product, initial transaction, and audit log atomically in a single batch
-    const batch = adminDb.batch()
+    // Create Product, initial transaction, and audit log atomically in a single transaction
     const productDocRef = adminDb.collection('products').doc()
     const productDocData: Record<string, unknown> = {
       name: cleanName,
@@ -161,12 +165,10 @@ export async function POST(req: NextRequest) {
       productDocData.pieceWeightsByLocationMg = pieceWeightsByLocationMg
     }
 
-    batch.set(productDocRef, productDocData)
-
-    // If opening stock was given, record the initial purchase transaction atomically
+    let initialTxDocData: Record<string, unknown> | null = null
+    const txDocRef = adminDb.collection('transactions').doc()
     if (initQty > 0 && initialLocationId && initialLocationName) {
-      const txDocRef = adminDb.collection('transactions').doc()
-      const txDocData: Record<string, unknown> = {
+      initialTxDocData = {
         type: 'purchase',
         productId: productDocRef.id,
         productName: cleanName,
@@ -188,14 +190,12 @@ export async function POST(req: NextRequest) {
         operatorEmail: caller.callerEmail
       }
       if (isIdol && validPieceWeights.length > 0) {
-        txDocData.pieceWeights = validPieceWeights
+        initialTxDocData.pieceWeights = validPieceWeights
       }
-      batch.set(txDocRef, txDocData)
     }
 
-    // Append Audit Log atomically with server timestamp
     const auditDocRef = adminDb.collection('audit_logs').doc()
-    batch.set(auditDocRef, {
+    const auditDocData = {
       userId: caller.callerUid,
       userName: caller.callerName,
       userEmail: caller.callerEmail,
@@ -206,12 +206,26 @@ export async function POST(req: NextRequest) {
       description: `Added product "${cleanName}" (${cleanMetal} · ${cleanCategory} · Brand: ${cleanBrand} · ${numWeight}g · SKU: ${cleanSku}) with ${totalStock} opening units`,
       timestamp: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp()
-    })
+    }
 
-    await batch.commit()
+    await adminDb.runTransaction(async (t) => {
+      // Check zero-balance lock inside the write transaction
+      const lockRef = getZeroBalanceLockRef()
+      const lockSnap = await t.get(lockRef)
+      assertNotZeroBalanceLocked(lockSnap)
+
+      t.set(productDocRef, productDocData)
+      if (initialTxDocData) {
+        t.set(txDocRef, initialTxDocData)
+      }
+      t.set(auditDocRef, auditDocData)
+    })
 
     return NextResponse.json({ success: true, id: productDocRef.id })
   } catch (err: unknown) {
+    if (err instanceof SystemLockedError) {
+      return NextResponse.json({ error: err.message }, { status: err.statusCode })
+    }
     console.error('POST /api/admin/products error:', err)
     const msg = err instanceof Error ? err.message : 'Failed to add product'
     return NextResponse.json({ error: msg }, { status: 400 })

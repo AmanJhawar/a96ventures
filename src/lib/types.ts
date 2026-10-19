@@ -45,7 +45,7 @@ export type ProductCategory = 'Bullions' | 'Idols' | 'MMTC PAMP';
 
 export type ProductBrand = 'MMTC PAMP' | 'Local';
 
-export type TransactionType = 'purchase' | 'sale' | 'return' | 'transfer' | 'adjustment' | 'repair' | 'melt' | 'reversal';
+export type TransactionType = 'purchase' | 'sale' | 'return' | 'transfer' | 'adjustment' | 'repair' | 'melt' | 'reversal' | 'opening';
 
 export interface Location {
   id: string;
@@ -95,6 +95,8 @@ export interface Transaction {
   toLocationName?: string; // for transfer
   customerName?: string; // for sale, return
   notes?: string;
+  weight?: number; // total weight (in grams)
+  weightMg?: number; // total weight (in whole milligrams)
   previousWeight?: number; // for repair (in grams)
   previousWeightMg?: number; // for repair (in whole milligrams)
   newWeight?: number; // for repair (in grams)
