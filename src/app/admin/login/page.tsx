@@ -230,7 +230,7 @@ function LoginForm() {
             <Clock size={16} className="text-gray-700 shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold text-black">Session Expired</p>
-              <p className="mt-0.5 text-gray-600">Your session was closed due to 15 minutes of inactivity to protect cash and stock. Please sign in again.</p>
+              <p className="mt-0.5 text-gray-600">Your session was closed due to 15 minutes of inactivity. Please sign in again.</p>
             </div>
           </div>
         )}

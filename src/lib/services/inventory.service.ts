@@ -22,6 +22,25 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
+// Helper to parse detailed error from API responses
+async function getErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      if (typeof data?.error === 'string' && data.error.trim()) return data.error.trim();
+      if (typeof data?.message === 'string' && data.message.trim()) return data.message.trim();
+    } catch {
+      if (text && text.length < 200 && !text.includes('<!DOCTYPE')) {
+        return text.trim();
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return `${fallback} (${res.status})`;
+}
+
 // ==========================================
 // LOCATIONS
 // ==========================================
@@ -30,8 +49,7 @@ export async function getLocations(): Promise<Location[]> {
   const headers = await getAuthHeaders();
   const res = await fetch('/api/admin/locations', { method: 'GET', headers });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to fetch locations (${res.status})`);
+    throw new Error(await getErrorMessage(res, 'Failed to fetch locations'));
   }
   const data = await res.json();
   if (Array.isArray(data.locations)) return data.locations;
@@ -47,8 +65,7 @@ export async function addLocation(data: { name: string; description?: string }):
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to add location (${res.status})`);
+    throw new Error(await getErrorMessage(res, 'Failed to add location'));
   }
 
   const resData = await res.json();
@@ -64,8 +81,7 @@ export async function updateLocation(id: string, data: { name: string; descripti
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to update location (${res.status})`);
+    throw new Error(await getErrorMessage(res, 'Failed to update location'));
   }
 }
 
@@ -77,8 +93,7 @@ export async function deleteLocation(id: string): Promise<void> {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to delete location (${res.status})`);
+    throw new Error(await getErrorMessage(res, 'Failed to delete location'));
   }
 }
 
@@ -194,8 +209,7 @@ export async function addProduct(data: {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to add product (${res.status})`);
+    throw new Error(await getErrorMessage(res, 'Failed to add product'));
   }
 
   const resData = await res.json();
@@ -223,8 +237,7 @@ export async function updateProduct(id: string, data: {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to update product (${res.status})`);
+    throw new Error(await getErrorMessage(res, 'Failed to update product'));
   }
 }
 
@@ -239,8 +252,7 @@ export async function deleteProduct(id: string): Promise<void> {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to delete product (${res.status})`);
+    throw new Error(await getErrorMessage(res, 'Failed to delete product'));
   }
 }
 

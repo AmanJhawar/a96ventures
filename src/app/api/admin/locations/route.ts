@@ -74,14 +74,14 @@ export async function POST(req: NextRequest) {
       description,
       createdAt: FieldValue.serverTimestamp(),
       createdBy: caller.callerUid,
-      createdByEmail: caller.callerEmail
+      createdByEmail: caller.callerEmail || ''
     })
 
     // Write server audit log
     await adminDb.collection('audit_logs').add({
       userId: caller.callerUid,
-      userName: caller.callerName,
-      userEmail: caller.callerEmail,
+      userName: caller.callerName || 'Admin',
+      userEmail: caller.callerEmail || '',
       action: 'create',
       entityType: 'location',
       entityId: docRef.id,
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     console.error('POST /api/admin/locations error:', err)
     const msg = err instanceof Error ? err.message : 'Failed to add location'
-    return NextResponse.json({ error: msg }, { status: 400 })
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
 
@@ -140,14 +140,14 @@ export async function PUT(req: NextRequest) {
       description,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: caller.callerUid,
-      updatedByEmail: caller.callerEmail
+      updatedByEmail: caller.callerEmail || ''
     })
 
     // Write server audit log
     await adminDb.collection('audit_logs').add({
       userId: caller.callerUid,
-      userName: caller.callerName,
-      userEmail: caller.callerEmail,
+      userName: caller.callerName || 'Admin',
+      userEmail: caller.callerEmail || '',
       action: 'update',
       entityType: 'location',
       entityId: id,
@@ -163,7 +163,7 @@ export async function PUT(req: NextRequest) {
   } catch (err: unknown) {
     console.error('PUT /api/admin/locations error:', err)
     const msg = err instanceof Error ? err.message : 'Failed to update location'
-    return NextResponse.json({ error: msg }, { status: 400 })
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
 
@@ -218,8 +218,8 @@ export async function DELETE(req: NextRequest) {
     // Write server audit log
     await adminDb.collection('audit_logs').add({
       userId: caller.callerUid,
-      userName: caller.callerName,
-      userEmail: caller.callerEmail,
+      userName: caller.callerName || 'Admin',
+      userEmail: caller.callerEmail || '',
       action: 'delete',
       entityType: 'location',
       entityId: id,
@@ -235,6 +235,6 @@ export async function DELETE(req: NextRequest) {
   } catch (err: unknown) {
     console.error('DELETE /api/admin/locations error:', err)
     const msg = err instanceof Error ? err.message : 'Failed to delete location'
-    return NextResponse.json({ error: msg }, { status: 400 })
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
