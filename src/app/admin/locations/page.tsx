@@ -142,7 +142,7 @@ export default function AdminLocations() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Locations</h1>
           <p className="text-gray-500 text-sm">
-            Manage your physical points of storage (showrooms, vaults, warehouses, workshops).
+            Showrooms, vaults, and warehouses.
           </p>
         </div>
         {!isFormOpen && hasPermission('locations', 'add') && (
@@ -201,11 +201,11 @@ export default function AdminLocations() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Location Name <span className="text-red-500">*</span>
+                  Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Main Showroom, Central Vault, Workshop A"
+                  placeholder="e.g. Main Vault"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
@@ -215,11 +215,11 @@ export default function AdminLocations() {
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                  Description / Notes (Optional)
+                  Description (Optional)
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Ground floor safe deposit, retail counter"
+                  placeholder="e.g. Retail counter, vault safe"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
@@ -240,7 +240,7 @@ export default function AdminLocations() {
                   className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
                 >
                   <Check size={16} />
-                  {submitting ? 'Saving...' : editingId ? 'Update Location' : 'Save Location'}
+                  {submitting ? 'Saving...' : editingId ? 'Update' : 'Save'}
                 </button>
               </div>
             </form>
@@ -255,8 +255,8 @@ export default function AdminLocations() {
         </div>
       ) : locations.length === 0 ? (
         <EmptyState
-          title="No locations configured"
-          description="Create your first location such as 'Showroom' or 'Vault' to start managing inventory across locations."
+          title="No locations found"
+          description="Add a showroom or vault to start tracking stock."
           action={
             hasPermission('locations', 'add') ? (
               <button
@@ -264,7 +264,7 @@ export default function AdminLocations() {
                 className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
               >
                 <Plus size={16} />
-                Add First Location
+                Add Location
               </button>
             ) : undefined
           }
@@ -276,7 +276,7 @@ export default function AdminLocations() {
               <tr>
                 <th className="px-6 py-3.5">Location</th>
                 <th className="px-6 py-3.5">Description</th>
-                <th className="px-6 py-3.5 text-right">Items in Stock</th>
+                <th className="px-6 py-3.5 text-right">Stock Units</th>
                 <th className="px-6 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
@@ -335,7 +335,7 @@ export default function AdminLocations() {
       <ConfirmModal
         isOpen={!!deleteId}
         title="Delete Location"
-        description="Are you sure you want to delete this location? If products hold stock at this location, deletion will be blocked."
+        description="Are you sure? Locations with active stock cannot be deleted."
         confirmText="Delete"
         onConfirm={executeDelete}
         onClose={() => setDeleteId(null)}

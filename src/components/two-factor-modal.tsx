@@ -171,8 +171,8 @@ function TwoFactorModalDialog({ onClose, user }: { onClose: () => void; user: Us
                 {isEnrolled ? <ShieldCheck size={20} /> : <Lock size={20} />}
               </div>
               <div>
-                <h2 className="text-lg font-bold text-black tracking-tight">Two-Step Verification (MFA)</h2>
-                <p className="text-xs text-gray-500">Protect cash registers, vaults and stock records with Firebase Auth MFA</p>
+                <h2 className="text-lg font-bold text-black tracking-tight">Two-Factor Authentication</h2>
+                <p className="text-xs text-gray-500">Protect your account with SMS verification codes.</p>
               </div>
             </div>
             <button

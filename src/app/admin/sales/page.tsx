@@ -678,9 +678,9 @@ export default function AdminSales() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Sales & Orders</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Sales</h1>
           <p className="text-gray-500 text-sm">
-            Record customer sales and customer returns.
+            Customer sales and returns.
           </p>
         </div>
 
@@ -692,7 +692,7 @@ export default function AdminSales() {
               className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold disabled:opacity-40 transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
             >
               <RotateCcw size={14} />
-              Record Return
+              New Return
             </button>
           )}
           {hasPermission('sales', 'add') && (
@@ -702,7 +702,7 @@ export default function AdminSales() {
               className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold disabled:opacity-40 transition-[background-color,transform] duration-150 active:scale-[0.97]"
             >
               <Plus size={14} />
-              Record Sale
+              New Sale
             </button>
           )}
         </div>
@@ -718,7 +718,7 @@ export default function AdminSales() {
           <div className="text-2xl font-bold text-black tabular-nums">
             ₹{stats.salesRevenue.toLocaleString('en-IN')}
           </div>
-          <div className="text-xs text-gray-400 mt-1">{stats.salesCount} sales recorded</div>
+          <div className="text-xs text-gray-400 mt-1">{stats.salesCount} sales</div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
@@ -729,18 +729,18 @@ export default function AdminSales() {
           <div className="text-2xl font-bold text-black tabular-nums">
             {stats.salesUnits.toLocaleString('en-IN')}
           </div>
-          <div className="text-xs text-gray-400 mt-1">across all locations</div>
+          <div className="text-xs text-gray-400 mt-1">units dispatched</div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between text-gray-500 mb-2">
-            <span className="text-xs uppercase font-semibold tracking-wider">Returns / Refunds</span>
+            <span className="text-xs uppercase font-semibold tracking-wider">Returns</span>
             <RotateCcw size={16} className="text-gray-400" />
           </div>
           <div className="text-2xl font-bold text-black tabular-nums">
             ₹{stats.returnsAmount.toLocaleString('en-IN')}
           </div>
-          <div className="text-xs text-gray-400 mt-1">{stats.returnsCount} returns restocked</div>
+          <div className="text-xs text-gray-400 mt-1">{stats.returnsCount} returns</div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
@@ -751,7 +751,7 @@ export default function AdminSales() {
           <div className="text-2xl font-bold text-black tabular-nums">
             ₹{stats.netRevenue.toLocaleString('en-IN')}
           </div>
-          <div className="text-xs text-gray-400 mt-1">Gross sales minus returns</div>
+          <div className="text-xs text-gray-400 mt-1">Sales minus returns</div>
         </div>
       </div>
 
@@ -786,7 +786,7 @@ export default function AdminSales() {
               }`}
           >
             <RotateCcw size={16} />
-            Returns & Restock ({stats.returnsCount})
+            Returns ({stats.returnsCount})
           </button>
         )}
       </div>

@@ -184,8 +184,8 @@ export default function AdminPortfolio() {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Portfolio Manager</h1>
-          <p className="text-gray-500 text-sm">Manage your portfolio companies and case studies.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Portfolio</h1>
+          <p className="text-gray-500 text-sm">Manage portfolio ventures and case studies.</p>
         </div>
         {!isFormOpen && hasPermission('portfolio', 'add') && (
           <button 
@@ -193,7 +193,7 @@ export default function AdminPortfolio() {
             className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97]"
           >
             <Plus size={14} />
-            Add Company
+            Add Venture
           </button>
         )}
       </div>

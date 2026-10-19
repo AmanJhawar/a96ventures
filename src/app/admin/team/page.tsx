@@ -184,8 +184,8 @@ export default function AdminTeam() {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Team Manager</h1>
-          <p className="text-gray-500 text-sm">Add, edit or remove team members from the public site.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Team</h1>
+          <p className="text-gray-500 text-sm">Manage leadership and team members.</p>
         </div>
         {!isFormOpen && hasPermission('team', 'add') && (
           <button 

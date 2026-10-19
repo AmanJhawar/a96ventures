@@ -230,7 +230,7 @@ function LoginForm() {
             <Clock size={16} className="text-gray-700 shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold text-black">Session Expired</p>
-              <p className="mt-0.5 text-gray-600">Your session was closed due to 15 minutes of inactivity. Please sign in again.</p>
+              <p className="mt-0.5 text-gray-600">Session expired after 15m of inactivity.</p>
             </div>
           </div>
         )}
@@ -240,7 +240,7 @@ function LoginForm() {
           <>
             <div className="text-center mb-10">
               <h2 className="text-3xl font-bold text-black tracking-tight mb-2">Admin</h2>
-              <p className="text-sm text-gray-500">Sign in to manage your command center.</p>
+              <p className="text-sm text-gray-500">Sign in to your account.</p>
             </div>
 
             {error && (
@@ -252,7 +252,7 @@ function LoginForm() {
             <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="space-y-6">
               <div>
                 <label htmlFor="identifier" className="block text-sm font-medium text-gray-500 mb-2">
-                  Username or Email
+                  Email or Username
                 </label>
                 <input
                   id="identifier"
@@ -262,7 +262,7 @@ function LoginForm() {
                   spellCheck={false}
                   {...register('identifier')}
                   className={`w-full px-4 py-3 rounded-lg border focus:border-black focus:ring-4 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] ${errors.identifier ? 'border-gray-900' : 'border-gray-200'}`}
-                  placeholder="e.g. username or email"
+                  placeholder="user@domain.com"
                 />
                 {errors.identifier && <p className="text-gray-500 font-medium text-sm mt-1">{errors.identifier.message}</p>}
               </div>
@@ -394,7 +394,7 @@ function LoginForm() {
                 </div>
                 <h2 className="text-2xl font-bold text-black tracking-tight">Reset Password</h2>
                 <p className="text-xs text-gray-500 mt-1">
-                  Enter your email or staff username to receive a password recovery link.
+                  Enter your email to receive a recovery link.
                 </p>
               </div>
             </div>
@@ -425,13 +425,13 @@ function LoginForm() {
               <form onSubmit={handleForgotPassword} className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Username or Email
+                    Email or Username
                   </label>
                   <input
                     type="text"
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
-                    placeholder="e.g. username or email"
+                    placeholder="user@domain.com"
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:border-black focus:ring-4 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 text-sm"
                     autoFocus
                   />

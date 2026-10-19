@@ -447,9 +447,9 @@ export default function AdminUsersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Users & Access Control</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Users & Permissions</h1>
           <p className="text-gray-500 text-sm">
-            Manage store users, granular subsection permissions, and audit activity streams.
+            Staff accounts, permissions, and audit logs.
           </p>
         </div>
 
@@ -477,7 +477,7 @@ export default function AdminUsersPage() {
             }`}
         >
           <Users size={16} />
-          Staff & Users ({users.length})
+          Staff ({users.length})
         </button>
         <button
           onClick={() => {
@@ -490,7 +490,7 @@ export default function AdminUsersPage() {
             }`}
         >
           <History size={16} />
-          Audit Trail & Activity Log ({currentAuditLogs.length})
+          Audit Trail ({currentAuditLogs.length})
         </button>
       </div>
 
@@ -577,7 +577,7 @@ export default function AdminUsersPage() {
                       </label>
                       <input
                         type="email"
-                        placeholder="e.g. rahul@a96ventures.com"
+                        placeholder="user@domain.com"
                         value={formEmail}
                         onChange={(e) => setFormEmail(e.target.value)}
                         disabled={!!editingUserId}

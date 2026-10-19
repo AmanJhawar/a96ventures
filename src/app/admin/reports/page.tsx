@@ -423,9 +423,9 @@ export default function AdminReportsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Reports & Analytics</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Reports</h1>
           <p className="text-gray-500 text-sm">
-            Highest-selling products, sales leaderboards, and physical stock valuation.
+            Sales performance and stock valuation.
           </p>
         </div>
 
@@ -438,7 +438,7 @@ export default function AdminReportsPage() {
                 className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 disabled:opacity-40 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
               >
                 <Download size={14} />
-                Export Sales CSV
+                Export Sales
               </button>
             ) : (
               <>
@@ -448,14 +448,14 @@ export default function AdminReportsPage() {
                   className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 disabled:opacity-40 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
                 >
                   <Download size={14} />
-                  Export Stock CSV
+                  Export Stock
                 </button>
                 <button
                   onClick={() => window.print()}
                   className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
                 >
                   <Printer size={14} />
-                  Print Summary
+                  Print
                 </button>
               </>
             )}
@@ -480,7 +480,7 @@ export default function AdminReportsPage() {
           }`}
         >
           <TrendingUp size={16} />
-          Highest Selling Products
+          Top Selling
         </button>
         <button
           onClick={() => setActiveTab('stock_summary')}
@@ -491,7 +491,7 @@ export default function AdminReportsPage() {
           }`}
         >
           <Warehouse size={16} />
-          Stock Summary Report
+          Stock Valuation
         </button>
       </div>
 

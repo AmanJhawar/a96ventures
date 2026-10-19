@@ -126,23 +126,23 @@ export const ROLE_PRESETS: Record<UserRole, UserPermissions> = {
 export const ROLE_LABELS: Record<UserRole, { label: string; description: string }> = {
   super_admin: {
     label: 'Super Admin',
-    description: 'Full uninhibited access across all modules, zero-balance export & user permissions.'
+    description: 'Full unrestricted access across all modules, fiscal closing, and user management.'
   },
   store_manager: {
     label: 'Store Manager',
-    description: 'Manages inventory, stock movements, purchases, and sales; cannot delete core catalogs.'
+    description: 'Inventory, purchases, sales, and movements; cannot delete core catalog items.'
   },
   sales_cashier: {
     label: 'Sales Cashier',
-    description: 'Front-desk point of sale. Records sales, returns, customer inquiries; read-only stock.'
+    description: 'Point of sale operations, customer returns, and read-only inventory.'
   },
   vault_custodian: {
     label: 'Vault Custodian',
-    description: 'Handles purchases, stock transfers, repairs, scrap melts, and physical audits.'
+    description: 'Purchases, transfers, repairs, scrap melts, and physical audits.'
   },
   custom: {
     label: 'Custom Access',
-    description: 'Individually selected permissions tailored to specific responsibilities.'
+    description: 'Customized permission set tailored to specific staff responsibilities.'
   }
 }
 

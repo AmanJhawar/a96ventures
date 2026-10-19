@@ -191,7 +191,7 @@ export default function AdminInquiries() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Inquiries</h1>
-          <p className="text-gray-500 text-sm">View contact submissions from the public site.</p>
+          <p className="text-gray-500 text-sm">Customer submissions and leads.</p>
         </div>
       </div>
 

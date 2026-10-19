@@ -1412,9 +1412,9 @@ export default function AdminInventory() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Inventory Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Inventory</h1>
           <p className="text-gray-500 text-sm">
-            Track items, purchases, transfers, idol repairs, and melts.
+            Catalog, stock levels, and movements.
           </p>
         </div>
 
@@ -1564,7 +1564,7 @@ export default function AdminInventory() {
               }`}
           >
             <Package size={16} />
-            Products Catalog ({products.length})
+            Products ({products.length})
           </button>
         )}
         {allowedTabs.includes('purchases') && (
@@ -1598,7 +1598,7 @@ export default function AdminInventory() {
               }`}
           >
             <Layers size={16} />
-            Stock Movements ({filteredMovements.length})
+            Movements ({filteredMovements.length})
           </button>
         )}
         {archivedSession && (

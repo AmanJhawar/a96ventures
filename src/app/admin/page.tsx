@@ -9,15 +9,15 @@ export default function AdminDashboard() {
   const { hasPermission, isSuperAdmin } = usePermissions()
 
   const cards = [
-    { name: 'Inventory', href: '/admin/inventory', icon: Warehouse, description: 'Manage products catalog, purchases, transfers, repairs, and melts.' },
-    { name: 'Sales', href: '/admin/sales', icon: ShoppingCart, description: 'Record customer sales and manage returns across locations.' },
-    { name: 'Locations', href: '/admin/locations', icon: MapPin, description: 'Manage showrooms, vaults, warehouses, and workshops.' },
-    { name: 'Reports', href: '/admin/reports', icon: BarChart3, description: 'Track sales leaderboards, highest-selling items, and stock valuation.' },
-    { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare, description: 'View and respond to customer inquiries.' },
-    { name: 'Users & Access', href: '/admin/users', icon: ShieldCheck, description: 'Manage staff users, granular subsection permissions, and audit logs.' },
-    { name: 'Team', href: '/admin/team', icon: Users, description: 'Manage team members and their roles.' },
-    { name: 'Brands', href: '/admin/brands', icon: Bookmark, description: 'Manage the brands in your ecosystem.' },
-    { name: 'Portfolio', href: '/admin/portfolio', icon: Briefcase, description: 'Update your investment portfolio.' },
+    { name: 'Inventory', href: '/admin/inventory', icon: Warehouse, description: 'Catalog, stock levels, and movements.' },
+    { name: 'Sales', href: '/admin/sales', icon: ShoppingCart, description: 'Customer sales and return orders.' },
+    { name: 'Locations', href: '/admin/locations', icon: MapPin, description: 'Showrooms, vaults, and storage points.' },
+    { name: 'Reports', href: '/admin/reports', icon: BarChart3, description: 'Sales performance and stock valuation.' },
+    { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare, description: 'Customer messages and leads.' },
+    { name: 'Users', href: '/admin/users', icon: ShieldCheck, description: 'Staff accounts and permissions.' },
+    { name: 'Team', href: '/admin/team', icon: Users, description: 'Public site team roster.' },
+    { name: 'Brands', href: '/admin/brands', icon: Bookmark, description: 'Brand partners and logos.' },
+    { name: 'Portfolio', href: '/admin/portfolio', icon: Briefcase, description: 'Ventures and case studies.' },
   ]
 
   const accessibleCards = cards.filter((card) => {
@@ -43,8 +43,8 @@ export default function AdminDashboard() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Dashboard Overview</h1>
-        <p className="text-gray-500 text-sm">Welcome to the A96 Ventures command center.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Dashboard</h1>
+        <p className="text-gray-500 text-sm">A96 Ventures command center</p>
       </div>
 
       <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" staggerDelay={0.05}>

@@ -29,7 +29,7 @@ const navItems: NavItemConfig[] = [
   { name: 'Locations', href: '/admin/locations', icon: MapPin, module: 'locations', action: 'view' },
   { name: 'Reports', href: '/admin/reports', icon: BarChart3, module: 'reports', action: 'view' },
   { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare, module: 'inquiries', action: 'view' },
-  { name: 'Users & Access', href: '/admin/users', icon: ShieldCheck, module: 'users', action: 'view' },
+  { name: 'Users', href: '/admin/users', icon: ShieldCheck, module: 'users', action: 'view' },
   { name: 'Team', href: '/admin/team', icon: Users, module: 'team', action: 'view' },
   { name: 'Brands', href: '/admin/brands', icon: Bookmark, module: 'brands', action: 'view' },
   { name: 'Portfolio', href: '/admin/portfolio', icon: Briefcase, module: 'portfolio', action: 'view' },
@@ -94,7 +94,7 @@ function AdminPageGate({ children }: { children: React.ReactNode }) {
           href="/admin"
           className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-xs font-semibold hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
         >
-          Return to Dashboard
+          Back to Dashboard
         </Link>
       </div>
     )
@@ -175,7 +175,7 @@ function SidebarContent({
             className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
           >
             <Shield size={16} />
-            Two-Step Login (MFA)
+            Two-Factor Auth
           </button>
         )}
         <button

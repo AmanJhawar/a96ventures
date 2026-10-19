@@ -171,8 +171,8 @@ export default function AdminBrands() {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Brands Manager</h1>
-          <p className="text-gray-500 text-sm">Add or remove portfolio brands.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Brands</h1>
+          <p className="text-gray-500 text-sm">Manage partner and ecosystem brands.</p>
         </div>
         {!isFormOpen && hasPermission('brands', 'add') && (
           <button 
