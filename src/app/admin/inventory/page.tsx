@@ -21,7 +21,9 @@ import {
   ChevronLeft,
   ChevronRight,
   History,
-  Trash2
+  Trash2,
+  ShieldCheck,
+  AlertTriangle
 } from 'lucide-react'
 
 export interface PurchaseLineItem {
@@ -1652,26 +1654,29 @@ export default function AdminInventory() {
                 Viewing Offline Archive: {archivedSession.filename}
                 {archivedSession.verification.status === 'verified' && (
                   <span
-                    className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300"
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200"
                     title={archivedSession.verification.message}
                   >
-                    ✓ Cryptographically Verified (Server Sealed)
+                    <ShieldCheck size={12} className="shrink-0 text-emerald-700" />
+                    Cryptographically Verified
                   </span>
                 )}
                 {archivedSession.verification.status === 'tampered' && (
                   <span
-                    className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-300 animate-pulse"
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold bg-red-50 text-red-800 border border-red-200 animate-pulse"
                     title={archivedSession.verification.message}
                   >
-                    ⚠️ TAMPER WARNING: Altered Archive (Invalid Signature / Hash)
+                    <AlertTriangle size={12} className="shrink-0 text-red-700" />
+                    Tamper Warning: Altered Archive
                   </span>
                 )}
                 {archivedSession.verification.status === 'unverified' && (
                   <span
-                    className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300"
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200"
                     title={archivedSession.verification.message}
                   >
-                    ⚠️ Unverified Archive (Unsigned / Not in System Registry)
+                    <AlertCircle size={12} className="shrink-0 text-amber-700" />
+                    Unverified Archive (Unsigned)
                   </span>
                 )}
               </div>
@@ -1700,13 +1705,18 @@ export default function AdminInventory() {
               setIsPurchaseFormOpen(false)
               setIsMovementFormOpen(false)
             }}
-            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'products'
+            className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'products'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
               }`}
           >
-            <Package size={16} />
-            Products ({products.length})
+            <Package size={15} className="shrink-0" />
+            <span>Products</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
+              activeTab === 'products' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {products.length}
+            </span>
           </button>
         )}
         {allowedTabs.includes('purchases') && (
@@ -1717,13 +1727,18 @@ export default function AdminInventory() {
               setIsPurchaseFormOpen(false)
               setIsMovementFormOpen(false)
             }}
-            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'purchases'
+            className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'purchases'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
               }`}
           >
-            <ShoppingBag size={16} />
-            Purchases ({displayTransactions.filter((t) => t.type === 'purchase').length})
+            <ShoppingBag size={15} className="shrink-0" />
+            <span>Purchases</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
+              activeTab === 'purchases' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {displayTransactions.filter((t) => t.type === 'purchase').length}
+            </span>
           </button>
         )}
         {allowedTabs.includes('movements') && (
@@ -1734,13 +1749,18 @@ export default function AdminInventory() {
               setIsPurchaseFormOpen(false)
               setIsMovementFormOpen(false)
             }}
-            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'movements'
+            className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'movements'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
               }`}
           >
-            <Layers size={16} />
-            Movements ({filteredMovements.length})
+            <Layers size={15} className="shrink-0" />
+            <span>Movements</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
+              activeTab === 'movements' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {filteredMovements.length}
+            </span>
           </button>
         )}
         {archivedSession && (
@@ -1751,53 +1771,61 @@ export default function AdminInventory() {
               setIsPurchaseFormOpen(false)
               setIsMovementFormOpen(false)
             }}
-            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'archived-audit'
+            className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'archived-audit'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
               }`}
           >
-            <History size={16} />
-            Archived Audit Trail ({archivedSession.auditLogs.length})
+            <History size={15} className="shrink-0" />
+            <span>Archived Audit Trail</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
+              activeTab === 'archived-audit' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {archivedSession.auditLogs.length}
+            </span>
           </button>
         )}
       </div>
 
       {/* Date Range Filter Bar for Purchases and Movements */}
       {(activeTab === 'purchases' || activeTab === 'movements') && (
-        <div className="flex flex-wrap items-center justify-between gap-4 p-3.5 mb-6 bg-white border border-gray-200 rounded-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-2.5 mb-6 bg-white border border-gray-200 rounded-xl shadow-2xs">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500 mr-1">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500 px-2 select-none">
               <Calendar size={14} className="text-gray-400" />
               Date Range:
             </span>
-            {([
-              { id: 'all', label: 'All Dates' },
-              { id: 'today', label: 'Today' },
-              { id: 'week', label: 'Last 7 Days' },
-              { id: 'month', label: 'Last 30 Days' },
-              { id: 'custom', label: 'Custom' },
-            ] as const).map((preset) => (
-              <button
-                key={preset.id}
-                onClick={() => {
-                  setDateRangePreset(preset.id)
-                  setPurchasesPage(1)
-                  setMovementsPage(1)
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${dateRangePreset === preset.id
-                  ? 'bg-black text-white border border-black shadow-xs'
-                  : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
-                  }`}
-              >
-                {preset.label}
-              </button>
-            ))}
+            <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+              {([
+                { id: 'all', label: 'All Dates' },
+                { id: 'today', label: 'Today' },
+                { id: 'week', label: 'Last 7 Days' },
+                { id: 'month', label: 'Last 30 Days' },
+                { id: 'custom', label: 'Custom' },
+              ] as const).map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => {
+                    setDateRangePreset(preset.id)
+                    setPurchasesPage(1)
+                    setMovementsPage(1)
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${dateRangePreset === preset.id
+                    ? 'bg-white text-black font-semibold shadow-xs'
+                    : 'text-gray-600 hover:text-black'
+                    }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {dateRangePreset === 'custom' && (
             <div className="flex items-center gap-2">
               <div className="w-36">
                 <CustomDatePicker
+                  size="sm"
                   value={customStartDate}
                   onChange={(d) => {
                     setCustomStartDate(d)
@@ -1807,9 +1835,10 @@ export default function AdminInventory() {
                   placeholder="Start Date"
                 />
               </div>
-              <span className="text-xs text-gray-400">to</span>
+              <span className="text-xs text-gray-400 font-medium">to</span>
               <div className="w-36">
                 <CustomDatePicker
+                  size="sm"
                   value={customEndDate}
                   onChange={(d) => {
                     setCustomEndDate(d)
@@ -1828,8 +1857,8 @@ export default function AdminInventory() {
       <div className="flex flex-col gap-3 mb-6">
         {/* Movements Subtype Filter */}
         {activeTab === 'movements' && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Movement:</span>
+          <div className="flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl w-fit">
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 select-none">Movement</span>
             {(['All', 'transfer', 'adjustment', 'repair', 'melt'] as const).map((mType) => {
               const labelMap: Record<string, string> = {
                 All: 'All',
@@ -1843,9 +1872,9 @@ export default function AdminInventory() {
                 <button
                   key={mType}
                   onClick={() => setMovementTypeFilter(mType)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${isActive
-                    ? 'bg-black text-white border border-black shadow-xs'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${isActive
+                    ? 'bg-white text-black font-semibold shadow-xs'
+                    : 'text-gray-600 hover:text-black'
                     }`}
                 >
                   {labelMap[mType]}
@@ -1855,16 +1884,16 @@ export default function AdminInventory() {
           </div>
         )}
 
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
             {/* Category Filter */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Category:</span>
+            <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 select-none">Category</span>
               <button
                 onClick={() => setSelectedCategory('All')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedCategory === 'All'
-                  ? 'bg-black text-white border border-black shadow-xs'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${selectedCategory === 'All'
+                  ? 'bg-white text-black font-semibold shadow-xs'
+                  : 'text-gray-600 hover:text-black'
                   }`}
               >
                 All
@@ -1873,9 +1902,9 @@ export default function AdminInventory() {
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedCategory === cat
-                    ? 'bg-black text-white border border-black shadow-xs'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${selectedCategory === cat
+                    ? 'bg-white text-black font-semibold shadow-xs'
+                    : 'text-gray-600 hover:text-black'
                     }`}
                 >
                   {cat}
@@ -1884,13 +1913,13 @@ export default function AdminInventory() {
             </div>
 
             {/* Metal Filter (Gold / Silver) */}
-            <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Metal:</span>
+            <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 select-none">Metal</span>
               <button
                 onClick={() => setSelectedMetal('All')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedMetal === 'All'
-                  ? 'bg-black text-white border border-black shadow-xs'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${selectedMetal === 'All'
+                  ? 'bg-white text-black font-semibold shadow-xs'
+                  : 'text-gray-600 hover:text-black'
                   }`}
               >
                 All
@@ -1899,9 +1928,9 @@ export default function AdminInventory() {
                 <button
                   key={m}
                   onClick={() => setSelectedMetal(m)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedMetal === m
-                    ? 'bg-black text-white border border-black shadow-xs'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${selectedMetal === m
+                    ? 'bg-white text-black font-semibold shadow-xs'
+                    : 'text-gray-600 hover:text-black'
                     }`}
                 >
                   {m}
@@ -1910,13 +1939,13 @@ export default function AdminInventory() {
             </div>
 
             {/* Brand Filter */}
-            <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Brand:</span>
+            <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 select-none">Brand</span>
               <button
                 onClick={() => setSelectedBrand('All')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedBrand === 'All'
-                  ? 'bg-black text-white border border-black shadow-xs'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${selectedBrand === 'All'
+                  ? 'bg-white text-black font-semibold shadow-xs'
+                  : 'text-gray-600 hover:text-black'
                   }`}
               >
                 All
@@ -1925,9 +1954,9 @@ export default function AdminInventory() {
                 <button
                   key={b}
                   onClick={() => setSelectedBrand(b)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedBrand === b
-                    ? 'bg-black text-white border border-black shadow-xs'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${selectedBrand === b
+                    ? 'bg-white text-black font-semibold shadow-xs'
+                    : 'text-gray-600 hover:text-black'
                     }`}
                 >
                   {b}
@@ -1937,18 +1966,18 @@ export default function AdminInventory() {
 
             {/* Product Status (Active / Archived) */}
             {activeTab === 'products' && (
-              <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4">
-                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Status:</span>
+              <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+                <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 select-none">Status</span>
                 {(['active', 'archived', 'all'] as const).map((st) => {
-                  const labelMap = { active: 'Active Catalog', archived: 'Archived', all: 'All Products' }
+                  const labelMap = { active: 'Active', archived: 'Archived', all: 'All' }
                   const isActive = productStatusFilter === st
                   return (
                     <button
                       key={st}
                       onClick={() => setProductStatusFilter(st)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${isActive
-                        ? 'bg-black text-white border border-black shadow-xs'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${isActive
+                        ? 'bg-white text-black font-semibold shadow-xs'
+                        : 'text-gray-600 hover:text-black'
                         }`}
                     >
                       {labelMap[st]}
@@ -1962,13 +1991,13 @@ export default function AdminInventory() {
           {/* Sort Control on Products Tab */}
           {activeTab === 'products' && (
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Sort by:</span>
-              <div className="w-56">
+              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 select-none">Sort:</span>
+              <div className="w-52">
                 <CustomSelect
+                  size="sm"
                   value={sortBy}
                   onValueChange={(val) => setSortBy(val as SortField)}
                   options={sortOptions}
-                  buttonClassName="py-1.5 px-3 text-xs rounded-lg"
                 />
               </div>
             </div>
@@ -2478,6 +2507,7 @@ export default function AdminInventory() {
                               Product <span className="text-red-500">*</span>
                             </label>
                             <CustomSelect
+                              size="sm"
                               value={item.productId}
                               onValueChange={(val) => handleUpdatePurchaseItem(item.id, { productId: val })}
                               options={productOptions}
@@ -2505,7 +2535,7 @@ export default function AdminInventory() {
                               placeholder={isIdol ? '0' : 'Qty'}
                               value={isIdol ? String(item.pieceWeights.length || 0) : item.quantity}
                               onChange={(e) => handleUpdatePurchaseItem(item.id, { quantity: e.target.value })}
-                              className={`w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150 ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
+                              className={`h-9 w-full px-3 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150 ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
                               required
                             />
                           </div>
@@ -2521,7 +2551,7 @@ export default function AdminInventory() {
                               placeholder="e.g. 75000"
                               value={item.price}
                               onChange={(e) => handleUpdatePurchaseItem(item.id, { price: e.target.value })}
-                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                              className="h-9 w-full px-3 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
                             />
                           </div>
 
@@ -2529,7 +2559,7 @@ export default function AdminInventory() {
                             <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
                               Total
                             </label>
-                            <div className="h-[34px] px-3 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-end font-bold text-xs text-black tabular-nums">
+                            <div className="h-9 px-3 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-end font-bold text-xs text-black tabular-nums">
                               {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN')}` : '—'}
                             </div>
                           </div>
@@ -3290,17 +3320,17 @@ export default function AdminInventory() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-800">
                             {p.category}
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium border border-gray-200 text-gray-700 bg-white shadow-2xs">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border border-gray-200 text-gray-700 bg-white shadow-2xs">
                             {p.brand || (p.category === 'MMTC PAMP' ? 'MMTC PAMP' : 'Local')}
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium border border-gray-200 text-gray-700 bg-gray-50">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border border-gray-200 text-gray-700 bg-gray-50">
                             {p.metal}
                           </span>
                         </td>
@@ -3359,9 +3389,9 @@ export default function AdminInventory() {
                               <button
                                 onClick={() => handleEditProduct(p)}
                                 title="Edit"
-                                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                className="w-8 h-8 rounded-lg inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                               >
-                                <Edit2 size={15} />
+                                <Edit2 size={14} />
                               </button>
                             )}
                             {!archivedSession && hasPermission('products', 'delete') && (
@@ -3369,9 +3399,9 @@ export default function AdminInventory() {
                                 onClick={() => setDeleteProductTarget(p)}
                                 title={p.isArchived ? "Product Archived" : "Archive Product"}
                                 disabled={p.isArchived}
-                                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 disabled:opacity-30 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                className="w-8 h-8 rounded-lg inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 disabled:opacity-30 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                               >
-                                <Archive size={15} />
+                                <Archive size={14} />
                               </button>
                             )}
                           </div>

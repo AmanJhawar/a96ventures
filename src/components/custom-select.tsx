@@ -22,6 +22,7 @@ export interface CustomSelectProps {
   buttonClassName?: string
   className?: string
   disabled?: boolean
+  size?: 'sm' | 'md'
 }
 
 export default function CustomSelect({
@@ -34,7 +35,8 @@ export default function CustomSelect({
   placeholder = 'Select option...',
   buttonClassName = '',
   className = '',
-  disabled = false
+  disabled = false,
+  size = 'md'
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
@@ -128,15 +130,15 @@ export default function CustomSelect({
         aria-controls={id ? `${id}-listbox` : undefined}
         disabled={disabled}
         onClick={() => (isOpen ? closeSelect() : openSelect())}
-        className={`w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm bg-white text-left flex justify-between items-center transition-[border-color,box-shadow,background-color,transform] duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
-          isOpen ? 'border-black ring-2 ring-black/10' : ''
-        } ${buttonClassName}`}
+        className={`w-full border border-gray-200 rounded-lg bg-white text-left flex justify-between items-center transition-[border-color,box-shadow,background-color,transform] duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
+          size === 'sm' ? 'h-9 px-3 text-xs' : 'h-10 px-3.5 text-sm'
+        } ${isOpen ? 'border-black ring-2 ring-black/10' : ''} ${buttonClassName}`}
       >
         <span className={`truncate mr-2 ${selectedOption ? 'text-black font-medium' : 'text-gray-400'}`}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
         <ChevronDown
-          className={`w-4 h-4 text-gray-500 shrink-0 transition-transform duration-200 ease-[var(--ease-out)] ${
+          className={`${size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-gray-500 shrink-0 transition-transform duration-200 ease-[var(--ease-out)] ${
             isOpen ? 'rotate-180 text-black' : ''
           }`}
         />

@@ -11,6 +11,7 @@ export interface CustomDatePickerProps {
   className?: string
   buttonClassName?: string
   disabled?: boolean
+  size?: 'sm' | 'md'
 }
 
 const MONTH_NAMES = [
@@ -32,7 +33,8 @@ export function CustomDatePicker({
   placeholder = 'Select date...',
   className = '',
   buttonClassName = '',
-  disabled = false
+  disabled = false,
+  size = 'md'
 }: CustomDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
@@ -196,12 +198,12 @@ export function CustomDatePicker({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm bg-white text-left flex items-center justify-between gap-2.5 transition-[border-color,box-shadow,transform] duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
-          isOpen ? 'border-black ring-2 ring-black/10' : ''
-        } ${buttonClassName}`}
+        className={`w-full border border-gray-200 rounded-lg bg-white text-left flex items-center justify-between gap-2 transition-[border-color,box-shadow,transform] duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
+          size === 'sm' ? 'h-9 px-3 text-xs' : 'h-10 px-3.5 text-sm'
+        } ${isOpen ? 'border-black ring-2 ring-black/10' : ''} ${buttonClassName}`}
       >
-        <div className="flex items-center gap-2.5 truncate">
-          <CalendarIcon size={16} className="text-gray-400 shrink-0" />
+        <div className="flex items-center gap-2 truncate">
+          <CalendarIcon size={size === 'sm' ? 14 : 16} className="text-gray-400 shrink-0" />
           <span className={`truncate ${value ? 'text-black font-medium' : 'text-gray-400'}`}>
             {displayLabel}
           </span>
@@ -215,7 +217,7 @@ export function CustomDatePicker({
             title="Clear date"
             className="text-gray-300 hover:text-gray-600 transition-colors p-0.5"
           >
-            <X size={13} />
+            <X size={size === 'sm' ? 12 : 13} />
           </span>
         )}
       </button>

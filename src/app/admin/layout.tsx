@@ -154,12 +154,13 @@ function SidebarContent({
             <Link
               key={item.name}
               href={item.href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-[box-shadow,background-color,border-color,color] duration-150 ${isActive
-                  ? 'bg-white text-black outline outline-2 outline-offset-[-2px] outline-black shadow-[0_0_0_1px_black]'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-black'
-                }`}
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.98] ${
+                isActive
+                  ? 'bg-black text-white shadow-xs'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-black'
+              }`}
             >
-              <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+              <Icon size={18} strokeWidth={isActive ? 2 : 1.75} className="shrink-0" />
               {item.name}
             </Link>
           )

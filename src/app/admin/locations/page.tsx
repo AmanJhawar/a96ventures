@@ -307,18 +307,18 @@ export default function AdminLocations() {
                           <button
                             onClick={() => handleEdit(loc)}
                             title="Edit"
-                            className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                            className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                           >
-                            <Edit2 size={15} />
+                            <Edit2 size={14} />
                           </button>
                         )}
                         {hasPermission('locations', 'delete') && (
                           <button
                             onClick={() => setDeleteId(loc.id)}
                             title="Delete"
-                            className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                            className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                           >
-                            <Trash2 size={15} />
+                            <Trash2 size={14} />
                           </button>
                         )}
                       </div>

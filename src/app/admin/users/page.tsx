@@ -997,9 +997,9 @@ export default function AdminUsersPage() {
                                 <button
                                   onClick={() => handleOpenEdit(user)}
                                   title="Edit permissions and profile"
-                                  className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                  className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                                 >
-                                  <Edit2 size={15} />
+                                  <Edit2 size={14} />
                                 </button>
 
                                 <button
@@ -1014,9 +1014,9 @@ export default function AdminUsersPage() {
                                     }
                                   }}
                                   title="Email set-password link"
-                                  className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                  className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                                 >
-                                  <Mail size={15} />
+                                  <Mail size={14} />
                                 </button>
 
                                 {!isCurrentUser && (
@@ -1024,17 +1024,17 @@ export default function AdminUsersPage() {
                                     <button
                                       onClick={() => setStatusTarget(user)}
                                       title={user.status === 'active' ? 'Suspend account' : 'Reactivate account'}
-                                      className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                      className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                                     >
-                                      {user.status === 'active' ? <Lock size={15} /> : <Unlock size={15} />}
+                                      {user.status === 'active' ? <Lock size={14} /> : <Unlock size={14} />}
                                     </button>
 
                                     <button
                                       onClick={() => setDeleteTarget(user)}
                                       title="Delete account"
-                                      className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                      className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                                     >
-                                      <Trash2 size={15} />
+                                      <Trash2 size={14} />
                                     </button>
                                   </>
                                 )}

@@ -829,48 +829,64 @@ export default function AdminSales() {
 
       {/* Metrics Summary Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between text-gray-500 mb-2">
-            <span className="text-xs uppercase font-semibold tracking-wider">Gross Sales</span>
-            <IndianRupee size={16} className="text-gray-400" />
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs uppercase font-semibold tracking-wider text-gray-500">Gross Sales</span>
+            <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700">
+              <IndianRupee size={14} />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-black tabular-nums">
-            ₹{stats.salesRevenue.toLocaleString('en-IN')}
+          <div>
+            <div className="text-2xl font-bold text-black tabular-nums tracking-tight">
+              ₹{stats.salesRevenue.toLocaleString('en-IN')}
+            </div>
+            <div className="text-xs text-gray-400 mt-1 font-medium">{stats.salesCount} sales</div>
           </div>
-          <div className="text-xs text-gray-400 mt-1">{stats.salesCount} sales</div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between text-gray-500 mb-2">
-            <span className="text-xs uppercase font-semibold tracking-wider">Units Sold</span>
-            <PackageCheck size={16} className="text-gray-400" />
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs uppercase font-semibold tracking-wider text-gray-500">Units Sold</span>
+            <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700">
+              <PackageCheck size={14} />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-black tabular-nums">
-            {stats.salesUnits.toLocaleString('en-IN')}
+          <div>
+            <div className="text-2xl font-bold text-black tabular-nums tracking-tight">
+              {stats.salesUnits.toLocaleString('en-IN')}
+            </div>
+            <div className="text-xs text-gray-400 mt-1 font-medium">units dispatched</div>
           </div>
-          <div className="text-xs text-gray-400 mt-1">units dispatched</div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between text-gray-500 mb-2">
-            <span className="text-xs uppercase font-semibold tracking-wider">Returns</span>
-            <RotateCcw size={16} className="text-gray-400" />
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs uppercase font-semibold tracking-wider text-gray-500">Returns</span>
+            <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700">
+              <RotateCcw size={14} />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-black tabular-nums">
-            ₹{stats.returnsAmount.toLocaleString('en-IN')}
+          <div>
+            <div className="text-2xl font-bold text-black tabular-nums tracking-tight">
+              ₹{stats.returnsAmount.toLocaleString('en-IN')}
+            </div>
+            <div className="text-xs text-gray-400 mt-1 font-medium">{stats.returnsCount} returns</div>
           </div>
-          <div className="text-xs text-gray-400 mt-1">{stats.returnsCount} returns</div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between text-gray-500 mb-2">
-            <span className="text-xs uppercase font-semibold tracking-wider">Net Sales</span>
-            <TrendingUp size={16} className="text-gray-400" />
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs uppercase font-semibold tracking-wider text-gray-500">Net Sales</span>
+            <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700">
+              <TrendingUp size={14} />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-black tabular-nums">
-            ₹{stats.netRevenue.toLocaleString('en-IN')}
+          <div>
+            <div className="text-2xl font-bold text-black tabular-nums tracking-tight">
+              ₹{stats.netRevenue.toLocaleString('en-IN')}
+            </div>
+            <div className="text-xs text-gray-400 mt-1 font-medium">Sales minus returns</div>
           </div>
-          <div className="text-xs text-gray-400 mt-1">Sales minus returns</div>
         </div>
       </div>
 
@@ -883,13 +899,18 @@ export default function AdminSales() {
               setIsSaleFormOpen(false)
               setIsReturnFormOpen(false)
             }}
-            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'sales'
+            className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'sales'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
               }`}
           >
-            <ShoppingCart size={16} />
-            Sales ({stats.salesCount})
+            <ShoppingCart size={15} className="shrink-0" />
+            <span>Sales</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
+              activeTab === 'sales' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {stats.salesCount}
+            </span>
           </button>
         )}
         {(isSuperAdmin || hasPermission('returns', 'view')) && (
@@ -899,51 +920,59 @@ export default function AdminSales() {
               setIsSaleFormOpen(false)
               setIsReturnFormOpen(false)
             }}
-            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'returns'
+            className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'returns'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
               }`}
           >
-            <RotateCcw size={16} />
-            Returns ({stats.returnsCount})
+            <RotateCcw size={15} className="shrink-0" />
+            <span>Returns</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
+              activeTab === 'returns' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {stats.returnsCount}
+            </span>
           </button>
         )}
       </div>
 
       {/* Date Range Filter Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-3.5 mb-6 bg-white border border-gray-200 rounded-xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-2.5 mb-6 bg-white border border-gray-200 rounded-xl shadow-2xs">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500 mr-1">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500 px-2 select-none">
             <Calendar size={14} className="text-gray-400" />
             Date Range:
           </span>
-          {([
-            { id: 'all', label: 'All Dates' },
-            { id: 'today', label: 'Today' },
-            { id: 'week', label: 'Last 7 Days' },
-            { id: 'month', label: 'Last 30 Days' },
-            { id: 'custom', label: 'Custom' },
-          ] as const).map((preset) => (
-            <button
-              key={preset.id}
-              onClick={() => {
-                setLoading(true)
-                setDateRangePreset(preset.id)
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${dateRangePreset === preset.id
-                ? 'bg-black text-white border border-black shadow-xs'
-                : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-black'
-                }`}
-            >
-              {preset.label}
-            </button>
-          ))}
+          <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+            {([
+              { id: 'all', label: 'All Dates' },
+              { id: 'today', label: 'Today' },
+              { id: 'week', label: 'Last 7 Days' },
+              { id: 'month', label: 'Last 30 Days' },
+              { id: 'custom', label: 'Custom' },
+            ] as const).map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => {
+                  setLoading(true)
+                  setDateRangePreset(preset.id)
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${dateRangePreset === preset.id
+                  ? 'bg-white text-black font-semibold shadow-xs'
+                  : 'text-gray-600 hover:text-black'
+                  }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {dateRangePreset === 'custom' && (
           <div className="flex items-center gap-2">
             <div className="w-36">
               <CustomDatePicker
+                size="sm"
                 value={customStartDate}
                 onChange={(d) => {
                   setLoading(true)
@@ -952,9 +981,10 @@ export default function AdminSales() {
                 placeholder="Start Date"
               />
             </div>
-            <span className="text-xs text-gray-400">to</span>
+            <span className="text-xs text-gray-400 font-medium">to</span>
             <div className="w-36">
               <CustomDatePicker
+                size="sm"
                 value={customEndDate}
                 onChange={(d) => {
                   setLoading(true)
@@ -967,43 +997,48 @@ export default function AdminSales() {
         )}
       </div>
 
-      {/* Category & Metal Filter Squircles */}
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Category:</span>
+      {/* Category & Metal Segmented Filters */}
+      <div className="flex flex-wrap items-center gap-2.5 mb-6">
+        {/* Category Filter */}
+        <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+          <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 select-none">Category</span>
           <button
             onClick={() => setSelectedCategory('All')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedCategory === 'All'
-              ? 'bg-black text-white border border-black shadow-xs'
-              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
-              }`}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
+              selectedCategory === 'All'
+                ? 'bg-white text-black font-semibold shadow-xs'
+                : 'text-gray-600 hover:text-black'
+            }`}
           >
-            All Categories
+            All
           </button>
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedCategory === cat
-                ? 'bg-black text-white border border-black shadow-xs'
-                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
-                }`}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
+                selectedCategory === cat
+                  ? 'bg-white text-black font-semibold shadow-xs'
+                  : 'text-gray-600 hover:text-black'
+              }`}
             >
               {cat}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Metal:</span>
+        {/* Metal Filter */}
+        <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+          <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 select-none">Metal</span>
           {(['All', 'Gold', 'Silver'] as const).map((m) => (
             <button
               key={m}
               onClick={() => setSelectedMetal(m)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${selectedMetal === m
-                ? 'bg-black text-white border border-black shadow-xs'
-                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
-                }`}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
+                selectedMetal === m
+                  ? 'bg-white text-black font-semibold shadow-xs'
+                  : 'text-gray-600 hover:text-black'
+              }`}
             >
               {m === 'All' ? 'All' : m}
             </button>
@@ -1184,6 +1219,7 @@ export default function AdminSales() {
                               Product <span className="text-red-500">*</span>
                             </label>
                             <CustomSelect
+                              size="sm"
                               value={item.productId}
                               onValueChange={(val) => handleUpdateSaleItem(item.id, { productId: val })}
                               options={saleProductOptions}
@@ -1213,7 +1249,7 @@ export default function AdminSales() {
                               placeholder={isIdol ? '1' : 'Qty'}
                               value={isIdol ? '1' : item.quantity}
                               onChange={(e) => handleUpdateSaleItem(item.id, { quantity: e.target.value })}
-                              className={`w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150 ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
+                              className={`h-9 w-full px-3 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150 ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
                               required
                             />
                           </div>
@@ -1229,7 +1265,7 @@ export default function AdminSales() {
                               placeholder="e.g. 78500"
                               value={item.price}
                               onChange={(e) => handleUpdateSaleItem(item.id, { price: e.target.value })}
-                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                              className="h-9 w-full px-3 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
                               required
                             />
                           </div>
@@ -1238,7 +1274,7 @@ export default function AdminSales() {
                             <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
                               Total
                             </label>
-                            <div className="h-[34px] px-3 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-end font-bold text-xs text-black tabular-nums">
+                            <div className="h-9 px-3 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-end font-bold text-xs text-black tabular-nums">
                               {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN')}` : '—'}
                             </div>
                           </div>
@@ -1628,7 +1664,7 @@ export default function AdminSales() {
                             <button
                               onClick={() => setDeleteTxTarget(tx)}
                               title="Post reversing entry (restores stock)"
-                              className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                              className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                             >
                               <RotateCcw size={14} />
                             </button>
@@ -1765,7 +1801,7 @@ export default function AdminSales() {
                             <button
                               onClick={() => setDeleteTxTarget(tx)}
                               title="Post reversing entry (reverses restock)"
-                              className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                              className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                             >
                               <RotateCcw size={14} />
                             </button>
