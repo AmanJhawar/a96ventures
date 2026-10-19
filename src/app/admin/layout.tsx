@@ -32,8 +32,12 @@ const navItems: NavItemConfig[] = [
   { name: 'Users', href: '/admin/users', icon: ShieldCheck, module: 'users', action: 'view' },
   { name: 'Team', href: '/admin/team', icon: Users, module: 'team', action: 'view' },
   { name: 'Brands', href: '/admin/brands', icon: Bookmark, module: 'brands', action: 'view' },
-  { name: 'Portfolio', href: '/admin/portfolio', icon: Briefcase, module: 'portfolio', action: 'view' },
 ]
+
+// 15 minutes of inactivity for staff handling cash/stock
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000
+const ADMIN_LAST_ACTIVITY_KEY = 'admin_last_activity'
+
 
 function AdminPageGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -179,8 +183,11 @@ function SidebarContent({
           </button>
         )}
         <button
-          onClick={() => {
-            signOut(auth)
+          onClick={async () => {
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem(ADMIN_LAST_ACTIVITY_KEY)
+            }
+            await signOut(auth)
             router.push('/admin/login')
           }}
           className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
@@ -208,6 +215,44 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
+        // Enforce 15-minute idle expiration even after browser refresh, sleeping laptop, or background tab
+        if (typeof window !== 'undefined') {
+          const storedLast = localStorage.getItem(ADMIN_LAST_ACTIVITY_KEY)
+          let isExpired = false
+
+          if (storedLast) {
+            const lastTime = Number(storedLast)
+            if (!isNaN(lastTime) && Date.now() - lastTime > IDLE_TIMEOUT_MS) {
+              isExpired = true
+            }
+          } else if (currentUser.metadata?.lastSignInTime) {
+            // Fallback for initial migration or cleared cache: compare against Firebase lastSignInTime
+            const lastSignIn = new Date(currentUser.metadata.lastSignInTime).getTime()
+            if (!isNaN(lastSignIn) && Date.now() - lastSignIn > IDLE_TIMEOUT_MS) {
+              isExpired = true
+            }
+          }
+
+          if (isExpired) {
+            try {
+              localStorage.removeItem(ADMIN_LAST_ACTIVITY_KEY)
+              await signOut(auth)
+            } catch (err) {
+              console.error('Error signing out on expired idle session:', err)
+            }
+            setUser(null)
+            setAdminUser(null)
+            setLoading(false)
+            router.push('/admin/login?reason=idle')
+            return
+          }
+
+          // If session is valid, ensure activity timestamp exists
+          if (!storedLast) {
+            localStorage.setItem(ADMIN_LAST_ACTIVITY_KEY, Date.now().toString())
+          }
+        }
+
         try {
           // Check for token custom claims
           let tokenResult = await currentUser.getIdTokenResult()
@@ -337,39 +382,112 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!user) return
 
-    const IDLE_TIMEOUT_MS = 15 * 60 * 1000
     let timeoutId: NodeJS.Timeout
+    let lastWriteTime = Date.now()
 
     const handleTimeout = async () => {
       try {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem(ADMIN_LAST_ACTIVITY_KEY)
+        }
         await signOut(auth)
       } catch (err) {
         console.error('Error signing out after idle timeout:', err)
       }
+      setUser(null)
+      setAdminUser(null)
       router.push('/admin/login?reason=idle')
     }
 
-    const resetTimer = () => {
+    const checkIdle = (): boolean => {
+      if (typeof window === 'undefined') return false
+      const lastActivityStr = localStorage.getItem(ADMIN_LAST_ACTIVITY_KEY)
+      if (!lastActivityStr) {
+        localStorage.setItem(ADMIN_LAST_ACTIVITY_KEY, Date.now().toString())
+        return false
+      }
+      const lastActivity = Number(lastActivityStr)
+      if (!isNaN(lastActivity) && Date.now() - lastActivity >= IDLE_TIMEOUT_MS) {
+        handleTimeout()
+        return true
+      }
+      return false
+    }
+
+    const scheduleTimer = () => {
       clearTimeout(timeoutId)
-      timeoutId = setTimeout(handleTimeout, IDLE_TIMEOUT_MS)
+      if (typeof window === 'undefined') return
+      const lastActivityStr = localStorage.getItem(ADMIN_LAST_ACTIVITY_KEY)
+      const lastActivity = lastActivityStr ? Number(lastActivityStr) : Date.now()
+      const elapsed = Date.now() - (isNaN(lastActivity) ? Date.now() : lastActivity)
+      const remaining = Math.max(0, IDLE_TIMEOUT_MS - elapsed)
+
+      if (remaining <= 0) {
+        handleTimeout()
+      } else {
+        timeoutId = setTimeout(() => {
+          if (!checkIdle()) {
+            handleTimeout()
+          }
+        }, remaining)
+      }
     }
 
-    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart']
-    const onActivity = () => {
-      resetTimer()
+    const recordActivity = () => {
+      const now = Date.now()
+      // Throttle localStorage writes to at most once every 5 seconds to reduce storage I/O
+      if (now - lastWriteTime > 5000) {
+        lastWriteTime = now
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(ADMIN_LAST_ACTIVITY_KEY, now.toString())
+        }
+      }
+      scheduleTimer()
     }
 
-    resetTimer()
+    // Initial check
+    if (checkIdle()) return
 
+    scheduleTimer()
+
+    // Periodic heartbeat check every 10 seconds (handles background timer throttling & wake)
+    const heartbeatInterval = setInterval(() => {
+      checkIdle()
+    }, 10000)
+
+    // Visibility / focus event: fires immediately when user wakes screen or switches back to tab
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        if (!checkIdle()) {
+          scheduleTimer()
+        }
+      }
+    }
+
+    // Storage event: syncs activity across multiple admin tabs
+    const onStorageChange = (e: StorageEvent) => {
+      if (e.key === ADMIN_LAST_ACTIVITY_KEY) {
+        scheduleTimer()
+      }
+    }
+
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click']
     activityEvents.forEach((event) => {
-      window.addEventListener(event, onActivity, { passive: true })
+      window.addEventListener(event, recordActivity, { passive: true })
     })
+    document.addEventListener('visibilitychange', onVisibilityOrFocus)
+    window.addEventListener('focus', onVisibilityOrFocus)
+    window.addEventListener('storage', onStorageChange)
 
     return () => {
       clearTimeout(timeoutId)
+      clearInterval(heartbeatInterval)
       activityEvents.forEach((event) => {
-        window.removeEventListener(event, onActivity)
+        window.removeEventListener(event, recordActivity)
       })
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus)
+      window.removeEventListener('focus', onVisibilityOrFocus)
+      window.removeEventListener('storage', onStorageChange)
     }
   }, [user, router])
 
@@ -415,6 +533,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="pt-2">
             <button
               onClick={async () => {
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem(ADMIN_LAST_ACTIVITY_KEY)
+                }
                 await signOut(auth)
                 setUser(null)
                 setAdminUser(null)

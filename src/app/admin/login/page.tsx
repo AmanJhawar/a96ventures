@@ -70,6 +70,9 @@ function LoginForm() {
   })
 
   useEffect(() => {
+    if (isIdle && typeof window !== 'undefined') {
+      localStorage.removeItem('admin_last_activity')
+    }
     return () => {
       if (recaptchaVerifierRef.current) {
         try {
@@ -79,7 +82,7 @@ function LoginForm() {
         }
       }
     }
-  }, [])
+  }, [isIdle])
 
   const verifyAndRedirect = async (user: User) => {
     // TREAT MISSING PROFILE AS AN ERROR: Never fail open or grant access without profile document
@@ -121,6 +124,10 @@ function LoginForm() {
       } catch (syncErr) {
         console.warn('Sync claims warning:', syncErr)
       }
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('admin_last_activity', Date.now().toString())
     }
 
     router.push('/admin')
