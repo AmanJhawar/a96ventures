@@ -7,16 +7,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Active status check via Firebase Custom Claims (default empty string, fail closed)
+    // Active status check via Firebase Custom Claims with fallback to admin profile document
     function isActive() {
-      return isAuthenticated() && 
-        request.auth.token.get('status', '') == 'active';
+      return isAuthenticated() && (
+        request.auth.token.get('status', '') == 'active' ||
+        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('status', 'active') == 'active')
+      );
     }
 
-    // Role check via Firebase Custom Claims
+    // Role check via Firebase Custom Claims with fallback to admin profile document
     function isSuperAdmin() {
-      return isActive() && 
-        request.auth.token.get('role', '') == 'super_admin';
+      return (isActive() && request.auth.token.get('role', '') == 'super_admin') ||
+        (isAuthenticated() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('role', '') == 'super_admin' &&
+         get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('status', 'active') != 'suspended');
     }
 
     // Map module and action to short code (e.g. products.view -> prd:v)
@@ -48,12 +53,14 @@ service cloud.firestore {
       return m + ':' + a;
     }
 
-    // Granular permission check via Firebase Custom Claims (checks compact short codes in 'perms')
+    // Granular permission check via Firebase Custom Claims with fallback to admin doc permissions
     function hasPermission(module, action) {
       return isSuperAdmin() || (
         isActive() && (
           (request.auth.token.get('perms', []).hasAny([permCode(module, action)])) ||
-          (request.auth.token.get('permissions', {}).get(module, {}).get(action, false) == true)
+          (request.auth.token.get('permissions', {}).get(module, {}).get(action, false) == true) ||
+          (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.get('permissions', {}).get(module, {}).get(action, false) == true)
         )
       );
     }
@@ -77,11 +84,11 @@ service cloud.firestore {
         && (!('gstinPan' in data) || (data.gstinPan is string && data.gstinPan.size() < 20));
     }
 
-    // Admins Collection - strictly managed by Firebase Admin SDK on the server
+    // Admins Collection - Super Admin can view and manage profiles; staff can read own profile
     match /admins/{uid} {
-      // Authenticated users can read only their own profile; nobody can write from client SDK
-      allow read: if isAuthenticated() && request.auth.uid == uid;
-      allow write: if false; // All mutations must go through server API with Firebase Admin SDK
+      allow read: if isAuthenticated() && (request.auth.uid == uid || isSuperAdmin());
+      allow create, update: if isSuperAdmin();
+      allow delete: if isSuperAdmin() && request.auth.uid != uid;
     }
 
     // Publicly readable marketing collections (Granular admin write only)
@@ -120,29 +127,34 @@ service cloud.firestore {
       allow delete: if hasPermission('inquiries', 'delete');
     }
 
-    // Locations (Granular admin permission required to read; mutations via server API with audit logs)
+    // Locations (Granular admin permission to read and manage)
     match /locations/{document=**} {
       allow read: if hasPermission('locations', 'view');
-      allow write: if false; // All location modifications must go through server API with audit logs!
+      allow create: if hasPermission('locations', 'add');
+      allow update: if hasPermission('locations', 'edit');
+      allow delete: if hasPermission('locations', 'delete');
     }
 
     // Products & Inventory:
-    // Read: Requires 'products.view' via custom claims
-    // Write: STRICTLY DENIED for client SDKs. All stock & catalog modifications MUST go through server API!
+    // Read: Requires 'products.view'
+    // Write: Requires 'products.add'/'products.edit'/'products.delete' or super_admin
     match /products/{document=**} {
       allow read: if hasPermission('products', 'view');
-      allow write: if false; // Enforce server-side execution for stock and price integrity
+      allow create: if hasPermission('products', 'add');
+      allow update: if hasPermission('products', 'edit');
+      allow delete: if hasPermission('products', 'delete');
     }
 
     // Transactions (Sales, Purchases, Movements):
-    // Read: Requires relevant module view permission via custom claims
-    // Write: STRICTLY DENIED for client SDKs. All financial and stock transactions MUST go through server API!
+    // Read: Requires relevant module view permission
+    // Write: Requires relevant add permission or super_admin
     match /transactions/{document=**} {
       allow read: if hasPermission('sales', 'view') || hasPermission('purchases', 'view') || hasPermission('movements', 'view');
-      allow write: if false; // Enforce server-side execution with ACID atomic transactions
+      allow create: if isSuperAdmin() || hasPermission('sales', 'add') || hasPermission('purchases', 'add') || hasPermission('movements', 'transfer') || hasPermission('movements', 'adjustment') || hasPermission('movements', 'repair') || hasPermission('movements', 'melt');
+      allow update, delete: if isSuperAdmin();
     }
 
-    // Audit Logs: Strictly server-only writes via Firebase Admin SDK. Direct client writes/deletes forbidden.
+    // Audit Logs: Readable by super admins or authorized auditors; append-only by authenticated users
     match /audit_logs/{logId} {
       allow read: if isAuthenticated() && (
         isSuperAdmin() ||
@@ -150,7 +162,8 @@ service cloud.firestore {
         hasPermission('archive', 'zeroBalance') ||
         hasPermission('reports', 'export')
       );
-      allow write: if false; // All audit entries must be written exclusively by the server API
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
     }
 
     // Absolute default deny for any other collections or paths

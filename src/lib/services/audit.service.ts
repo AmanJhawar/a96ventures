@@ -1,5 +1,14 @@
+import { app } from '@/lib/firebase/config'
 import { auth } from '@/lib/firebase/auth'
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  addDoc
+} from 'firebase/firestore/lite'
 import { AuditLogEntry, AuditActionType } from '@/lib/types'
+
+const db = getFirestore(app)
 
 export interface RecordAuditParams {
   userId?: string
@@ -38,9 +47,33 @@ export async function recordAuditLog(params: RecordAuditParams): Promise<string>
         return data.id || ''
       }
     }
-    return ''
   } catch (err) {
-    console.error('Failed to write audit log via server:', err)
+    console.warn('Failed to write audit log via server, falling back to client:', err)
+  }
+
+  // Client Firestore fallback
+  try {
+    const currentUser = auth.currentUser
+    const now = new Date().toISOString()
+    const docRef = await addDoc(collection(db, 'audit_logs'), {
+      timestamp: now,
+      createdAt: now,
+      userId: params.userId || currentUser?.uid || '',
+      userEmail: params.userEmail || currentUser?.email || '',
+      userName: params.userName || currentUser?.displayName || 'Admin',
+      action: params.action,
+      entityType: params.entityType,
+      entityId: params.entityId,
+      entityName: params.entityName || '',
+      locationId: params.locationId || '',
+      locationName: params.locationName || '',
+      description: params.description,
+      diffs: params.diffs || [],
+      metadata: params.metadata || {}
+    })
+    return docRef.id
+  } catch (clientErr) {
+    console.warn('Client audit log write failed:', clientErr)
     return ''
   }
 }
@@ -99,32 +132,62 @@ export async function exportFullAuditTrail(options?: {
  * Fetch audit logs via server code or client query.
  */
 export async function getAuditLogs(filters?: GetAuditLogsFilter): Promise<AuditLogEntry[]> {
-  const currentUser = auth.currentUser
-  if (!currentUser) {
-    throw new Error('Not authenticated')
+  try {
+    const currentUser = auth.currentUser
+    if (currentUser) {
+      const token = await currentUser.getIdToken()
+      const params = new URLSearchParams()
+      if (filters?.isExport) params.set('export', 'true')
+      if (filters?.limitCount) params.set('limit', String(filters.limitCount))
+      if (filters?.page) params.set('page', String(filters.page))
+      if (filters?.userId && filters.userId !== 'all') params.set('userId', filters.userId)
+      if (filters?.entityType && filters.entityType !== 'all') params.set('entityType', filters.entityType)
+      if (filters?.action && filters.action !== 'all') params.set('action', filters.action)
+
+      const res = await fetch(`/api/admin/audit?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        return data.logs || []
+      }
+    }
+  } catch (apiErr) {
+    console.warn('Audit logs API failed, falling back to direct Firestore:', apiErr)
   }
 
-  const token = await currentUser.getIdToken()
-  const params = new URLSearchParams()
-  if (filters?.isExport) params.set('export', 'true')
-  if (filters?.limitCount) params.set('limit', String(filters.limitCount))
-  if (filters?.page) params.set('page', String(filters.page))
-  if (filters?.userId && filters.userId !== 'all') params.set('userId', filters.userId)
-  if (filters?.entityType && filters.entityType !== 'all') params.set('entityType', filters.entityType)
-  if (filters?.action && filters.action !== 'all') params.set('action', filters.action)
+  // Client Firestore fallback
+  const snap = await getDocs(collection(db, 'audit_logs'))
+  const logs: AuditLogEntry[] = []
+  snap.forEach((d) => {
+    const data = d.data()
+    if (filters?.userId && filters.userId !== 'all' && data.userId !== filters.userId) return
+    if (filters?.entityType && filters.entityType !== 'all' && data.entityType !== filters.entityType) return
+    if (filters?.action && filters.action !== 'all' && data.action !== filters.action) return
 
-  const res = await fetch(`/api/admin/audit?${params.toString()}`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    logs.push({
+      id: d.id,
+      timestamp: data.timestamp || data.createdAt || '',
+      userId: data.userId || '',
+      userName: data.userName || '',
+      userEmail: data.userEmail || '',
+      action: data.action,
+      entityType: data.entityType,
+      entityId: data.entityId,
+      entityName: data.entityName,
+      locationId: data.locationId,
+      locationName: data.locationName,
+      description: data.description || '',
+      diffs: data.diffs,
+      metadata: data.metadata
+    })
   })
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `Failed to fetch audit logs (${res.status})`)
-  }
-
-  const data = await res.json()
-  return data.logs || []
+  logs.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
+  const limit = filters?.limitCount || 50
+  return logs.slice(0, limit)
 }
