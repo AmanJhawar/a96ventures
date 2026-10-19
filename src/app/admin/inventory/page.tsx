@@ -3,15 +3,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Plus,
-  Trash2,
   Edit2,
   AlertCircle,
   X,
   Check,
-  ArrowRightLeft,
-  Wrench,
-  Flame,
-  SlidersHorizontal,
   Package,
   Layers,
   ShoppingBag,
@@ -21,12 +16,15 @@ import {
   RotateCcw,
   Upload,
   Archive,
-  Download,
   Lock,
   Calendar,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  History
 } from 'lucide-react'
+import { auth } from '@/lib/firebase/auth'
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
+import { useArchive } from '@/lib/context/ArchiveContext'
 import { Product, Location, Transaction, ProductCategory, ProductBrand, TransactionType, MetalType } from '@/lib/types'
 import {
   getProducts,
@@ -37,9 +35,9 @@ import {
   deleteProduct,
   recordTransaction,
   deleteTransaction,
-  clearTransactionHistory
+  clearTransactionHistory,
+  getTransactionsPage
 } from '@/lib/services/inventory.service'
-import { getAuditLogs } from '@/lib/services/audit.service'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
 import CustomSelect, { SelectOption } from '@/components/custom-select'
@@ -49,7 +47,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatWeight } from '@/lib/utils/weight'
-import { getTodayIST, getDaysAgoIST } from '@/lib/utils/date'
+import { getTodayIST, getDaysAgoIST, getDefaultFiscalCutoffIST, getNextDayIST, formatDisplayDateIST } from '@/lib/utils/date'
 
 const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
 const BULLION_BRANDS: ProductBrand[] = ['MMTC PAMP', 'Local']
@@ -60,7 +58,7 @@ const PURITY_OPTIONS_BY_METAL: Record<MetalType, string[]> = {
   Silver: ['999.9', '999', '925']
 }
 
-type InventoryTab = 'products' | 'purchases' | 'movements'
+type InventoryTab = 'products' | 'purchases' | 'movements' | 'archived-audit'
 type MovementSubtype = 'transfer' | 'adjustment' | 'repair' | 'melt'
 type SortField =
   | 'last_modified'
@@ -95,14 +93,18 @@ export default function AdminInventory() {
   const userAssignedLocationId = adminUser?.assignedLocationId
   const isLocationLocked = Boolean(!isSuperAdmin && userAssignedLocationId)
 
+  // Shared Offline archive viewing state
+  const { archivedSession, loadArchiveFromFile, exitArchive } = useArchive()
+
   // Granular view permissions for inventory tabs
   const allowedTabs = useMemo<InventoryTab[]>(() => {
     const tabs: InventoryTab[] = []
     if (hasPermission('products', 'view')) tabs.push('products')
     if (hasPermission('purchases', 'view')) tabs.push('purchases')
     if (hasPermission('movements', 'view')) tabs.push('movements')
+    if (archivedSession) tabs.push('archived-audit')
     return tabs
-  }, [hasPermission])
+  }, [hasPermission, archivedSession])
 
   // Movement types the user has permission to record
   const allowedMovementTypes = useMemo<MovementSubtype[]>(() => {
@@ -114,14 +116,19 @@ export default function AdminInventory() {
     return types
   }, [hasPermission])
 
-  const [activeTab, setActiveTab] = useState<InventoryTab>('products')
+  const [requestedTab, setRequestedTab] = useState<InventoryTab>('products')
 
-  // Automatically keep activeTab on an allowed tab
-  useEffect(() => {
-    if (allowedTabs.length > 0 && !allowedTabs.includes(activeTab)) {
-      setActiveTab(allowedTabs[0])
+  // Automatically keep activeTab on an allowed tab without cascading effect renders
+  const activeTab: InventoryTab = useMemo(() => {
+    if (allowedTabs.length > 0 && !allowedTabs.includes(requestedTab)) {
+      return allowedTabs[0]
     }
-  }, [allowedTabs, activeTab])
+    return requestedTab
+  }, [allowedTabs, requestedTab])
+
+  const setActiveTab = (tab: InventoryTab) => {
+    setRequestedTab(tab)
+  }
 
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All')
   const [selectedBrand, setSelectedBrand] = useState<string>('All')
@@ -134,7 +141,6 @@ export default function AdminInventory() {
   const [locations, setLocations] = useState<Location[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   // Date range filter state for transactions (Purchases & Movements)
   const [dateRangePreset, setDateRangePreset] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all')
@@ -176,6 +182,7 @@ export default function AdminInventory() {
   const [prodPieceInput, setProdPieceInput] = useState('')
   const [productFormSubmitting, setProductFormSubmitting] = useState(false)
   const [productFormError, setProductFormError] = useState<string | null>(null)
+  const [isProductCategoryMetalLocked, setIsProductCategoryMetalLocked] = useState(false)
 
   // Purchase modal / form state
   const [isPurchaseFormOpen, setIsPurchaseFormOpen] = useState(false)
@@ -206,6 +213,7 @@ export default function AdminInventory() {
   // Melt-specific fields
   const [movementRecoveredWeight, setMovementRecoveredWeight] = useState('')
   const [movementPieceWeight, setMovementPieceWeight] = useState('')
+  const [movementAdjustmentMode, setMovementAdjustmentMode] = useState<'surplus' | 'deficit'>('deficit')
   const [movementSubmitting, setMovementSubmitting] = useState(false)
   const [movementError, setMovementError] = useState<string | null>(null)
 
@@ -216,59 +224,54 @@ export default function AdminInventory() {
   // Zero Balance & Offline Archive Export/Upload
   const [isZeroBalanceModalOpen, setIsZeroBalanceModalOpen] = useState(false)
   const [zeroBalanceSubmitting, setZeroBalanceSubmitting] = useState(false)
+  const [zeroBalanceCutoffDate, setZeroBalanceCutoffDate] = useState<string>(() => getDefaultFiscalCutoffIST())
+  const [zeroBalanceConfirmText, setZeroBalanceConfirmText] = useState('')
+  const [zeroBalancePassword, setZeroBalancePassword] = useState('')
+  const zeroBalanceOpeningDate = useMemo(() => getNextDayIST(zeroBalanceCutoffDate), [zeroBalanceCutoffDate])
 
-  // Offline archive viewing state
-  const [archivedSession, setArchivedSession] = useState<{
-    filename: string
-    exportedAt: string
-    transactions: Transaction[]
-  } | null>(null)
+  // Archive input ref
   const archiveInputRef = useRef<HTMLInputElement | null>(null)
 
-  const handleArchiveFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Archived Audit Log Filter & Pagination states (when viewing offline archive in Inventory)
+  const [archivedAuditSearch, setArchivedAuditSearch] = useState('')
+  const [archivedAuditEntityFilter, setArchivedAuditEntityFilter] = useState<string>('all')
+  const archivedAuditActionFilter = 'all'
+  const [archivedAuditPage, setArchivedAuditPage] = useState(1)
+  const archivedAuditPageSize = 25
+
+  const filteredArchivedAuditLogs = useMemo(() => {
+    if (!archivedSession?.auditLogs) return []
+    return archivedSession.auditLogs.filter((entry) => {
+      const matchSearch =
+        archivedAuditSearch === '' ||
+        entry.description.toLowerCase().includes(archivedAuditSearch.toLowerCase()) ||
+        entry.userName.toLowerCase().includes(archivedAuditSearch.toLowerCase()) ||
+        (entry.entityName && entry.entityName.toLowerCase().includes(archivedAuditSearch.toLowerCase()))
+
+      const matchEntity = archivedAuditEntityFilter === 'all' || entry.entityType === archivedAuditEntityFilter
+      const matchAction = archivedAuditActionFilter === 'all' || entry.action === archivedAuditActionFilter
+
+      return matchSearch && matchEntity && matchAction
+    })
+  }, [archivedSession, archivedAuditSearch, archivedAuditEntityFilter, archivedAuditActionFilter])
+
+  const totalArchivedAuditPages = Math.ceil(filteredArchivedAuditLogs.length / archivedAuditPageSize) || 1
+  const paginatedArchivedAuditLogs = useMemo(() => {
+    const start = (archivedAuditPage - 1) * archivedAuditPageSize
+    return filteredArchivedAuditLogs.slice(start, start + archivedAuditPageSize)
+  }, [filteredArchivedAuditLogs, archivedAuditPage, archivedAuditPageSize])
+
+  const handleArchiveFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string
-        const parsed = JSON.parse(text)
-        let loadedTxs: Transaction[] = []
-        let exportDate = new Date().toISOString()
-
-        if (Array.isArray(parsed)) {
-          loadedTxs = parsed
-        } else if (parsed && Array.isArray(parsed.transactions)) {
-          loadedTxs = parsed.transactions
-          if (parsed.exportedAt) exportDate = parsed.exportedAt
-        } else {
-          throw new Error('Unrecognized archive format. Expected an exported transaction archive.')
-        }
-
-        loadedTxs = loadedTxs.map((t) => ({
-          ...t,
-          category: ((t.category as string) === 'Silver Idols' ? 'Idols' : t.category) as ProductCategory
-        }))
-
-        setArchivedSession({
-          filename: file.name,
-          exportedAt: exportDate,
-          transactions: loadedTxs
-        })
+    try {
+      const success = await loadArchiveFromFile(file)
+      if (success) {
         setActiveTab('movements')
-        toast.success(`Loaded offline archive "${file.name}"`, {
-          description: `${loadedTxs.length} historical transactions available for review.`
-        })
-      } catch (err: unknown) {
-        console.error('Failed to parse archive file', err)
-        setError('Failed to read archive file. Please ensure it is a valid JSON export.')
-        toast.error('Failed to read archive file')
-      } finally {
-        if (e.target) e.target.value = ''
       }
+    } finally {
+      if (e.target) e.target.value = ''
     }
-    reader.readAsText(file)
   }
 
   const handleZeroBalance = async () => {
@@ -276,69 +279,76 @@ export default function AdminInventory() {
       toast.error('Master Zero Balance cannot be executed while viewing an offline archive')
       return
     }
+    if (!zeroBalanceCutoffDate) {
+      toast.error('Please specify a valid closing fiscal cutoff date')
+      return
+    }
+    if (zeroBalanceConfirmText.trim() !== 'CONFIRM ZERO BALANCE') {
+      toast.error('Please type "CONFIRM ZERO BALANCE" exactly to proceed')
+      return
+    }
+    if (!zeroBalancePassword) {
+      toast.error('Please enter your account password to verify recent sign-in')
+      return
+    }
+
     try {
       setZeroBalanceSubmitting(true)
 
-      // 1. Fetch current audit logs to include in the offline archive backup
-      const auditLogsSnapshot = await getAuditLogs({ limitCount: 5000 }).catch(() => [])
+      // 1. Fresh Authentication (re-authenticate with password)
+      toast.loading('Verifying administrator credentials...', { id: 'zero-balance' })
+      const currentUser = auth.currentUser
+      if (!currentUser || !currentUser.email) {
+        throw new Error('No active administrator session found. Please refresh and log in.')
+      }
 
-      // 2. Export archive JSON to user's computer before erasing from cloud
-      if (transactions.length > 0 || auditLogsSnapshot.length > 0) {
-        const archivePayload = {
-          system: 'A96 Ventures Unified Inventory System',
-          type: 'Master Audit Archive (All History & Activity Trail)',
-          version: '1.1',
-          exportedAt: new Date().toISOString(),
-          totalTransactions: transactions.length,
-          totalAuditLogs: auditLogsSnapshot.length,
-          breakdown: {
-            sales: transactions.filter((t) => t.type === 'sale').length,
-            purchases: transactions.filter((t) => t.type === 'purchase').length,
-            transfers: transactions.filter((t) => t.type === 'transfer').length,
-            adjustments: transactions.filter((t) => t.type === 'adjustment').length,
-            repairs: transactions.filter((t) => t.type === 'repair').length,
-            melts: transactions.filter((t) => t.type === 'melt').length,
-            returns: transactions.filter((t) => t.type === 'return').length
-          },
-          productsSnapshot: products.map((p) => ({
-            id: p.id,
-            name: p.name,
-            category: p.category,
-            metal: p.metal,
-            sku: p.sku,
-            stock: p.stock,
-            weight: p.weight,
-            purity: p.purity,
-            stockByLocation: p.stockByLocation || {}
-          })),
-          transactions: transactions,
-          auditLogs: auditLogsSnapshot
-        }
-        const blob = new Blob([JSON.stringify(archivePayload, null, 2)], { type: 'application/json' })
+      const cred = EmailAuthProvider.credential(currentUser.email, zeroBalancePassword)
+      await reauthenticateWithCredential(currentUser, cred)
+      await currentUser.getIdToken(true) // Force fresh token with recent auth_time claim
+
+      // 2. Execute Zero-Balance on Server:
+      // Server takes lock, builds complete archive up to cutoff, computes SHA-256 checksum,
+      // saves archive server-side in system_archives, scrubs records, sets opening balances & cutoff lock
+      toast.loading(`Executing Master Zero-Balance up to ${zeroBalanceCutoffDate} on server...`, { id: 'zero-balance' })
+      const res = await clearTransactionHistory({
+        cutoffDate: zeroBalanceCutoffDate,
+        confirmationPhrase: 'CONFIRM ZERO BALANCE'
+      })
+
+      // 3. Automatically download the server-verified archive with embedded checksum
+      if (res.archive) {
+        const blob = new Blob([JSON.stringify(res.archive, null, 2)], { type: 'application/json' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
         const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-        a.download = `a96-audit-archive-${dateStr}.json`
+        a.download = `a96-audit-archive-cutoff-${zeroBalanceCutoffDate}-${dateStr}.json`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
       }
 
-      // 3. Erase transaction documents and scrub audit trail from cloud database
-      const { count, auditCount } = await clearTransactionHistory()
       setIsZeroBalanceModalOpen(false)
+      setZeroBalanceConfirmText('')
+      setZeroBalancePassword('')
+
       toast.success('Zero balance complete', {
-        description: `Exported and cleared ${count} transaction(s) and scrubbed ${auditCount} audit log(s). Live stock counts remain rolled over and intact.`,
-        duration: 5000
+        id: 'zero-balance',
+        description: `Archive saved on server (ID: ${res.archiveId || 'N/A'}, Checksum: ${res.checksum?.slice(0, 10) || 'N/A'}). Wiped ${res.count} transactions and ${res.auditCount} audit logs. Opening entries established on ${res.openingDate || zeroBalanceOpeningDate}.`,
+        duration: 9000
       })
-      setArchivedSession(null)
+
+      exitArchive()
       setTransactions([])
+      await loadAll()
     } catch (err: unknown) {
       console.error('Failed to zero balance history', err)
-      setError('Failed to clear transaction history. Please try again.')
-      toast.error('Failed to clear transaction history')
+      let msg = err instanceof Error ? err.message : 'Failed to clear transaction history. Please try again.'
+      if ((err as { code?: string }).code === 'auth/wrong-password' || (err as { code?: string }).code === 'auth/invalid-credential') {
+        msg = 'Incorrect password. Re-authentication failed.'
+      }
+      toast.error(msg, { id: 'zero-balance' })
     } finally {
       setZeroBalanceSubmitting(false)
     }
@@ -357,7 +367,8 @@ export default function AdminInventory() {
       setTransactions(txs)
     } catch (err: unknown) {
       console.error('Failed to load inventory data', err)
-      setError('Unable to load inventory data. Please try again.')
+      const msg = err instanceof Error ? err.message : 'Unable to load inventory data. Please try again.'
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -381,7 +392,8 @@ export default function AdminInventory() {
       .catch((err: unknown) => {
         if (!ignore) {
           console.error('Failed to load inventory data', err)
-          setError('Unable to load inventory data. Please try again.')
+          const msg = err instanceof Error ? err.message : 'Unable to load inventory data. Please try again.'
+          toast.error(msg)
           setLoading(false)
         }
       })
@@ -522,7 +534,7 @@ export default function AdminInventory() {
           return 0
       }
     })
-  }, [products, selectedCategory, selectedMetal, sortBy])
+  }, [products, selectedCategory, selectedBrand, selectedMetal, productStatusFilter, sortBy])
 
   // Effective transactions (switches to offline archive when uploaded)
   const displayTransactions = archivedSession ? archivedSession.transactions : transactions
@@ -549,6 +561,10 @@ export default function AdminInventory() {
   const filteredMovements = useMemo(() => {
     const movementTypes: TransactionType[] = ['transfer', 'adjustment', 'repair', 'melt']
     return displayTransactions.filter((tx) => {
+      // Reversals have their own type and must not mix into Movements with stock-take corrections
+      if (tx.isReversal || Boolean(tx.reversalOf) || tx.isReversed || (tx.type as string) === 'reversal') {
+        return false
+      }
       const typeMatch = movementTypeFilter === 'All' || tx.type === movementTypeFilter
       const catMatch = selectedCategory === 'All' || tx.category === selectedCategory
       const metalMatch = selectedMetal === 'All' || tx.metal === selectedMetal
@@ -730,6 +746,7 @@ export default function AdminInventory() {
   // Handlers for Products
   const handleOpenAddProduct = () => {
     setEditingProductId(null)
+    setIsProductCategoryMetalLocked(false)
     setProdName('')
     const isIdolsDefault = selectedCategory === 'Idols'
     const initialCategory: ProductCategory = isIdolsDefault ? 'Idols' : 'Bullions'
@@ -768,6 +785,20 @@ export default function AdminInventory() {
     setProdPieceWeights(p.pieceWeights || [])
     setProdPieceInput('')
     setProductFormError(null)
+
+    // Check if category and metal should be locked (has stock or transaction history entries)
+    const hasStock = Number(p.stock || 0) > 0 || Object.values(p.stockByLocation || {}).some((s) => Number(s) > 0)
+    const hasEntriesLocal = transactions.some((t) => t.productId === p.id)
+    const isLocked = Boolean(hasStock || hasEntriesLocal)
+    setIsProductCategoryMetalLocked(isLocked)
+    if (!isLocked) {
+      getTransactionsPage({ productId: p.id, limitCount: 1 }).then((res) => {
+        if (res.transactions && res.transactions.length > 0) {
+          setIsProductCategoryMetalLocked(true)
+        }
+      }).catch(() => {})
+    }
+
     setIsProductFormOpen(true)
   }
 
@@ -800,10 +831,15 @@ export default function AdminInventory() {
         return
       }
     } else {
-      if (prodPieceWeights.length > 0) {
-        weightNum = Number((prodPieceWeights.reduce((a, b) => a + b, 0) / prodPieceWeights.length).toFixed(3))
+      if (editingProductId) {
+        const existingP = products.find((p) => p.id === editingProductId)
+        weightNum = Number(existingP?.weight || 0)
       } else {
-        weightNum = 0
+        if (prodPieceWeights.length > 0) {
+          weightNum = Number((prodPieceWeights.reduce((a, b) => a + b, 0) / prodPieceWeights.length).toFixed(3))
+        } else {
+          weightNum = 0
+        }
       }
     }
 
@@ -820,8 +856,7 @@ export default function AdminInventory() {
           metal: prodMetal,
           sku: cleanSku,
           weight: weightNum,
-          purity: prodPurity,
-          pieceWeights: isIdol ? prodPieceWeights : undefined
+          purity: prodPurity
         })
         setProducts((prev) =>
           prev.map((p) =>
@@ -833,9 +868,8 @@ export default function AdminInventory() {
                   brand: effectiveBrand,
                   metal: prodMetal,
                   sku: cleanSku,
-                  weight: weightNum,
+                  weight: isIdol ? (p.weight || 0) : weightNum,
                   purity: prodPurity,
-                  ...(isIdol ? { pieceWeights: prodPieceWeights } : {}),
                   updatedAt: new Date().toISOString()
                 }
               : p
@@ -1049,6 +1083,7 @@ export default function AdminInventory() {
     setMovementRepairCharge('')
     setMovementRecoveredWeight('')
     setMovementPieceWeight('')
+    setMovementAdjustmentMode('deficit')
     const firstP = products[0]
     setMovementNewWeight(firstP ? String(firstP.weight || '') : '')
     setMovementError(null)
@@ -1206,7 +1241,16 @@ export default function AdminInventory() {
           })
         )
       } else if (movementType === 'adjustment') {
-        const qty = Number(movementQty)
+        const isIdol = prod.category === 'Idols'
+        let qty = Number(movementQty)
+        if (isIdol) {
+          qty = movementAdjustmentMode === 'deficit' ? -1 : 1
+          if (!movementPieceWeight || isNaN(Number(movementPieceWeight)) || Number(movementPieceWeight) <= 0) {
+            throw new Error(movementAdjustmentMode === 'deficit'
+              ? 'Please select which specific piece to write off'
+              : 'Please enter a valid piece weight in grams')
+          }
+        }
         if (isNaN(qty) || qty === 0) throw new Error('Adjustment quantity cannot be 0')
         res = await recordTransaction({
           type: 'adjustment',
@@ -1215,6 +1259,7 @@ export default function AdminInventory() {
           category: prod.category,
           metal: prod.metal,
           quantity: qty,
+          pieceWeight: isIdol ? Number(movementPieceWeight) : undefined,
           locationId: effectiveLocId,
           locationName: locName,
           date: movementDate,
@@ -1228,10 +1273,33 @@ export default function AdminInventory() {
               ...(p.stockByLocation || {}),
               [effectiveLocId]: Math.max(0, (p.stockByLocation?.[effectiveLocId] || 0) + qty)
             }
+            const newPieces = p.pieceWeights ? [...p.pieceWeights] : []
+            const newPiecesByLoc = p.pieceWeightsByLocation ? { ...p.pieceWeightsByLocation } : {}
+            if (isIdol && movementPieceWeight) {
+              const numPW = Number(movementPieceWeight)
+              if (qty < 0) {
+                const idx = newPieces.indexOf(numPW)
+                if (idx !== -1) newPieces.splice(idx, 1)
+                const locPieces = newPiecesByLoc[effectiveLocId] ? [...newPiecesByLoc[effectiveLocId]] : []
+                const lIdx = locPieces.indexOf(numPW)
+                if (lIdx !== -1) locPieces.splice(lIdx, 1)
+                newPiecesByLoc[effectiveLocId] = locPieces
+              } else {
+                newPieces.push(numPW)
+                const locPieces = newPiecesByLoc[effectiveLocId] ? [...newPiecesByLoc[effectiveLocId]] : []
+                locPieces.push(numPW)
+                newPiecesByLoc[effectiveLocId] = locPieces
+              }
+            }
             return {
               ...p,
               stock: newStock,
-              stockByLocation: newStockByLoc
+              stockByLocation: newStockByLoc,
+              ...(isIdol ? {
+                pieceWeights: newPieces,
+                pieceWeightsByLocation: newPiecesByLoc,
+                weight: newPieces.length > 0 ? Number((newPieces.reduce((a, b) => a + b, 0) / newPieces.length).toFixed(3)) : 0
+              } : {})
             }
           })
         )
@@ -1413,25 +1481,49 @@ export default function AdminInventory() {
 
       {/* Offline Archive Viewer Active Notification */}
       {archivedSession && (
-        <div className="mb-6 p-4 bg-gray-50 border border-gray-300 rounded-xl flex items-center justify-between flex-wrap gap-3">
+        <div className={`mb-6 p-4 rounded-xl flex items-center justify-between flex-wrap gap-3 border ${
+          archivedSession.verification.status === 'tampered'
+            ? 'bg-red-50/70 border-red-300'
+            : archivedSession.verification.status === 'verified'
+              ? 'bg-emerald-50/60 border-emerald-300'
+              : 'bg-gray-50 border-gray-300'
+        }`}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-black text-white flex items-center justify-center shrink-0">
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+              archivedSession.verification.status === 'tampered'
+                ? 'bg-red-600 text-white'
+                : archivedSession.verification.status === 'verified'
+                  ? 'bg-emerald-700 text-white'
+                  : 'bg-black text-white'
+            }`}>
               <Archive size={16} />
             </div>
             <div>
-              <div className="text-sm font-bold text-black flex items-center gap-2">
+              <div className="text-sm font-bold text-black flex items-center gap-2 flex-wrap">
                 Viewing Offline Archive: {archivedSession.filename}
-                <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-black text-white">
-                  Offline Mode
-                </span>
+                {archivedSession.verification.status === 'verified' && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    ✓ Cryptographically Verified (SHA-256)
+                  </span>
+                )}
+                {archivedSession.verification.status === 'tampered' && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-300 animate-pulse">
+                    ⚠️ TAMPER WARNING: Checksum Mismatch (Altered File)
+                  </span>
+                )}
+                {archivedSession.verification.status === 'unverified' && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                    ⚠️ Legacy Archive (No Checksum)
+                  </span>
+                )}
               </div>
-              <div className="text-xs text-gray-500">
-                {archivedSession.transactions.length} historical transactions from {new Date(archivedSession.exportedAt).toLocaleDateString()} · Read-only offline archive
+              <div className="text-xs text-gray-600 mt-0.5">
+                {archivedSession.transactions.length} historical transactions · {archivedSession.auditLogs.length} audit logs · Exported {new Date(archivedSession.exportedAt).toLocaleDateString()}
               </div>
             </div>
           </div>
           <button
-            onClick={() => setArchivedSession(null)}
+            onClick={exitArchive}
             className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:text-black hover:bg-gray-100 transition-[background-color,transform] active:scale-[0.97]"
           >
             <X size={13} />
@@ -1491,6 +1583,23 @@ export default function AdminInventory() {
           >
             <Layers size={16} />
             Stock Movements ({filteredMovements.length})
+          </button>
+        )}
+        {archivedSession && (
+          <button
+            onClick={() => {
+              setActiveTab('archived-audit')
+              setIsProductFormOpen(false)
+              setIsPurchaseFormOpen(false)
+              setIsMovementFormOpen(false)
+            }}
+            className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'archived-audit'
+              ? 'border-black text-black'
+              : 'border-transparent text-gray-500 hover:text-black'
+              }`}
+          >
+            <History size={16} />
+            Archived Audit Trail ({archivedSession.auditLogs.length})
           </button>
         )}
       </div>
@@ -1755,14 +1864,29 @@ export default function AdminInventory() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Category <span className="text-red-500">*</span>
-                  </label>
-                  <CustomSelect
-                    value={prodCategory}
-                    onValueChange={(val) => handleCategoryChange(val as ProductCategory)}
-                    options={categoryOptions}
-                  />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Category <span className="text-red-500">*</span>
+                    </label>
+                    {isProductCategoryMetalLocked && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                        <Lock className="w-3 h-3 text-gray-500" />
+                        Locked
+                      </span>
+                    )}
+                  </div>
+                  {isProductCategoryMetalLocked ? (
+                    <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 flex items-center justify-between">
+                      <span>{prodCategory}</span>
+                      <span className="text-xs font-normal text-gray-400">Has entries / stock</span>
+                    </div>
+                  ) : (
+                    <CustomSelect
+                      value={prodCategory}
+                      onValueChange={(val) => handleCategoryChange(val as ProductCategory)}
+                      options={categoryOptions}
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -1786,31 +1910,46 @@ export default function AdminInventory() {
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Metal <span className="text-red-500">*</span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleMetalChange('Gold')}
-                      className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color] duration-150 flex items-center justify-center ${prodMetal === 'Gold'
-                        ? 'bg-black text-white shadow-sm'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                        }`}
-                    >
-                      Gold
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleMetalChange('Silver')}
-                      className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color] duration-150 flex items-center justify-center ${prodMetal === 'Silver'
-                        ? 'bg-black text-white shadow-sm'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                        }`}
-                    >
-                      Silver
-                    </button>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
+                      Metal <span className="text-red-500">*</span>
+                    </label>
+                    {isProductCategoryMetalLocked && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                        <Lock className="w-3 h-3 text-gray-500" />
+                        Locked
+                      </span>
+                    )}
                   </div>
+                  {isProductCategoryMetalLocked ? (
+                    <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 flex items-center justify-between">
+                      <span>{prodMetal}</span>
+                      <span className="text-xs font-normal text-gray-400">Has entries / stock</span>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleMetalChange('Gold')}
+                        className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 flex items-center justify-center active:scale-[0.97] ${prodMetal === 'Gold'
+                          ? 'bg-black text-white shadow-sm'
+                          : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}
+                      >
+                        Gold
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMetalChange('Silver')}
+                        className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 flex items-center justify-center active:scale-[0.97] ${prodMetal === 'Silver'
+                          ? 'bg-black text-white shadow-sm'
+                          : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}
+                      >
+                        Silver
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -1881,11 +2020,14 @@ export default function AdminInventory() {
                 <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wider text-gray-800">
-                        Piece-Level Weight Registry
+                      <div className="text-xs font-semibold uppercase tracking-wider text-gray-800 flex items-center gap-1.5">
+                        {editingProductId && <Lock className="w-3.5 h-3.5 text-gray-500" />}
+                        Piece-Level Weight Registry {editingProductId ? '(Locked)' : ''}
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        Each idol piece has a distinct weight. Enter individual piece weights (press Enter or Add).
+                        {editingProductId
+                          ? 'Pieces are managed through inventory movements. Change pieces only through purchases and adjustments.'
+                          : 'Each idol piece has a distinct weight. Enter individual piece weights (press Enter or Add).'}
                       </p>
                     </div>
                     {prodPieceWeights.length > 0 && (
@@ -1895,28 +2037,30 @@ export default function AdminInventory() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="e.g. 48.250, 51.600, 49.825 (or comma-separated)"
-                      value={prodPieceInput}
-                      onChange={(e) => setProdPieceInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleAddProdPieceWeight()
-                        }
-                      }}
-                      className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleAddProdPieceWeight()}
-                      className="px-4 py-2 bg-black text-white text-xs font-semibold rounded-lg hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-                    >
-                      + Add Piece
-                    </button>
-                  </div>
+                  {!editingProductId && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="e.g. 48.250, 51.600, 49.825 (or comma-separated)"
+                        value={prodPieceInput}
+                        onChange={(e) => setProdPieceInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleAddProdPieceWeight()
+                          }
+                        }}
+                        className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddProdPieceWeight()}
+                        className="px-4 py-2 bg-black text-white text-xs font-semibold rounded-lg hover:bg-gray-800 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                      >
+                        + Add Piece
+                      </button>
+                    </div>
+                  )}
 
                   {prodPieceWeights.length > 0 ? (
                     <div className="space-y-2 pt-1">
@@ -1924,17 +2068,19 @@ export default function AdminInventory() {
                         {prodPieceWeights.map((w, idx) => (
                           <span
                             key={idx}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 hover:bg-gray-200/80 border border-gray-200 text-xs font-semibold text-gray-800 transition-[background-color] duration-100"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 border border-gray-200 text-xs font-semibold text-gray-800"
                           >
                             <span>#{idx + 1}: <strong>{formatWeight(w)}</strong></span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveProdPieceWeight(idx)}
-                              className="text-gray-400 hover:text-red-600 transition-colors duration-100 ml-0.5"
-                              title="Remove piece"
-                            >
-                              ✕
-                            </button>
+                            {!editingProductId && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveProdPieceWeight(idx)}
+                                className="text-gray-400 hover:text-red-600 transition-colors duration-100 ml-0.5"
+                                title="Remove piece"
+                              >
+                                ✕
+                              </button>
+                            )}
                           </span>
                         ))}
                       </div>
@@ -1947,7 +2093,9 @@ export default function AdminInventory() {
                     </div>
                   ) : (
                     <div className="text-center py-3 bg-white/60 border border-dashed border-gray-200 rounded-lg text-xs text-gray-400">
-                      No individual pieces registered yet. Add weights above or restock via Purchases.
+                      {editingProductId
+                        ? 'No individual pieces registered. Restock or adjust via Purchases or Adjustments.'
+                        : 'No individual pieces registered yet. Add weights above or restock via Purchases.'}
                     </div>
                   )}
                 </div>
@@ -2465,37 +2613,137 @@ export default function AdminInventory() {
               )}
 
               {movementType === 'adjustment' && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Quantity Adjustment (+ or -) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="e.g. +2 or -1"
-                        value={movementQty}
-                        onChange={(e) => setMovementQty(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                        required
-                      />
-                      <p className="text-xs text-gray-400 mt-1">
-                        Positive number for surplus found, or negative for shrinkage / damaged units.
-                      </p>
-                    </div>
+                <div className="space-y-4">
+                  {isMovementProductAnIdol ? (
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-200">
+                        <div>
+                          <label className="block text-xs font-semibold uppercase tracking-wider text-gray-800">
+                            Idol Piece Adjustment Mode <span className="text-red-500">*</span>
+                          </label>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            Adjust idol stock at {locationMap.get(movementLocationId) || 'selected store'} piece by piece.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMovementAdjustmentMode('deficit')
+                              setMovementQty('-1')
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${
+                              movementAdjustmentMode === 'deficit'
+                                ? 'bg-black text-white shadow-xs'
+                                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                            }`}
+                          >
+                            Deficit / Write-off Piece (-1)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMovementAdjustmentMode('surplus')
+                              setMovementQty('1')
+                              setMovementPieceWeight('')
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${
+                              movementAdjustmentMode === 'surplus'
+                                ? 'bg-black text-white shadow-xs'
+                                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                            }`}
+                          >
+                            Surplus / Add Piece (+1)
+                          </button>
+                        </div>
+                      </div>
 
-                    <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs flex flex-col justify-center">
-                      <div className="text-gray-500">Current Stock: <strong className="text-black">{currentSourceStock} units</strong></div>
-                      <div className="mt-1 pt-1 border-t border-gray-200/60 font-semibold text-black">
-                        New Stock: {currentSourceStock + (Number(movementQty) || 0)} units
-                        {Number(movementQty) !== 0 && (
-                          <span className="ml-1.5 text-[11px] font-normal text-gray-500">
-                            ({Number(movementQty) > 0 ? `+${movementQty} surplus` : `${movementQty} deficit`})
-                          </span>
-                        )}
+                      {movementAdjustmentMode === 'deficit' ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-700 font-semibold uppercase tracking-wider">
+                              Select Piece to Write Off <span className="text-red-500">*</span>
+                            </span>
+                            <span className="text-[11px] text-gray-500 font-medium">
+                              {availableMovementPieces.length} available at location
+                            </span>
+                          </div>
+                          {availableMovementPieces.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-2 bg-white rounded-lg border border-gray-200">
+                              {availableMovementPieces.map((pw, i) => (
+                                <button
+                                  key={`${pw}-${i}`}
+                                  type="button"
+                                  onClick={() => setMovementPieceWeight(String(pw))}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${
+                                    String(movementPieceWeight) === String(pw)
+                                      ? 'bg-black text-white shadow-xs'
+                                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  #{i + 1}: {formatWeight(pw)}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-red-600 font-medium p-2 bg-red-50 border border-red-200 rounded-lg">
+                              No idol pieces available at {locationMap.get(movementLocationId) || 'selected store'} to write off.
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                            New Piece Weight (Grams) <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="0.001"
+                            placeholder="e.g. 52.350"
+                            value={movementPieceWeight}
+                            onChange={(e) => setMovementPieceWeight(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                            required
+                          />
+                          <p className="text-xs text-gray-400 mt-1">
+                            Adds an unrecorded or found idol piece directly to {locationMap.get(movementLocationId) || 'this location'}.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                          Quantity Adjustment (+ or -) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="e.g. +2 or -1"
+                          value={movementQty}
+                          onChange={(e) => setMovementQty(e.target.value)}
+                          className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                          required
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                          Positive number for surplus found, or negative for shrinkage / damaged units.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs flex flex-col justify-center">
+                        <div className="text-gray-500">Current Stock: <strong className="text-black">{currentSourceStock} units</strong></div>
+                        <div className="mt-1 pt-1 border-t border-gray-200/60 font-semibold text-black">
+                          New Stock: {currentSourceStock + (Number(movementQty) || 0)} units
+                          {Number(movementQty) !== 0 && (
+                            <span className="ml-1.5 text-[11px] font-normal text-gray-500">
+                              ({Number(movementQty) > 0 ? `+${movementQty} surplus` : `${movementQty} deficit`})
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -2975,9 +3223,14 @@ export default function AdminInventory() {
                               Reversal
                             </span>
                           )}
+                          {(tx.isOpeningBalance || tx.isOpeningEntry) && (
+                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                              Opening Balance
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {!archivedSession && hasPermission('purchases', 'delete') && !tx.isReversed && !tx.reversalOf && (
+                          {!archivedSession && hasPermission('purchases', 'delete') && !tx.isReversed && !tx.reversalOf && !tx.isOpeningBalance && !tx.isOpeningEntry && (
                             <button
                               onClick={() => setDeleteTxTarget(tx)}
                               title="Post reversing entry"
@@ -3177,9 +3430,14 @@ export default function AdminInventory() {
                               Reversal
                             </span>
                           )}
+                          {(tx.isOpeningBalance || tx.isOpeningEntry) && (
+                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                              Opening Balance
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {!archivedSession && hasPermission('movements', 'delete') && !tx.isReversed && !tx.reversalOf && (
+                          {!archivedSession && hasPermission('movements', 'delete') && !tx.isReversed && !tx.reversalOf && !tx.isOpeningBalance && !tx.isOpeningEntry && (
                             <button
                               onClick={() => setDeleteTxTarget(tx)}
                               title="Post reversing entry"
@@ -3237,6 +3495,125 @@ export default function AdminInventory() {
             )}
           </div>
         )
+      ) : activeTab === 'archived-audit' && archivedSession ? (
+        <div className="space-y-6">
+          {/* Archived Audit Search & Filters */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+            <div className="relative flex-1 max-w-md">
+              <input
+                type="text"
+                placeholder="Search archived narrative, user, or entity..."
+                value={archivedAuditSearch}
+                onChange={(e) => setArchivedAuditSearch(e.target.value)}
+                className="w-full pl-3.5 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 shrink-0">
+              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Entity:</span>
+              {(['all', 'product', 'sale', 'movement', 'purchase', 'user', 'archive'] as const).map((ent) => (
+                <button
+                  key={ent}
+                  onClick={() => setArchivedAuditEntityFilter(ent)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${archivedAuditEntityFilter === ent
+                    ? 'bg-black text-white border border-black shadow-xs'
+                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                  }`}
+                >
+                  {ent}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Archived Audit Logs Table */}
+          {filteredArchivedAuditLogs.length === 0 ? (
+            <EmptyState
+              title="No archived audit entries found"
+              description="No audit trail events match the current search or entity filters in this archive."
+            />
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50/50 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3.5">Timestamp</th>
+                      <th className="px-6 py-3.5">Operator</th>
+                      <th className="px-6 py-3.5">Action</th>
+                      <th className="px-6 py-3.5">Entity</th>
+                      <th className="px-6 py-3.5">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-xs">
+                    {paginatedArchivedAuditLogs.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-gray-50/70 transition-colors">
+                        <td className="px-6 py-4 text-gray-500 font-mono whitespace-nowrap">
+                          {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="font-semibold text-black block">{entry.userName}</span>
+                          <span className="text-[11px] text-gray-400">{entry.userEmail}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-gray-100 text-gray-700 border border-gray-200">
+                            {entry.action}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="capitalize font-medium text-black">{entry.entityType}</span>
+                          {entry.entityName && <span className="text-gray-500 block text-[11px] truncate max-w-xs">{entry.entityName}</span>}
+                        </td>
+                        <td className="px-6 py-4 text-gray-700 max-w-md">
+                          <div>{entry.description}</div>
+                          {Array.isArray(entry.diffs) && entry.diffs.length > 0 && (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {entry.diffs.map((d, idx) => (
+                                <span key={idx} className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded text-gray-600">
+                                  {d.label || d.field}: {String(d.oldValue ?? 'None')} → {String(d.newValue ?? 'None')}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {totalArchivedAuditPages > 1 && (
+                <div className="flex items-center justify-between px-6 py-3.5 border-t border-gray-100 text-xs text-gray-500">
+                  <span>
+                    Showing {(archivedAuditPage - 1) * archivedAuditPageSize + 1} to{' '}
+                    {Math.min(archivedAuditPage * archivedAuditPageSize, filteredArchivedAuditLogs.length)} of{' '}
+                    {filteredArchivedAuditLogs.length} archived entries
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setArchivedAuditPage((p) => Math.max(1, p - 1))}
+                      disabled={archivedAuditPage <= 1}
+                      className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="font-medium text-black">
+                      Page {archivedAuditPage} of {totalArchivedAuditPages}
+                    </span>
+                    <button
+                      onClick={() => setArchivedAuditPage((p) => Math.min(totalArchivedAuditPages, p + 1))}
+                      disabled={archivedAuditPage >= totalArchivedAuditPages}
+                      className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       ) : null}
 
       {/* Product Archive Modal */}
@@ -3263,11 +3640,95 @@ export default function AdminInventory() {
       <ConfirmModal
         isOpen={isZeroBalanceModalOpen}
         title="Zero Balance All History & Audit Log"
-        description="Exports an offline JSON archive of all transactions and the activity audit trail, then wipes both from the cloud. Current product stocks are rolled over and remain unchanged."
-        confirmText={zeroBalanceSubmitting ? "Exporting & Erasing..." : "Export & Zero Balance"}
+        description="Archives and clears transactions and audit logs up to the specified cutoff date. Consolidated opening balances will be dated the following day. All future entries on or before the cutoff date will be permanently blocked."
+        confirmText={zeroBalanceSubmitting ? "Archiving & Erasing..." : "Purge & Zero Balance"}
+        disabled={
+          zeroBalanceSubmitting ||
+          zeroBalanceConfirmText.trim() !== 'CONFIRM ZERO BALANCE' ||
+          !zeroBalancePassword.trim()
+        }
         onConfirm={handleZeroBalance}
-        onClose={() => setIsZeroBalanceModalOpen(false)}
-      />
+        onClose={() => {
+          if (!zeroBalanceSubmitting) {
+            setIsZeroBalanceModalOpen(false)
+            setZeroBalanceConfirmText('')
+            setZeroBalancePassword('')
+          }
+        }}
+      >
+        <div className="space-y-4 pt-2">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Closing Fiscal Cutoff Date (inclusive)
+              </label>
+              <input
+                type="date"
+                value={zeroBalanceCutoffDate}
+                disabled={zeroBalanceSubmitting}
+                onChange={(e) => setZeroBalanceCutoffDate(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 disabled:opacity-50"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Standard fiscal year closes on 31 March (e.g. 2026-03-31).
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-200 text-xs">
+              <div>
+                <span className="text-gray-500 block">Cutoff (Wiped):</span>
+                <span className="font-semibold text-red-600">
+                  ≤ {formatDisplayDateIST(zeroBalanceCutoffDate)}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-500 block">Opening Entry Date:</span>
+                <span className="font-semibold text-emerald-700">
+                  {formatDisplayDateIST(zeroBalanceOpeningDate)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Type to Confirm and Password Re-Auth */}
+          <div className="p-3.5 bg-red-50/70 border border-red-200 rounded-xl space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-red-900 mb-1">
+                Type-to-Confirm: Type <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-red-300 select-all font-bold">CONFIRM ZERO BALANCE</span>
+              </label>
+              <input
+                type="text"
+                value={zeroBalanceConfirmText}
+                disabled={zeroBalanceSubmitting}
+                onChange={(e) => setZeroBalanceConfirmText(e.target.value)}
+                placeholder="CONFIRM ZERO BALANCE"
+                className="w-full px-3 py-2 bg-white border border-red-300 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-red-600 transition-[border-color] duration-150 disabled:opacity-50"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-red-900 mb-1">
+                Account Password (Fresh Sign-in Verification)
+              </label>
+              <input
+                type="password"
+                value={zeroBalancePassword}
+                disabled={zeroBalanceSubmitting}
+                onChange={(e) => setZeroBalancePassword(e.target.value)}
+                placeholder="Enter your current password"
+                className="w-full px-3 py-2 bg-white border border-red-300 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-red-600 transition-[border-color] duration-150 disabled:opacity-50"
+              />
+              <p className="text-[11px] text-red-700/80 mt-1">
+                Server mandates recent authentication within the last 5 minutes to authorize irreversible purges.
+              </p>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5 leading-relaxed">
+            <strong>Server Lock & Protection:</strong> A distributed lock pauses new entries during the run. The archive is saved server-side with count and SHA-256 checksum recorded before records are deleted. Opening balances cannot be reversed. Future entries on or before {formatDisplayDateIST(zeroBalanceCutoffDate)} will be blocked.
+          </div>
+        </div>
+      </ConfirmModal>
     </div>
   )
 }

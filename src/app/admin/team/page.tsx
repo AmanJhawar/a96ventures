@@ -6,7 +6,7 @@ import { collection, addDoc, setDoc, deleteDoc, doc, getDocs, getFirestore } fro
 import { app } from '@/lib/firebase/config'
 const db = getFirestore(app)
 import { TeamMember } from '@/lib/types'
-import { getOptimizedUrl } from '@/lib/utils'
+import { getOptimizedUrl } from '@/lib/utils/cloudinary'
 import { Trash2, Plus, Users, Edit2, Lock } from 'lucide-react'
 import { ImageDropzone } from '@/components/image-dropzone'
 import { ConfirmModal } from '@/components/confirm-modal'

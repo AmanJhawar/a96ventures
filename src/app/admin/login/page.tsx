@@ -8,6 +8,7 @@ import {
   PhoneAuthProvider,
   PhoneMultiFactorGenerator,
   MultiFactorResolver,
+  MultiFactorError,
   RecaptchaVerifier,
   User
 } from 'firebase/auth'
@@ -133,17 +134,18 @@ function LoginForm() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, targetEmail, data.password)
       await verifyAndRedirect(userCredential.user)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Sign in error:', err)
+      const authErr = err as { code?: string; message?: string }
 
       // Handle Multi-Factor Authentication requirement
-      if (err.code === 'auth/multi-factor-auth-required') {
+      if (authErr.code === 'auth/multi-factor-auth-required') {
         try {
-          const mfaResolver = getMultiFactorResolver(auth, err)
+          const mfaResolver = getMultiFactorResolver(auth, err as MultiFactorError)
           setResolver(mfaResolver)
 
           const phoneHint = mfaResolver.hints.find(h => h.factorId === PhoneMultiFactorGenerator.FACTOR_ID) || mfaResolver.hints[0]
-          setMfaHint(phoneHint?.displayName || (phoneHint as any)?.phoneNumber || 'enrolled mobile number')
+          setMfaHint(phoneHint?.displayName || (phoneHint as unknown as { phoneNumber?: string })?.phoneNumber || 'enrolled mobile number')
 
           if (!recaptchaVerifierRef.current) {
             recaptchaVerifierRef.current = new RecaptchaVerifier(auth, 'login-recaptcha-container', {
@@ -160,14 +162,15 @@ function LoginForm() {
           setVerificationId(vId)
           setStep('mfa')
           return
-        } catch (mfaInitErr: any) {
+        } catch (mfaInitErr: unknown) {
           console.error('Failed to initiate MFA challenge:', mfaInitErr)
-          setError(mfaInitErr.message || 'Failed to start multi-factor verification.')
+          const mfaMsg = mfaInitErr instanceof Error ? mfaInitErr.message : 'Failed to start multi-factor verification.'
+          setError(mfaMsg)
           return
         }
       }
 
-      setError(err.message?.includes('Admin Profile') ? err.message : 'Invalid username or password.')
+      setError(authErr.message?.includes('Admin Profile') ? authErr.message : 'Invalid username or password.')
     }
   }
 
@@ -183,9 +186,10 @@ function LoginForm() {
       const assertion = PhoneMultiFactorGenerator.assertion(cred)
       const userCredential = await resolver.resolveSignIn(assertion)
       await verifyAndRedirect(userCredential.user)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('MFA completion error:', err)
-      setError(err.message || 'Invalid verification code. Please check and try again.')
+      const msg = err instanceof Error ? err.message : 'Invalid verification code. Please check and try again.'
+      setError(msg)
     } finally {
       setMfaSubmitting(false)
     }
@@ -206,9 +210,10 @@ function LoginForm() {
       const email = resolveAdminEmail(forgotEmail)
       await sendPasswordResetEmail(auth, email)
       setSuccessMsg(`Password reset instructions have been dispatched to ${email}. Check your inbox.`)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Password reset error:', err)
-      setError(err.message || 'Unable to send password reset email. Please verify the address.')
+      const msg = err instanceof Error ? err.message : 'Unable to send password reset email. Please verify the address.'
+      setError(msg)
     } finally {
       setForgotSubmitting(false)
     }
@@ -244,7 +249,7 @@ function LoginForm() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="space-y-6">
               <div>
                 <label htmlFor="identifier" className="block text-sm font-medium text-gray-500 mb-2">
                   Username or Email

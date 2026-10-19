@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
   multiFactor,
   PhoneAuthProvider,
@@ -22,9 +22,21 @@ interface TwoFactorModalProps {
 }
 
 export function TwoFactorModal({ isOpen, onClose, user }: TwoFactorModalProps) {
+  if (!isOpen || !user) return null
+
+  return <TwoFactorModalDialog key={user.uid} onClose={onClose} user={user} />
+}
+
+function TwoFactorModalDialog({ onClose, user }: { onClose: () => void; user: User }) {
   const shouldReduceMotion = useReducedMotion()
-  const [enrolledFactors, setEnrolledFactors] = useState<MultiFactorInfo[]>([])
-  const [phoneNumber, setPhoneNumber] = useState('')
+  const [enrolledFactors, setEnrolledFactors] = useState<MultiFactorInfo[]>(() => {
+    try {
+      return multiFactor(user).enrolledFactors || []
+    } catch {
+      return []
+    }
+  })
+  const [phoneNumber, setPhoneNumber] = useState(user.phoneNumber || '+91 ')
   const [verificationCode, setVerificationCode] = useState('')
   const [verificationId, setVerificationId] = useState<string | null>(null)
   const [isSendingCode, setIsSendingCode] = useState(false)
@@ -34,7 +46,6 @@ export function TwoFactorModal({ isOpen, onClose, user }: TwoFactorModalProps) {
 
   // Refresh enrolled factors list
   const refreshFactors = () => {
-    if (!user) return
     try {
       const factors = multiFactor(user).enrolledFactors
       setEnrolledFactors(factors || [])
@@ -42,16 +53,6 @@ export function TwoFactorModal({ isOpen, onClose, user }: TwoFactorModalProps) {
       console.warn('Could not read enrolled factors:', e)
     }
   }
-
-  useEffect(() => {
-    if (isOpen && user) {
-      refreshFactors()
-      setError(null)
-      setVerificationId(null)
-      setVerificationCode('')
-      setPhoneNumber(user.phoneNumber || '+91 ')
-    }
-  }, [isOpen, user])
 
   const handleSendCode = async () => {
     if (!user) return
@@ -150,8 +151,6 @@ export function TwoFactorModal({ isOpen, onClose, user }: TwoFactorModalProps) {
       setIsUnenrolling(false)
     }
   }
-
-  if (!isOpen) return null
 
   const isEnrolled = enrolledFactors.length > 0
 

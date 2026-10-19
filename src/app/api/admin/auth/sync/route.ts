@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
-import { SUPER_ADMIN_PERMISSIONS, EMPTY_PERMISSIONS } from '@/lib/constants/permissions'
+import { SUPER_ADMIN_PERMISSIONS, EMPTY_PERMISSIONS, permissionsToShortCodes } from '@/lib/constants/permissions'
 import { UserRole } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -15,8 +15,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Empty token' }, { status: 401 })
     }
 
-    // Verify token signature using Firebase Admin SDK with Google's public keys
-    const decoded = await adminAuth.verifyIdToken(token)
+    // Verify token signature using Firebase Admin SDK with Google's public keys & check revocation
+    const decoded = await adminAuth.verifyIdToken(token, true)
 
     // Strict Hard-coded checks for Project ID, Audience, Issuer, and Expiry
     const HARDCODED_PROJECT_ID = 'a96ventures-979e6'
@@ -49,24 +49,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden: Admin account is suspended' }, { status: 403 })
     }
 
-    // Resolve role: existing admin profile without explicit role or with 'admin' maps to 'super_admin'
-    const role: UserRole =
-      (data.role === 'admin' || data.role === 'super_admin' || !data.role)
-        ? 'super_admin'
-        : (data.role as UserRole)
+    // STRICT DEFAULT DENY:
+    // Missing role must NEVER default to super_admin.
+    const rawRole = typeof data.role === 'string' ? data.role.trim() : ''
+    if (!rawRole) {
+      return NextResponse.json({ error: 'Forbidden: Admin profile has no assigned role. Access denied.' }, { status: 403 })
+    }
+
+    const role: UserRole = rawRole as UserRole
+    const isSuperAdmin = role === 'super_admin'
     
     // DEFAULT TO NO ACCESS: If permissions field is missing, strictly default to EMPTY_PERMISSIONS
-    // (Only an explicit super_admin receives SUPER_ADMIN_PERMISSIONS)
+    // (Only an explicit active super_admin receives SUPER_ADMIN_PERMISSIONS)
     const permissions =
-      role === 'super_admin'
-        ? (data.permissions || SUPER_ADMIN_PERMISSIONS)
+      isSuperAdmin
+        ? SUPER_ADMIN_PERMISSIONS
         : (data.permissions || EMPTY_PERMISSIONS)
 
-    // Set custom user claims so Firestore rules and client token reflect role & permissions
+    const perms = permissionsToShortCodes(permissions)
+
+    // Set custom user claims with compact short codes to stay well under 1,000-byte token limit
     await adminAuth.setCustomUserClaims(uid, {
       role,
       status,
-      permissions
+      perms
     })
 
     return NextResponse.json({
@@ -74,6 +80,7 @@ export async function POST(req: NextRequest) {
       synced: true,
       role,
       status,
+      perms,
       permissions
     })
   } catch (error: unknown) {

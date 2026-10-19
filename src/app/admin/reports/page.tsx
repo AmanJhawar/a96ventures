@@ -6,22 +6,16 @@ import {
   Warehouse,
   Download,
   Printer,
-  Calendar,
-  Layers,
-  ShoppingBag,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
   Lock
 } from 'lucide-react'
-import { Product, Location, Transaction, ProductCategory, MetalType } from '@/lib/types'
-import { getProducts, getLocations, getTransactions } from '@/lib/services/inventory.service'
-import CustomSelect, { SelectOption } from '@/components/custom-select'
+import { Product, Location, Transaction, ProductCategory, MetalType, TransactionStats } from '@/lib/types'
+import { getProducts, getLocations, getTransactionsPage, getTransactionStats } from '@/lib/services/inventory.service'
 import { EmptyState } from '@/components/empty-state'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatWeight } from '@/lib/utils/weight'
 import { getTodayIST, getDaysAgoIST } from '@/lib/utils/date'
 import { downloadCSV } from '@/lib/utils/csv'
+import { toast } from 'sonner'
 
 const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
 const METALS: MetalType[] = ['Gold', 'Silver']
@@ -30,22 +24,6 @@ type ReportTab = 'top_selling' | 'stock_summary'
 type DateRange = 'all' | 'month' | 'week' | 'today'
 type TopSellingSort = 'volume_desc' | 'revenue_desc' | 'stock_desc'
 
-function getTimestampMs(ts: unknown): number {
-  if (!ts) return 0
-  if (typeof ts === 'object' && ts !== null) {
-    if ('toMillis' in ts && typeof (ts as { toMillis: () => number }).toMillis === 'function') {
-      return (ts as { toMillis: () => number }).toMillis()
-    }
-    if ('seconds' in ts && typeof (ts as { seconds: number }).seconds === 'number') {
-      return (ts as { seconds: number }).seconds * 1000
-    }
-  }
-  if (typeof ts === 'string' || typeof ts === 'number') {
-    const d = new Date(ts).getTime()
-    return isNaN(d) ? 0 : d
-  }
-  return 0
-}
 
 interface ProductSalesStat {
   productId: string
@@ -72,89 +50,108 @@ export default function AdminReportsPage() {
   // Data
   const [products, setProducts] = useState<Product[]>([])
   const [locations, setLocations] = useState<Location[]>([])
-  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [stats, setStats] = useState<TransactionStats | null>(null)
+  const [salesTransactions, setSalesTransactions] = useState<Transaction[]>([])
+  const [salesCursor, setSalesCursor] = useState<string | null>(null)
+  const [salesHasMore, setSalesHasMore] = useState(false)
+  const [loadingMoreSales, setLoadingMoreSales] = useState(false)
+  const [visibleLeaderboardCount, setVisibleLeaderboardCount] = useState(15)
+  const [salesSubView, setSalesSubView] = useState<'leaderboard' | 'transactions'>('leaderboard')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const { startDate, endDate } = useMemo(() => {
+    if (dateRange === 'today') {
+      const today = getTodayIST()
+      return { startDate: today, endDate: today }
+    }
+    if (dateRange === 'week') {
+      return { startDate: getDaysAgoIST(7), endDate: getTodayIST() }
+    }
+    if (dateRange === 'month') {
+      return { startDate: getDaysAgoIST(30), endDate: getTodayIST() }
+    }
+    return { startDate: undefined, endDate: undefined }
+  }, [dateRange])
+
   useEffect(() => {
     let ignore = false
-    const startDate =
-      dateRange === 'today'
-        ? getTodayIST()
-        : dateRange === 'week'
-          ? getDaysAgoIST(7)
-          : dateRange === 'month'
-            ? getDaysAgoIST(30)
-            : undefined
 
     Promise.all([
       getProducts(),
       getLocations(),
-      getTransactions({ startDate, type: 'sale' })
+      getTransactionStats({ startDate, endDate }),
+      getTransactionsPage({ startDate, endDate, type: 'sale', limitCount: 25, excludeReversed: true })
     ])
-      .then(([prods, locs, txs]) => {
+      .then(([prods, locs, serverStats, salesPageRes]) => {
         if (!ignore) {
           setProducts(prods)
           setLocations(locs)
-          setTransactions(txs)
+          setStats(serverStats)
+          setSalesTransactions(salesPageRes.transactions)
+          setSalesCursor(salesPageRes.nextCursor)
+          setSalesHasMore(salesPageRes.hasMore)
           setLoading(false)
         }
       })
       .catch((err: unknown) => {
         if (!ignore) {
           console.error('Failed to load reports data', err)
-          setError('Unable to load reports data. Please try again.')
+          const msg = err instanceof Error ? err.message : 'Unable to load reports data. Please try again.'
+          setError(msg)
+          toast.error(msg)
           setLoading(false)
         }
       })
     return () => {
       ignore = true
     }
-  }, [dateRange])
+  }, [startDate, endDate])
 
-  // -------------------------------------------------------------
-  // TOP SELLING PRODUCTS COMPUTATION
-  // -------------------------------------------------------------
-  const salesTransactions = useMemo(() => {
-    const todayStr = getTodayIST()
-    const weekAgoStr = getDaysAgoIST(7)
-    const monthAgoStr = getDaysAgoIST(30)
-
-    return transactions.filter((tx) => {
-      if (tx.type !== 'sale') return false
-
-      if (dateRange === 'today' && tx.date !== todayStr) return false
-      if (dateRange === 'week' && tx.date < weekAgoStr) return false
-      if (dateRange === 'month' && tx.date < monthAgoStr) return false
-
-      if (selectedCategory !== 'All' && tx.category !== selectedCategory) return false
-      if (selectedMetal !== 'All' && tx.metal !== selectedMetal) return false
-
-      return true
-    })
-  }, [transactions, dateRange, selectedCategory, selectedMetal])
-
-  const topSellingList = useMemo<ProductSalesStat[]>(() => {
-    const map = new Map<string, { unitsSold: number; totalRevenue: number }>()
-
-    salesTransactions.forEach((tx) => {
-      const existing = map.get(tx.productId) || { unitsSold: 0, totalRevenue: 0 }
-      const revenue = (tx.price || 0) * tx.quantity
-      map.set(tx.productId, {
-        unitsSold: existing.unitsSold + tx.quantity,
-        totalRevenue: existing.totalRevenue + revenue
+  const handleLoadMoreSales = async () => {
+    if (!salesCursor || loadingMoreSales || !salesHasMore) return
+    setLoadingMoreSales(true)
+    try {
+      const res = await getTransactionsPage({
+        startDate,
+        endDate,
+        type: 'sale',
+        cursor: salesCursor,
+        limitCount: 25,
+        excludeReversed: true
       })
-    })
+      setSalesTransactions((prev) => [...prev, ...res.transactions])
+      setSalesCursor(res.nextCursor)
+      setSalesHasMore(res.hasMore)
+    } catch (err: unknown) {
+      console.error('Failed to load more sales transactions:', err)
+      const msg = err instanceof Error ? err.message : 'Failed to load more sales transactions'
+      toast.error(msg)
+    } finally {
+      setLoadingMoreSales(false)
+    }
+  }
 
-    // Map through products (or include products that have sales)
-    const stats: ProductSalesStat[] = []
+  // -------------------------------------------------------------
+  // TOP SELLING PRODUCTS COMPUTATION (from server-aggregated stats)
+  // -------------------------------------------------------------
+  const topSellingList = useMemo<ProductSalesStat[]>(() => {
+    if (!stats?.productSalesStats) return []
+
     const productLookup = new Map<string, Product>()
     products.forEach((p) => productLookup.set(p.id, p))
 
-    map.forEach((value, prodId) => {
+    const list: ProductSalesStat[] = []
+
+    Object.entries(stats.productSalesStats).forEach(([prodId, stat]) => {
+      if (stat.unitsSold <= 0 && stat.totalRevenue <= 0) return
+
       const prod = productLookup.get(prodId)
       if (prod) {
-        stats.push({
+        if (selectedCategory !== 'All' && prod.category !== selectedCategory) return
+        if (selectedMetal !== 'All' && prod.metal !== selectedMetal) return
+
+        list.push({
           productId: prod.id,
           productName: prod.name,
           category: prod.category,
@@ -162,52 +159,53 @@ export default function AdminReportsPage() {
           metal: prod.metal || 'Silver',
           weight: prod.weight || 0,
           purity: prod.purity || '—',
-          unitsSold: value.unitsSold,
-          totalRevenue: value.totalRevenue,
-          averagePrice: value.unitsSold > 0 ? Math.round(value.totalRevenue / value.unitsSold) : 0,
+          unitsSold: stat.unitsSold,
+          totalRevenue: stat.totalRevenue,
+          averagePrice: stat.unitsSold > 0 ? Math.round(stat.totalRevenue / stat.unitsSold) : 0,
           currentStock: prod.stock || 0
         })
       } else {
-        // Fallback for archived / deleted products
-        const sampleTx = salesTransactions.find((t) => t.productId === prodId)
-        stats.push({
+        if (selectedCategory !== 'All' || selectedMetal !== 'All') return
+        list.push({
           productId: prodId,
-          productName: sampleTx?.productName || 'Unknown Product',
-          category: (sampleTx?.category === 'MMTC PAMP' ? 'Bullions' : sampleTx?.category || 'Bullions') as ProductCategory,
-          brand: sampleTx?.brand || (sampleTx?.category === 'MMTC PAMP' ? 'MMTC PAMP' : 'Local'),
-          metal: sampleTx?.metal || 'Silver',
+          productName: `Product (${prodId.slice(0, 8)})`,
+          category: 'Bullions',
+          brand: 'Local',
+          metal: 'Silver',
           weight: 0,
           purity: '—',
-          unitsSold: value.unitsSold,
-          totalRevenue: value.totalRevenue,
-          averagePrice: value.unitsSold > 0 ? Math.round(value.totalRevenue / value.unitsSold) : 0,
+          unitsSold: stat.unitsSold,
+          totalRevenue: stat.totalRevenue,
+          averagePrice: stat.unitsSold > 0 ? Math.round(stat.totalRevenue / stat.unitsSold) : 0,
           currentStock: 0
         })
       }
     })
 
-    return stats.sort((a, b) => {
+    return list.sort((a, b) => {
       if (topSort === 'volume_desc') return b.unitsSold - a.unitsSold
       if (topSort === 'revenue_desc') return b.totalRevenue - a.totalRevenue
       if (topSort === 'stock_desc') return b.currentStock - a.currentStock
       return 0
     })
-  }, [salesTransactions, products, topSort])
+  }, [stats, products, selectedCategory, selectedMetal, topSort])
 
   const topSellingOverview = useMemo<{
     totalUnits: number
     totalRevenue: number
+    salesCount: number
     topProductByVolume: ProductSalesStat | null
     topProductByRevenue: ProductSalesStat | null
   }>(() => {
-    let totalUnits = 0
-    let totalRevenue = 0
     let topProductByVolume: ProductSalesStat | null = null
     let topProductByRevenue: ProductSalesStat | null = null
 
+    let filteredUnits = 0
+    let filteredRevenue = 0
+
     topSellingList.forEach((item) => {
-      totalUnits += item.unitsSold
-      totalRevenue += item.totalRevenue
+      filteredUnits += item.unitsSold
+      filteredRevenue += item.totalRevenue
       if (!topProductByVolume || item.unitsSold > topProductByVolume.unitsSold) {
         topProductByVolume = item
       }
@@ -216,13 +214,19 @@ export default function AdminReportsPage() {
       }
     })
 
+    const isFiltered = selectedCategory !== 'All' || selectedMetal !== 'All'
     return {
-      totalUnits,
-      totalRevenue,
+      totalUnits: isFiltered ? filteredUnits : (stats?.salesUnits ?? 0),
+      totalRevenue: isFiltered ? filteredRevenue : (stats?.salesRevenue ?? 0),
+      salesCount: isFiltered ? topSellingList.length : (stats?.salesCount ?? 0),
       topProductByVolume,
       topProductByRevenue
     }
-  }, [topSellingList])
+  }, [topSellingList, stats, selectedCategory, selectedMetal])
+
+  const displayedLeaderboard = useMemo(() => {
+    return topSellingList.slice(0, visibleLeaderboardCount)
+  }, [topSellingList, visibleLeaderboardCount])
 
   const maxUnitsSold = useMemo(() => {
     if (topSellingList.length === 0) return 1
@@ -510,7 +514,7 @@ export default function AdminReportsPage() {
                 {topSellingOverview.totalUnits.toLocaleString('en-IN')}
               </div>
               <span className="text-xs text-gray-500 mt-1 block">
-                Across {salesTransactions.length} recorded sales
+                Across {topSellingOverview.salesCount.toLocaleString('en-IN')} recorded sales
               </span>
             </div>
 
@@ -577,7 +581,11 @@ export default function AdminReportsPage() {
                 ].map((t) => (
                   <button
                     key={t.id}
-                    onClick={() => setDateRange(t.id as DateRange)}
+                    onClick={() => {
+                      setLoading(true)
+                      setDateRange(t.id as DateRange)
+                      setVisibleLeaderboardCount(15)
+                    }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                       dateRange === t.id
                         ? 'bg-black text-white border border-black shadow-xs'
@@ -593,7 +601,10 @@ export default function AdminReportsPage() {
               <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4 overflow-x-auto">
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Category:</span>
                 <button
-                  onClick={() => setSelectedCategory('All')}
+                  onClick={() => {
+                    setSelectedCategory('All')
+                    setVisibleLeaderboardCount(15)
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                     selectedCategory === 'All'
                       ? 'bg-black text-white border border-black shadow-xs'
@@ -605,7 +616,10 @@ export default function AdminReportsPage() {
                 {CATEGORIES.map((c) => (
                   <button
                     key={c}
-                    onClick={() => setSelectedCategory(c)}
+                    onClick={() => {
+                      setSelectedCategory(c)
+                      setVisibleLeaderboardCount(15)
+                    }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                       selectedCategory === c
                         ? 'bg-black text-white border border-black shadow-xs'
@@ -621,7 +635,10 @@ export default function AdminReportsPage() {
               <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4">
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Metal:</span>
                 <button
-                  onClick={() => setSelectedMetal('All')}
+                  onClick={() => {
+                    setSelectedMetal('All')
+                    setVisibleLeaderboardCount(15)
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                     selectedMetal === 'All'
                       ? 'bg-black text-white border border-black shadow-xs'
@@ -633,7 +650,10 @@ export default function AdminReportsPage() {
                 {METALS.map((m) => (
                   <button
                     key={m}
-                    onClick={() => setSelectedMetal(m)}
+                    onClick={() => {
+                      setSelectedMetal(m)
+                      setVisibleLeaderboardCount(15)
+                    }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                       selectedMetal === m
                         ? 'bg-black text-white border border-black shadow-xs'
@@ -650,7 +670,10 @@ export default function AdminReportsPage() {
             <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4">
               <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Rank By:</span>
               <button
-                onClick={() => setTopSort('volume_desc')}
+                onClick={() => {
+                  setTopSort('volume_desc')
+                  setVisibleLeaderboardCount(15)
+                }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                   topSort === 'volume_desc'
                     ? 'bg-black text-white border border-black shadow-xs'
@@ -660,7 +683,10 @@ export default function AdminReportsPage() {
                 Volume (Units)
               </button>
               <button
-                onClick={() => setTopSort('revenue_desc')}
+                onClick={() => {
+                  setTopSort('revenue_desc')
+                  setVisibleLeaderboardCount(15)
+                }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
                   topSort === 'revenue_desc'
                     ? 'bg-black text-white border border-black shadow-xs'
@@ -672,115 +698,251 @@ export default function AdminReportsPage() {
             </div>
           </div>
 
-          {/* Leaderboard Table */}
-          {topSellingList.length === 0 ? (
-            <EmptyState
-              title="No sales found for the selected period"
-              description="Adjust the time filter or record customer sales in the Sales section to populate the sales leaderboard."
-            />
-          ) : (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-black tracking-tight">Sales Leaderboard</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Ranked products based on total sales volume and revenue generation.
-                  </p>
-                </div>
-                <span className="text-xs text-gray-400 font-mono">
-                  {topSellingList.length} top performing items
-                </span>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200 text-xs uppercase font-semibold text-gray-500 tracking-wider">
-                    <tr>
-                      <th className="px-6 py-3.5 w-16 text-center">Rank</th>
-                      <th className="px-6 py-3.5">Product</th>
-                      <th className="px-6 py-3.5">Category</th>
-                      <th className="px-6 py-3.5">Metal</th>
-                      <th className="px-6 py-3.5">Weight / Purity</th>
-                      <th className="px-6 py-3.5 text-right">Units Sold</th>
-                      <th className="px-6 py-3.5 w-44">Sales Share</th>
-                      <th className="px-6 py-3.5 text-right">Total Revenue (₹)</th>
-                      <th className="px-6 py-3.5 text-right">Avg Unit Price</th>
-                      <th className="px-6 py-3.5 text-right">Remaining Stock</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {topSellingList.map((item, idx) => {
-                      const sharePercent = Math.min(100, Math.round((item.unitsSold / maxUnitsSold) * 100))
-                      return (
-                        <tr key={item.productId} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
-                          <td className="px-6 py-4 text-center">
-                            <span
-                              className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                                idx === 0
-                                  ? 'bg-black text-white'
-                                  : idx === 1
-                                  ? 'bg-gray-200 text-black'
-                                  : idx === 2
-                                  ? 'bg-gray-100 text-gray-700'
-                                  : 'text-gray-400'
-                              }`}
-                            >
-                              {idx + 1}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 font-semibold text-black">
-                            {item.productName}
-                          </td>
-                          <td className="px-6 py-4 text-xs text-gray-600">
-                            {item.category}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
-                              {item.metal}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-xs text-gray-600">
-                            {item.weight > 0 ? `${item.weight}g` : <span className="text-gray-400 italic">Variable</span>}
-                            {item.purity && item.purity !== '—' ? ` · ${item.purity}` : ''}
-                          </td>
-                          <td className="px-6 py-4 text-right tabular-nums font-bold text-black text-base">
-                            {item.unitsSold}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                              <div
-                                className="bg-black h-2 rounded-full origin-left transition-transform duration-300 ease-[var(--ease-out)] w-full"
-                                style={{ transform: `scaleX(${sharePercent / 100})` }}
-                              />
-                            </div>
-                            <span className="text-[10px] text-gray-400 mt-1 block">
-                              {sharePercent}% of top item
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right tabular-nums font-bold text-black">
-                            ₹{item.totalRevenue.toLocaleString('en-IN')}
-                          </td>
-                          <td className="px-6 py-4 text-right tabular-nums text-gray-600">
-                            ₹{item.averagePrice.toLocaleString('en-IN')}
-                          </td>
-                          <td className="px-6 py-4 text-right tabular-nums">
-                            <span
-                              className={`font-semibold ${
-                                item.currentStock === 0
-                                  ? 'text-gray-400'
-                                  : 'text-black'
-                              }`}
-                            >
-                              {item.currentStock} in stock
-                            </span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+          {/* Sub-View Selector between Product Leaderboard and Sales Transactions */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="inline-flex items-center p-1 bg-gray-100 rounded-lg border border-gray-200/60">
+              <button
+                onClick={() => setSalesSubView('leaderboard')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
+                  salesSubView === 'leaderboard'
+                    ? 'bg-white text-black shadow-xs font-bold'
+                    : 'text-gray-600 hover:text-black'
+                }`}
+              >
+                Product Leaderboard ({topSellingList.length})
+              </button>
+              <button
+                onClick={() => setSalesSubView('transactions')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
+                  salesSubView === 'transactions'
+                    ? 'bg-white text-black shadow-xs font-bold'
+                    : 'text-gray-600 hover:text-black'
+                }`}
+              >
+                Sales Transactions Log ({salesTransactions.length}{salesHasMore ? '+' : ''})
+              </button>
             </div>
+          </div>
+
+          {salesSubView === 'leaderboard' ? (
+            /* Leaderboard Table with Load More */
+            topSellingList.length === 0 ? (
+              <EmptyState
+                title="No sales found for the selected period"
+                description="Adjust the time filter or record customer sales in the Sales section to populate the sales leaderboard."
+              />
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-black tracking-tight">Sales Leaderboard</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Ranked products based on total sales volume and revenue generation.
+                    </p>
+                  </div>
+                  <span className="text-xs text-gray-400 font-mono">
+                    {topSellingList.length} top performing items
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200 text-xs uppercase font-semibold text-gray-500 tracking-wider">
+                      <tr>
+                        <th className="px-6 py-3.5 w-16 text-center">Rank</th>
+                        <th className="px-6 py-3.5">Product</th>
+                        <th className="px-6 py-3.5">Category</th>
+                        <th className="px-6 py-3.5">Metal</th>
+                        <th className="px-6 py-3.5">Weight / Purity</th>
+                        <th className="px-6 py-3.5 text-right">Units Sold</th>
+                        <th className="px-6 py-3.5 w-44">Sales Share</th>
+                        <th className="px-6 py-3.5 text-right">Total Revenue (₹)</th>
+                        <th className="px-6 py-3.5 text-right">Avg Unit Price</th>
+                        <th className="px-6 py-3.5 text-right">Remaining Stock</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {displayedLeaderboard.map((item, idx) => {
+                        const sharePercent = Math.min(100, Math.round((item.unitsSold / maxUnitsSold) * 100))
+                        return (
+                          <tr key={item.productId} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
+                            <td className="px-6 py-4 text-center">
+                              <span
+                                className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                                  idx === 0
+                                    ? 'bg-black text-white'
+                                    : idx === 1
+                                    ? 'bg-gray-200 text-black'
+                                    : idx === 2
+                                    ? 'bg-gray-100 text-gray-700'
+                                    : 'text-gray-400'
+                                }`}
+                              >
+                                {idx + 1}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 font-semibold text-black">
+                              {item.productName}
+                            </td>
+                            <td className="px-6 py-4 text-xs text-gray-600">
+                              {item.category}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
+                                {item.metal}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-xs text-gray-600">
+                              {item.weight > 0 ? `${item.weight}g` : <span className="text-gray-400 italic">Variable</span>}
+                              {item.purity && item.purity !== '—' ? ` · ${item.purity}` : ''}
+                            </td>
+                            <td className="px-6 py-4 text-right tabular-nums font-bold text-black text-base">
+                              {item.unitsSold}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                                <div
+                                  className="bg-black h-2 rounded-full origin-left transition-transform duration-300 ease-[var(--ease-out)] w-full"
+                                  style={{ transform: `scaleX(${sharePercent / 100})` }}
+                                />
+                              </div>
+                              <span className="text-[10px] text-gray-400 mt-1 block">
+                                {sharePercent}% of top item
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right tabular-nums font-bold text-black">
+                              ₹{item.totalRevenue.toLocaleString('en-IN')}
+                            </td>
+                            <td className="px-6 py-4 text-right tabular-nums text-gray-600">
+                              ₹{item.averagePrice.toLocaleString('en-IN')}
+                            </td>
+                            <td className="px-6 py-4 text-right tabular-nums">
+                              <span
+                                className={`font-semibold ${
+                                  item.currentStock === 0
+                                    ? 'text-gray-400'
+                                    : 'text-black'
+                                }`}
+                              >
+                                {item.currentStock} in stock
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {topSellingList.length > visibleLeaderboardCount && (
+                  <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
+                    <span className="text-xs text-gray-500">
+                      Showing <strong className="text-black font-semibold">{displayedLeaderboard.length}</strong> of{' '}
+                      <strong className="text-black font-semibold">{topSellingList.length}</strong> ranked products
+                    </span>
+                    <button
+                      onClick={() => setVisibleLeaderboardCount((prev) => Math.min(prev + 15, topSellingList.length))}
+                      className="px-4 py-2 bg-white border border-gray-200 hover:border-black text-black rounded-lg text-xs font-semibold shadow-xs transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
+                    >
+                      Load More Products
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          ) : (
+            /* Sales Transactions Log with Cursor Load More */
+            salesTransactions.length === 0 ? (
+              <EmptyState
+                title="No sales transactions found"
+                description="There are no individual sales records in this date range."
+              />
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-black tracking-tight">Sales Activity Log</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Individual customer sale records paginated from the server (excluding reversed entries).
+                    </p>
+                  </div>
+                  <span className="text-xs text-gray-400 font-mono">
+                    {salesTransactions.filter((tx) => !tx.isReversed && !tx.isReversal && !tx.reversalOf).length} sales loaded
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200 text-xs uppercase font-semibold text-gray-500 tracking-wider">
+                      <tr>
+                        <th className="px-6 py-3.5">Date</th>
+                        <th className="px-6 py-3.5">Product</th>
+                        <th className="px-6 py-3.5">Customer</th>
+                        <th className="px-6 py-3.5">Location</th>
+                        <th className="px-6 py-3.5 text-right">Qty</th>
+                        <th className="px-6 py-3.5 text-right">Price (₹)</th>
+                        <th className="px-6 py-3.5 text-right font-bold text-black">Total (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {salesTransactions
+                        .filter((tx) => !tx.isReversed && !tx.isReversal && !tx.reversalOf)
+                        .map((tx) => {
+                          const loc = locations.find((l) => l.id === tx.locationId)
+                          const total = (tx.price || 0) * tx.quantity
+                          return (
+                            <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
+                              <td className="px-6 py-3.5 font-mono text-xs text-gray-600 whitespace-nowrap">
+                                {tx.date}
+                              </td>
+                              <td className="px-6 py-3.5 font-semibold text-black">
+                                {tx.productName}
+                                <span className="block text-[11px] font-normal text-gray-400">
+                                  {tx.metal} · {tx.category}
+                                </span>
+                              </td>
+                              <td className="px-6 py-3.5 text-xs text-gray-700">
+                                {tx.customerName || <span className="text-gray-300 italic">Walk-in</span>}
+                              </td>
+                              <td className="px-6 py-3.5 text-xs text-gray-600">
+                                {loc?.name || '—'}
+                              </td>
+                              <td className="px-6 py-3.5 text-right tabular-nums font-semibold text-black">
+                                {tx.quantity}
+                              </td>
+                              <td className="px-6 py-3.5 text-right tabular-nums text-gray-600 text-xs">
+                                {typeof tx.price === 'number' ? `₹${tx.price.toLocaleString('en-IN')}` : '—'}
+                              </td>
+                              <td className="px-6 py-3.5 text-right tabular-nums font-bold text-black">
+                                ₹{total.toLocaleString('en-IN')}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {salesHasMore ? (
+                  <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
+                    <span className="text-xs text-gray-500">
+                      Showing <strong className="text-black font-semibold">{salesTransactions.filter((tx) => !tx.isReversed && !tx.isReversal && !tx.reversalOf).length}</strong> sales transactions
+                    </span>
+                    <button
+                      onClick={handleLoadMoreSales}
+                      disabled={loadingMoreSales}
+                      className="px-4 py-2 bg-white border border-gray-200 hover:border-black text-black rounded-lg text-xs font-semibold shadow-xs transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50"
+                    >
+                      {loadingMoreSales ? 'Loading More...' : 'Load More Sales'}
+                    </button>
+                  </div>
+                ) : salesTransactions.filter((tx) => !tx.isReversed && !tx.isReversal && !tx.reversalOf).length > 0 ? (
+                  <div className="p-3 text-center border-t border-gray-100 text-xs text-gray-400 bg-gray-50/30">
+                    All {salesTransactions.filter((tx) => !tx.isReversed && !tx.isReversal && !tx.reversalOf).length} sales in this date range loaded
+                  </div>
+                ) : null}
+              </div>
+            )
           )}
         </div>
       ) : (

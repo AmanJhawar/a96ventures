@@ -3,21 +3,9 @@ import { auth } from '@/lib/firebase/auth';
 import {
   getFirestore,
   collection,
-  getDocs,
-  getDoc,
-  doc,
-  addDoc,
-  setDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  limit,
-  startAfter,
-  serverTimestamp,
-  QueryConstraint
+  getDocs
 } from 'firebase/firestore/lite';
-import { Location, Product, Transaction, TransactionType, ProductCategory, MetalType } from '@/lib/types';
+import { Location, Product, Transaction, TransactionType, ProductCategory, MetalType, TransactionStats } from '@/lib/types';
 
 const db = getFirestore(app);
 
@@ -39,23 +27,15 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 // ==========================================
 
 export async function getLocations(): Promise<Location[]> {
-  try {
-    const headers = await getAuthHeaders();
-    const res = await fetch('/api/admin/locations', { method: 'GET', headers });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.locations)) return data.locations;
-    }
-  } catch {
-    // Fall back to client query if offline or pre-auth
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/locations', { method: 'GET', headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to fetch locations (${res.status})`);
   }
-
-  const querySnapshot = await getDocs(collection(db, 'locations'));
-  const items: Location[] = [];
-  querySnapshot.forEach((docSnap: { data: () => Record<string, unknown>; id: string }) => {
-    items.push({ ...docSnap.data(), id: docSnap.id } as Location);
-  });
-  return items.sort((a, b) => a.name.localeCompare(b.name));
+  const data = await res.json();
+  if (Array.isArray(data.locations)) return data.locations;
+  return [];
 }
 
 export async function addLocation(data: { name: string; description?: string }): Promise<string> {
@@ -272,8 +252,11 @@ export interface TransactionFilterOptions {
   startDate?: string; // YYYY-MM-DD
   endDate?: string;   // YYYY-MM-DD
   type?: TransactionType | 'All';
+  productId?: string;
   limitCount?: number;
   cursorDocId?: string | null;
+  cursor?: string | null;
+  excludeReversed?: boolean;
 }
 
 export interface PaginatedTransactions {
@@ -282,68 +265,67 @@ export interface PaginatedTransactions {
   hasMore: boolean;
 }
 
-export async function getTransactionsPage(options: TransactionFilterOptions = {}): Promise<PaginatedTransactions> {
-  const constraints: QueryConstraint[] = [];
+export async function getTransactionStats(options?: {
+  startDate?: string;
+  endDate?: string;
+  locationId?: string;
+}): Promise<TransactionStats> {
+  const params = new URLSearchParams();
+  if (options?.startDate) params.set('startDate', options.startDate);
+  if (options?.endDate) params.set('endDate', options.endDate);
+  if (options?.locationId) params.set('locationId', options.locationId);
 
-  if (options.startDate && options.endDate) {
-    constraints.push(where('date', '>=', options.startDate));
-    constraints.push(where('date', '<=', options.endDate));
-    constraints.push(orderBy('date', 'desc'));
-  } else if (options.startDate) {
-    constraints.push(where('date', '>=', options.startDate));
-    constraints.push(orderBy('date', 'desc'));
-  } else if (options.endDate) {
-    constraints.push(where('date', '<=', options.endDate));
-    constraints.push(orderBy('date', 'desc'));
-  } else {
-    constraints.push(orderBy('date', 'desc'));
-  }
-
-  if (options.cursorDocId) {
-    const cursorDoc = await getDoc(doc(db, 'transactions', options.cursorDocId));
-    if (cursorDoc.exists()) {
-      constraints.push(startAfter(cursorDoc));
-    }
-  }
-
-  const pageSize = options.limitCount || 30;
-  constraints.push(limit(pageSize));
-
-  const q = query(collection(db, 'transactions'), ...constraints);
-  const querySnapshot = await getDocs(q);
-
-  let items: Transaction[] = [];
-  querySnapshot.forEach((docSnap) => {
-    const data = docSnap.data();
-    items.push({
-      ...data,
-      id: docSnap.id,
-      category: (data.category === 'Silver Idols' ? 'Idols' : data.category) as ProductCategory,
-      previousWeight: data.previousWeightMg !== undefined ? Number(data.previousWeightMg) / 1000 : (data.previousWeight !== undefined ? Number(data.previousWeight) : undefined),
-      newWeight: data.newWeightMg !== undefined ? Number(data.newWeightMg) / 1000 : (data.newWeight !== undefined ? Number(data.newWeight) : undefined),
-      weightChange: data.weightChangeMg !== undefined ? Number(data.weightChangeMg) / 1000 : (data.weightChange !== undefined ? Number(data.weightChange) : undefined),
-      recoveredWeight: data.recoveredWeightMg !== undefined ? Number(data.recoveredWeightMg) / 1000 : (data.recoveredWeight !== undefined ? Number(data.recoveredWeight) : undefined),
-      pieceWeight: data.pieceWeightMg !== undefined ? Number(data.pieceWeightMg) / 1000 : (data.pieceWeight !== undefined ? Number(data.pieceWeight) : undefined),
-      pieceWeights: Array.isArray(data.pieceWeightsMg)
-        ? data.pieceWeightsMg.map((mg: number) => Number(mg) / 1000)
-        : Array.isArray(data.pieceWeights)
-          ? data.pieceWeights.map((w: number) => Number(w))
-          : undefined,
-    } as Transaction);
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/admin/transactions/stats?${params.toString()}`, {
+    method: 'GET',
+    headers
   });
 
-  if (options.type && options.type !== 'All') {
-    items = items.filter((t) => t.type === options.type);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to fetch transaction stats (${res.status})`);
   }
 
-  const nextCursor = querySnapshot.docs.length === pageSize ? querySnapshot.docs[querySnapshot.docs.length - 1].id : null;
-  const hasMore = querySnapshot.docs.length === pageSize;
+  const resData = await res.json();
+  return resData.stats as TransactionStats;
+}
 
-  return { transactions: items, nextCursor, hasMore };
+export async function getTransactionsPage(options: TransactionFilterOptions = {}): Promise<PaginatedTransactions> {
+  const effectiveCursor = options.cursorDocId || options.cursor;
+  const headers = await getAuthHeaders();
+  const params = new URLSearchParams();
+  if (options.startDate) params.set('startDate', options.startDate);
+  if (options.endDate) params.set('endDate', options.endDate);
+  if (options.type && options.type !== 'All') params.set('type', options.type);
+  if (options.productId) params.set('productId', options.productId);
+  if (options.limitCount) params.set('limit', String(options.limitCount));
+  if (effectiveCursor) params.set('cursor', effectiveCursor);
+  if (options.excludeReversed) params.set('excludeReversed', 'true');
+
+  const res = await fetch(`/api/admin/transactions?${params.toString()}`, {
+    method: 'GET',
+    headers
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to fetch transactions (${res.status})`);
+  }
+
+  const data = await res.json();
+  if (!Array.isArray(data.transactions)) {
+    throw new Error('Invalid transactions response format');
+  }
+
+  return {
+    transactions: data.transactions as Transaction[],
+    nextCursor: data.nextCursor || null,
+    hasMore: Boolean(data.hasMore)
+  };
 }
 
 export async function getTransactions(options?: TransactionFilterOptions): Promise<Transaction[]> {
-  const res = await getTransactionsPage({ limitCount: options?.limitCount || 100, ...options });
+  const res = await getTransactionsPage({ limitCount: options?.limitCount || 50, ...options });
   return res.transactions;
 }
 
@@ -440,13 +422,68 @@ export async function reverseTransaction(tx: Transaction): Promise<{ reversingTr
 export const deleteTransaction = reverseTransaction;
 
 /**
- * Erases all transaction history and scrubs the audit trail (Master Zero-Balance) via server API.
+ * Builds the complete master archive on the server from every record up to cutoffDate.
  */
-export async function clearTransactionHistory(): Promise<{ count: number; auditCount: number }> {
+export async function fetchMasterArchive(options?: { cutoffDate?: string }): Promise<{
+  archive: Record<string, unknown>;
+  count: number;
+  auditCount: number;
+  cutoffDate?: string;
+  openingDate?: string;
+}> {
+  const headers = await getAuthHeaders();
+  const params = new URLSearchParams();
+  if (options?.cutoffDate) params.set('cutoffDate', options.cutoffDate);
+
+  const res = await fetch(`/api/admin/transactions/archive?${params.toString()}`, {
+    method: 'GET',
+    headers
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to generate master archive (${res.status})`);
+  }
+
+  const resData = await res.json();
+  return {
+    archive: resData.archive,
+    count: Number(resData.count || 0),
+    auditCount: Number(resData.auditCount || 0),
+    cutoffDate: resData.cutoffDate,
+    openingDate: resData.openingDate
+  };
+}
+
+/**
+ * Erases historical transaction records up to cutoffDate and scrubs the audit trail (Master Zero-Balance).
+ * Verifies that the expected transaction and audit counts match the database before deleting.
+ */
+export async function clearTransactionHistory(params?: {
+  expectedTransactionCount?: number;
+  expectedAuditCount?: number;
+  cutoffDate?: string;
+  confirmationPhrase?: string;
+}): Promise<{
+  count: number;
+  auditCount: number;
+  cutoffDate?: string;
+  openingDate?: string;
+  archiveId?: string;
+  checksum?: string;
+  archive?: unknown;
+}> {
   const headers = await getAuthHeaders();
   const res = await fetch('/api/admin/transactions', {
     method: 'PUT',
-    headers
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      ...params,
+      confirmationPhrase: params?.confirmationPhrase || 'CONFIRM ZERO BALANCE'
+    })
   });
 
   if (!res.ok) {
@@ -457,6 +494,11 @@ export async function clearTransactionHistory(): Promise<{ count: number; auditC
   const resData = await res.json();
   return {
     count: resData.count || 0,
-    auditCount: resData.auditCount || 0
+    auditCount: resData.auditCount || 0,
+    cutoffDate: resData.cutoffDate,
+    openingDate: resData.openingDate,
+    archiveId: resData.archiveId,
+    checksum: resData.checksum,
+    archive: resData.archive
   };
 }

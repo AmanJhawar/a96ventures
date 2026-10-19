@@ -5,7 +5,7 @@ import { collection, setDoc, deleteDoc, doc, getDocs, getFirestore } from 'fireb
 import { app } from '@/lib/firebase/config'
 const db = getFirestore(app)
 import { PortfolioCompany } from '@/lib/types'
-import { Trash2, Plus, Briefcase, Edit2, Lock } from 'lucide-react'
+import { Trash2, Plus, Edit2, Lock } from 'lucide-react'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'

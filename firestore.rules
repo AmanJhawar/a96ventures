@@ -19,11 +19,42 @@ service cloud.firestore {
         request.auth.token.get('role', '') == 'super_admin';
     }
 
-    // Granular permission check via Firebase Custom Claims
+    // Map module and action to short code (e.g. products.view -> prd:v)
+    function permCode(module, action) {
+      let m = module == 'products' ? 'prd' :
+              module == 'purchases' ? 'pur' :
+              module == 'movements' ? 'mov' :
+              module == 'sales' ? 'sal' :
+              module == 'returns' ? 'ret' :
+              module == 'inquiries' ? 'inq' :
+              module == 'locations' ? 'loc' :
+              module == 'brands' ? 'brd' :
+              module == 'team' ? 'tem' :
+              module == 'portfolio' ? 'prt' :
+              module == 'reports' ? 'rep' :
+              module == 'archive' ? 'arc' :
+              module == 'users' ? 'usr' : module;
+      let a = action == 'view' ? 'v' :
+              action == 'add' ? 'a' :
+              action == 'edit' ? 'e' :
+              action == 'delete' ? 'd' :
+              action == 'transfer' ? 't' :
+              action == 'adjustment' ? 'j' :
+              action == 'repair' ? 'r' :
+              action == 'melt' ? 'm' :
+              action == 'export' ? 'x' :
+              action == 'zeroBalance' ? 'z' :
+              action == 'uploadArchive' ? 'u' : action;
+      return m + ':' + a;
+    }
+
+    // Granular permission check via Firebase Custom Claims (checks compact short codes in 'perms')
     function hasPermission(module, action) {
       return isSuperAdmin() || (
-        isActive() &&
-        request.auth.token.get('permissions', {}).get(module, {}).get(action, false) == true
+        isActive() && (
+          (request.auth.token.get('perms', []).hasAny([permCode(module, action)])) ||
+          (request.auth.token.get('permissions', {}).get(module, {}).get(action, false) == true)
+        )
       );
     }
 
@@ -111,14 +142,15 @@ service cloud.firestore {
       allow write: if false; // Enforce server-side execution with ACID atomic transactions
     }
 
-    // Audit Logs: Create only with verified auth UID and server timestamp; never update; delete only for Zero Balance
+    // Audit Logs: Strictly server-only writes via Firebase Admin SDK. Direct client writes/deletes forbidden.
     match /audit_logs/{logId} {
-      allow read: if isAuthenticated() && (isSuperAdmin() || hasPermission('users', 'view'));
-      allow create: if isAuthenticated()
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.timestamp == request.time;
-      allow update: if false;
-      allow delete: if hasPermission('archive', 'zeroBalance');
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        hasPermission('users', 'view') ||
+        hasPermission('archive', 'zeroBalance') ||
+        hasPermission('reports', 'export')
+      );
+      allow write: if false; // All audit entries must be written exclusively by the server API
     }
 
     // Absolute default deny for any other collections or paths

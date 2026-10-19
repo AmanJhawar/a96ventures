@@ -12,15 +12,14 @@ import {
   TrendingUp,
   PackageCheck,
   Lock,
-  Calendar,
-  ChevronLeft,
-  ChevronRight
+  Calendar
 } from 'lucide-react'
-import { Product, Location, Transaction, ProductCategory, MetalType } from '@/lib/types'
+import { Product, Location, Transaction, ProductCategory, MetalType, TransactionStats } from '@/lib/types'
 import {
   getProducts,
   getLocations,
-  getTransactions,
+  getTransactionsPage,
+  getTransactionStats,
   recordTransaction,
   deleteTransaction
 } from '@/lib/services/inventory.service'
@@ -50,9 +49,26 @@ export default function AdminSales() {
   // Data state
   const [products, setProducts] = useState<Product[]>([])
   const [locations, setLocations] = useState<Location[]>([])
-  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [salesList, setSalesList] = useState<Transaction[]>([])
+  const [salesCursor, setSalesCursor] = useState<string | null>(null)
+  const [salesHasMore, setSalesHasMore] = useState(false)
+  const [loadingMoreSales, setLoadingMoreSales] = useState(false)
+
+  const [returnsList, setReturnsList] = useState<Transaction[]>([])
+  const [returnsCursor, setReturnsCursor] = useState<string | null>(null)
+  const [returnsHasMore, setReturnsHasMore] = useState(false)
+  const [loadingMoreReturns, setLoadingMoreReturns] = useState(false)
+
+  const [stats, setStats] = useState<TransactionStats>({
+    salesCount: 0,
+    salesUnits: 0,
+    salesRevenue: 0,
+    returnsCount: 0,
+    returnsUnits: 0,
+    returnsAmount: 0,
+    netRevenue: 0
+  })
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   // Sale form state
   const [isSaleFormOpen, setIsSaleFormOpen] = useState(false)
@@ -83,32 +99,10 @@ export default function AdminSales() {
   // Delete modal state
   const [deleteTxTarget, setDeleteTxTarget] = useState<Transaction | null>(null)
 
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const [prods, locs, txs] = await Promise.all([
-        getProducts(),
-        getLocations(),
-        getTransactions()
-      ])
-      setProducts(prods)
-      setLocations(locs)
-      setTransactions(txs)
-    } catch (err: unknown) {
-      console.error('Failed to load sales data', err)
-      setError('Unable to load sales data. Please check connection.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Date Range and Pagination State
+  // Date Range State
   const [dateRangePreset, setDateRangePreset] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
-  const [salesPage, setSalesPage] = useState(1)
-  const [returnsPage, setReturnsPage] = useState(1)
-  const pageSize = 15
 
   const { effectiveStartDate, effectiveEndDate } = useMemo(() => {
     if (dateRangePreset === 'today') {
@@ -127,35 +121,103 @@ export default function AdminSales() {
     return { effectiveStartDate: '', effectiveEndDate: '' }
   }, [dateRangePreset, customStartDate, customEndDate])
 
+  // Server stats & transaction pagination loader
   useEffect(() => {
     let ignore = false
+
     Promise.all([
       getProducts(),
       getLocations(),
-      getTransactions({
+      getTransactionStats({
         startDate: effectiveStartDate || undefined,
-        endDate: effectiveEndDate || undefined
+        endDate: effectiveEndDate || undefined,
+        locationId: userAssignedLocationId || undefined
+      }),
+      getTransactionsPage({
+        startDate: effectiveStartDate || undefined,
+        endDate: effectiveEndDate || undefined,
+        type: 'sale',
+        limitCount: 25
+      }),
+      getTransactionsPage({
+        startDate: effectiveStartDate || undefined,
+        endDate: effectiveEndDate || undefined,
+        type: 'return',
+        limitCount: 25
       })
     ])
-      .then(([prods, locs, txs]) => {
+      .then(([prods, locs, serverStats, salesPageRes, returnsPageRes]) => {
         if (!ignore) {
           setProducts(prods)
           setLocations(locs)
-          setTransactions(txs)
+          setStats(serverStats)
+          setSalesList(salesPageRes.transactions)
+          setSalesCursor(salesPageRes.nextCursor)
+          setSalesHasMore(salesPageRes.hasMore)
+          setReturnsList(returnsPageRes.transactions)
+          setReturnsCursor(returnsPageRes.nextCursor)
+          setReturnsHasMore(returnsPageRes.hasMore)
           setLoading(false)
         }
       })
       .catch((err: unknown) => {
         if (!ignore) {
           console.error('Failed to load sales data', err)
-          setError('Unable to load sales data. Please check connection.')
+          const msg = err instanceof Error ? err.message : 'Unable to load sales data. Please check connection.'
+          toast.error(msg)
           setLoading(false)
         }
       })
+
     return () => {
       ignore = true
     }
-  }, [effectiveStartDate, effectiveEndDate])
+  }, [effectiveStartDate, effectiveEndDate, userAssignedLocationId])
+
+  // Load More Handlers
+  const handleLoadMoreSales = async () => {
+    if (!salesCursor || loadingMoreSales) return
+    try {
+      setLoadingMoreSales(true)
+      const res = await getTransactionsPage({
+        startDate: effectiveStartDate || undefined,
+        endDate: effectiveEndDate || undefined,
+        type: 'sale',
+        limitCount: 25,
+        cursorDocId: salesCursor
+      })
+      setSalesList((prev) => [...prev, ...res.transactions])
+      setSalesCursor(res.nextCursor)
+      setSalesHasMore(res.hasMore)
+    } catch (err) {
+      console.error('Failed to load more sales', err)
+      toast.error('Failed to load more sales')
+    } finally {
+      setLoadingMoreSales(false)
+    }
+  }
+
+  const handleLoadMoreReturns = async () => {
+    if (!returnsCursor || loadingMoreReturns) return
+    try {
+      setLoadingMoreReturns(true)
+      const res = await getTransactionsPage({
+        startDate: effectiveStartDate || undefined,
+        endDate: effectiveEndDate || undefined,
+        type: 'return',
+        limitCount: 25,
+        cursorDocId: returnsCursor
+      })
+      setReturnsList((prev) => [...prev, ...res.transactions])
+      setReturnsCursor(res.nextCursor)
+      setReturnsHasMore(res.hasMore)
+    } catch (err) {
+      console.error('Failed to load more returns', err)
+      toast.error('Failed to load more returns')
+    } finally {
+      setLoadingMoreReturns(false)
+    }
+  }
 
   // Helper map for locations
   const locationMap = useMemo(() => {
@@ -165,67 +227,22 @@ export default function AdminSales() {
   }, [locations])
 
   // Filtered sales
-  const salesList = useMemo(() => {
-    return transactions.filter(
+  const filteredSales = useMemo(() => {
+    return salesList.filter(
       (tx) =>
-        tx.type === 'sale' &&
         (selectedCategory === 'All' || tx.category === selectedCategory) &&
-        (selectedMetal === 'All' || tx.metal === selectedMetal) &&
-        (!effectiveStartDate || tx.date >= effectiveStartDate) &&
-        (!effectiveEndDate || tx.date <= effectiveEndDate)
+        (selectedMetal === 'All' || tx.metal === selectedMetal)
     )
-  }, [transactions, selectedCategory, selectedMetal, effectiveStartDate, effectiveEndDate])
-
-  const paginatedSales = useMemo(() => {
-    const start = (salesPage - 1) * pageSize
-    return salesList.slice(start, start + pageSize)
-  }, [salesList, salesPage, pageSize])
-  const totalSalesPages = Math.max(1, Math.ceil(salesList.length / pageSize))
+  }, [salesList, selectedCategory, selectedMetal])
 
   // Filtered returns
-  const returnsList = useMemo(() => {
-    return transactions.filter(
+  const filteredReturns = useMemo(() => {
+    return returnsList.filter(
       (tx) =>
-        tx.type === 'return' &&
         (selectedCategory === 'All' || tx.category === selectedCategory) &&
-        (selectedMetal === 'All' || tx.metal === selectedMetal) &&
-        (!effectiveStartDate || tx.date >= effectiveStartDate) &&
-        (!effectiveEndDate || tx.date <= effectiveEndDate)
+        (selectedMetal === 'All' || tx.metal === selectedMetal)
     )
-  }, [transactions, selectedCategory, selectedMetal, effectiveStartDate, effectiveEndDate])
-
-  const paginatedReturns = useMemo(() => {
-    const start = (returnsPage - 1) * pageSize
-    return returnsList.slice(start, start + pageSize)
-  }, [returnsList, returnsPage, pageSize])
-  const totalReturnsPages = Math.max(1, Math.ceil(returnsList.length / pageSize))
-
-  // KPI Metrics
-  const metrics = useMemo(() => {
-    let totalSalesRevenue = 0
-    let totalUnitsSold = 0
-    let totalReturnsAmount = 0
-
-    salesList.forEach((s) => {
-      totalUnitsSold += Number(s.quantity || 0)
-      if (s.price) {
-        totalSalesRevenue += Number(s.price) * Number(s.quantity || 0)
-      }
-    })
-
-    returnsList.forEach((r) => {
-      if (r.price) {
-        totalReturnsAmount += Number(r.price) * Number(r.quantity || 0)
-      }
-    })
-
-    return {
-      revenue: totalSalesRevenue,
-      unitsSold: totalUnitsSold,
-      returnsAmount: totalReturnsAmount,
-      netRevenue: totalSalesRevenue - totalReturnsAmount
-    }
-  }, [salesList, returnsList])
+  }, [returnsList, selectedCategory, selectedMetal])
 
   // Selected product in sale form
   const selectedSaleProduct = useMemo(() => {
@@ -362,6 +379,12 @@ export default function AdminSales() {
       setSaleError('Quantity must be at least 1')
       return
     }
+
+    if (!salePrice || isNaN(Number(salePrice)) || Number(salePrice) <= 0) {
+      setSaleError('Selling price per unit is required and must be greater than ₹0')
+      return
+    }
+
     const stockAvailable = prod.stockByLocation?.[effectiveLocId] || 0
     if (qty > stockAvailable) {
       setSaleError(`Insufficient stock at this location. Available: ${stockAvailable}, Requested: ${qty}`)
@@ -382,7 +405,7 @@ export default function AdminSales() {
         metal: prod.metal,
         quantity: qty,
         pieceWeight: isIdol ? Number(salePieceWeight) : undefined,
-        price: salePrice ? Number(salePrice) : undefined,
+        price: Number(salePrice),
         locationId: effectiveLocId,
         locationName: locName,
         customerName: saleCustomerName,
@@ -393,7 +416,15 @@ export default function AdminSales() {
       toast.success('Sale recorded successfully')
 
       // Optimistically update local transactions & product stock without network reloads
-      setTransactions((prev) => [createdTx, ...prev])
+      setSalesList((prev) => [createdTx, ...prev])
+      const saleAmt = (Number(salePrice) || 0) * qty
+      setStats((prev) => ({
+        ...prev,
+        salesCount: prev.salesCount + 1,
+        salesUnits: prev.salesUnits + qty,
+        salesRevenue: prev.salesRevenue + saleAmt,
+        netRevenue: prev.netRevenue + saleAmt
+      }))
       setProducts((prev) =>
         prev.map((p) => {
           if (p.id !== prod.id) return p
@@ -488,7 +519,15 @@ export default function AdminSales() {
       toast.success('Return recorded and restocked successfully')
 
       // Optimistically update local transactions & product stock
-      setTransactions((prev) => [createdTx, ...prev])
+      setReturnsList((prev) => [createdTx, ...prev])
+      const retAmt = (Number(returnPrice) || 0) * qty
+      setStats((prev) => ({
+        ...prev,
+        returnsCount: prev.returnsCount + 1,
+        returnsUnits: prev.returnsUnits + qty,
+        returnsAmount: prev.returnsAmount + retAmt,
+        netRevenue: prev.netRevenue - retAmt
+      }))
       setProducts((prev) =>
         prev.map((p) => {
           if (p.id !== prod.id) return p
@@ -533,20 +572,41 @@ export default function AdminSales() {
       toast.success('Reversing entry posted successfully')
       
       const reversedId = deleteTxTarget.id
-      setTransactions((prev) => {
-        const updated = prev.map((t) => (t.id === reversedId ? { ...t, isReversed: true } : t))
-        if (res.reversingEntry) {
-          return [res.reversingEntry, ...updated]
-        }
-        return updated
-      })
+      const isTargetSale = deleteTxTarget.type === 'sale'
+      const isTargetReturn = deleteTxTarget.type === 'return'
+      const targetQty = Number(deleteTxTarget.quantity || 1)
+      const targetPrice = Number(deleteTxTarget.price || 0)
+      const targetTotal = targetPrice * targetQty
+
+      if (isTargetSale) {
+        setSalesList((prev) => {
+          const updated = prev.map((t) => (t.id === reversedId ? { ...t, isReversed: true } : t))
+          return res.reversingEntry ? [res.reversingEntry, ...updated] : updated
+        })
+        setStats((prev) => ({
+          ...prev,
+          salesCount: Math.max(0, prev.salesCount - 1),
+          salesUnits: Math.max(0, prev.salesUnits - targetQty),
+          salesRevenue: Math.max(0, prev.salesRevenue - targetTotal),
+          netRevenue: Math.max(0, prev.netRevenue - targetTotal)
+        }))
+      } else if (isTargetReturn) {
+        setReturnsList((prev) => {
+          const updated = prev.map((t) => (t.id === reversedId ? { ...t, isReversed: true } : t))
+          return res.reversingEntry ? [res.reversingEntry, ...updated] : updated
+        })
+        setStats((prev) => ({
+          ...prev,
+          returnsCount: Math.max(0, prev.returnsCount - 1),
+          returnsUnits: Math.max(0, prev.returnsUnits - targetQty),
+          returnsAmount: Math.max(0, prev.returnsAmount - targetTotal),
+          netRevenue: prev.netRevenue + targetTotal
+        }))
+      }
 
       // Reverse stock on product locally
       const targetProdId = deleteTxTarget.productId
       const targetLocId = deleteTxTarget.locationId
-      const targetQty = Number(deleteTxTarget.quantity || 1)
-      const isTargetSale = deleteTxTarget.type === 'sale'
-      const isTargetReturn = deleteTxTarget.type === 'return'
 
       setProducts((prev) =>
         prev.map((p) => {
@@ -656,9 +716,9 @@ export default function AdminSales() {
             <IndianRupee size={16} className="text-gray-400" />
           </div>
           <div className="text-2xl font-bold text-black tabular-nums">
-            ₹{metrics.revenue.toLocaleString('en-IN')}
+            ₹{stats.salesRevenue.toLocaleString('en-IN')}
           </div>
-          <div className="text-xs text-gray-400 mt-1">{salesList.length} sales recorded</div>
+          <div className="text-xs text-gray-400 mt-1">{stats.salesCount} sales recorded</div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
@@ -667,7 +727,7 @@ export default function AdminSales() {
             <PackageCheck size={16} className="text-gray-400" />
           </div>
           <div className="text-2xl font-bold text-black tabular-nums">
-            {metrics.unitsSold.toLocaleString('en-IN')}
+            {stats.salesUnits.toLocaleString('en-IN')}
           </div>
           <div className="text-xs text-gray-400 mt-1">across all locations</div>
         </div>
@@ -678,9 +738,9 @@ export default function AdminSales() {
             <RotateCcw size={16} className="text-gray-400" />
           </div>
           <div className="text-2xl font-bold text-black tabular-nums">
-            ₹{metrics.returnsAmount.toLocaleString('en-IN')}
+            ₹{stats.returnsAmount.toLocaleString('en-IN')}
           </div>
-          <div className="text-xs text-gray-400 mt-1">{returnsList.length} returns restocked</div>
+          <div className="text-xs text-gray-400 mt-1">{stats.returnsCount} returns restocked</div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
@@ -689,7 +749,7 @@ export default function AdminSales() {
             <TrendingUp size={16} className="text-gray-400" />
           </div>
           <div className="text-2xl font-bold text-black tabular-nums">
-            ₹{metrics.netRevenue.toLocaleString('en-IN')}
+            ₹{stats.netRevenue.toLocaleString('en-IN')}
           </div>
           <div className="text-xs text-gray-400 mt-1">Gross sales minus returns</div>
         </div>
@@ -710,7 +770,7 @@ export default function AdminSales() {
               }`}
           >
             <ShoppingCart size={16} />
-            Sales ({salesList.length})
+            Sales ({stats.salesCount})
           </button>
         )}
         {(isSuperAdmin || hasPermission('returns', 'view')) && (
@@ -726,7 +786,7 @@ export default function AdminSales() {
               }`}
           >
             <RotateCcw size={16} />
-            Returns & Restock ({returnsList.length})
+            Returns & Restock ({stats.returnsCount})
           </button>
         )}
       </div>
@@ -748,9 +808,8 @@ export default function AdminSales() {
             <button
               key={preset.id}
               onClick={() => {
+                setLoading(true)
                 setDateRangePreset(preset.id)
-                setSalesPage(1)
-                setReturnsPage(1)
               }}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${dateRangePreset === preset.id
                 ? 'bg-black text-white border border-black shadow-xs'
@@ -768,9 +827,8 @@ export default function AdminSales() {
               <CustomDatePicker
                 value={customStartDate}
                 onChange={(d) => {
+                  setLoading(true)
                   setCustomStartDate(d)
-                  setSalesPage(1)
-                  setReturnsPage(1)
                 }}
                 placeholder="Start Date"
               />
@@ -780,9 +838,8 @@ export default function AdminSales() {
               <CustomDatePicker
                 value={customEndDate}
                 onChange={(d) => {
+                  setLoading(true)
                   setCustomEndDate(d)
-                  setSalesPage(1)
-                  setReturnsPage(1)
                 }}
                 placeholder="End Date"
               />
@@ -981,16 +1038,17 @@ export default function AdminSales() {
 
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Selling Price per Unit (₹)
+                    Selling Price per Unit (₹) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
-                    min="0"
+                    min="0.01"
                     step="0.01"
                     placeholder="e.g. 78500"
                     value={salePrice}
                     onChange={(e) => setSalePrice(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    required
                   />
                 </div>
 
@@ -1251,7 +1309,7 @@ export default function AdminSales() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
         </div>
       ) : activeTab === 'sales' ? (
-        salesList.length === 0 ? (
+        filteredSales.length === 0 ? (
           <EmptyState
             title="No sales recorded"
             description="When you record a customer sale, stock is automatically decremented from the chosen physical location."
@@ -1288,7 +1346,7 @@ export default function AdminSales() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {paginatedSales.map((tx) => {
+                  {filteredSales.map((tx) => {
                     const totalVal = tx.price ? tx.price * tx.quantity : 0
                     return (
                       <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
@@ -1357,50 +1415,38 @@ export default function AdminSales() {
               </table>
             </div>
 
-            {/* Pagination Controls */}
-            {salesList.length > pageSize && (
-              <div className="px-6 py-3.5 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-                <span>
-                  Showing{' '}
-                  <strong className="text-black font-semibold">
-                    {(salesPage - 1) * pageSize + 1}
-                  </strong>{' '}
-                  to{' '}
-                  <strong className="text-black font-semibold">
-                    {Math.min(salesPage * pageSize, salesList.length)}
-                  </strong>{' '}
-                  of{' '}
-                  <strong className="text-black font-semibold">
-                    {salesList.length}
-                  </strong>{' '}
-                  sales
+            {/* Load More Controls */}
+            <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
+              <span className="font-mono">
+                Showing <strong className="text-black font-semibold">{filteredSales.length}</strong> of{' '}
+                <strong className="text-black font-semibold">{stats.salesCount}</strong> recorded sales
+              </span>
+              {salesHasMore ? (
+                <button
+                  onClick={handleLoadMoreSales}
+                  disabled={loadingMoreSales}
+                  className="h-9 px-4 inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-800 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold shadow-xs transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50"
+                >
+                  {loadingMoreSales ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      Loading more...
+                    </>
+                  ) : (
+                    'Load More Sales'
+                  )}
+                </button>
+              ) : (
+                <span className="text-[11px] text-gray-400 font-mono">
+                  {filteredSales.length > 0 ? 'All sales loaded' : ''}
                 </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setSalesPage((p) => Math.max(1, p - 1))}
-                    disabled={salesPage <= 1}
-                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span className="font-medium text-black">
-                    Page {salesPage} of {totalSalesPages}
-                  </span>
-                  <button
-                    onClick={() => setSalesPage((p) => Math.min(totalSalesPages, p + 1))}
-                    disabled={salesPage >= totalSalesPages}
-                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )
       ) : (
         /* Returns Tab */
-        returnsList.length === 0 ? (
+        filteredReturns.length === 0 ? (
           <EmptyState
             title="No returns recorded"
             description="Returns restore items back into stock at your chosen location and track customer refund amounts."
@@ -1437,7 +1483,7 @@ export default function AdminSales() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {paginatedReturns.map((tx) => {
+                  {filteredReturns.map((tx) => {
                     const totalVal = tx.price ? tx.price * tx.quantity : 0
                     return (
                       <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
@@ -1506,45 +1552,33 @@ export default function AdminSales() {
               </table>
             </div>
 
-            {/* Pagination Controls */}
-            {returnsList.length > pageSize && (
-              <div className="px-6 py-3.5 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-                <span>
-                  Showing{' '}
-                  <strong className="text-black font-semibold">
-                    {(returnsPage - 1) * pageSize + 1}
-                  </strong>{' '}
-                  to{' '}
-                  <strong className="text-black font-semibold">
-                    {Math.min(returnsPage * pageSize, returnsList.length)}
-                  </strong>{' '}
-                  of{' '}
-                  <strong className="text-black font-semibold">
-                    {returnsList.length}
-                  </strong>{' '}
-                  returns
+            {/* Load More Controls */}
+            <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
+              <span className="font-mono">
+                Showing <strong className="text-black font-semibold">{filteredReturns.length}</strong> of{' '}
+                <strong className="text-black font-semibold">{stats.returnsCount}</strong> recorded returns
+              </span>
+              {returnsHasMore ? (
+                <button
+                  onClick={handleLoadMoreReturns}
+                  disabled={loadingMoreReturns}
+                  className="h-9 px-4 inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-800 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold shadow-xs transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50"
+                >
+                  {loadingMoreReturns ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      Loading more...
+                    </>
+                  ) : (
+                    'Load More Returns'
+                  )}
+                </button>
+              ) : (
+                <span className="text-[11px] text-gray-400 font-mono">
+                  {filteredReturns.length > 0 ? 'All returns loaded' : ''}
                 </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setReturnsPage((p) => Math.max(1, p - 1))}
-                    disabled={returnsPage <= 1}
-                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span className="font-medium text-black">
-                    Page {returnsPage} of {totalReturnsPages}
-                  </span>
-                  <button
-                    onClick={() => setReturnsPage((p) => Math.min(totalReturnsPages, p + 1))}
-                    disabled={returnsPage >= totalReturnsPages}
-                    className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-black hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97]"
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )
       )}

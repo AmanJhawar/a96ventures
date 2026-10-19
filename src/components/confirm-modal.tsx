@@ -11,6 +11,8 @@ interface ConfirmModalProps {
   description?: string
   confirmText?: string
   cancelText?: string
+  disabled?: boolean
+  children?: React.ReactNode
   onConfirm: () => void
   onClose: () => void
 }
@@ -21,6 +23,8 @@ export function ConfirmModal({
   description,
   confirmText = "Confirm",
   cancelText = "Cancel",
+  disabled = false,
+  children,
   onConfirm,
   onClose
 }: ConfirmModalProps) {
@@ -123,30 +127,39 @@ export function ConfirmModal({
                 <h2 id="confirm-modal-title" className="text-xl font-bold text-black tracking-tight">{title}</h2>
                 <button 
                   onClick={onClose}
-                  className="p-2 -mr-2 text-gray-400 hover:text-black transition-[color,background-color,transform] duration-150 rounded-lg hover:bg-gray-100 active:scale-[0.97]"
+                  disabled={disabled}
+                  className="p-2 -mr-2 text-gray-400 hover:text-black transition-[color,background-color,transform] duration-150 rounded-lg hover:bg-gray-100 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <X size={20} />
                 </button>
               </div>
               
               {description && (
-                <p className="text-gray-500 mb-8 leading-relaxed">
+                <p className="text-gray-500 mb-6 leading-relaxed">
                   {description}
                 </p>
+              )}
+
+              {children && (
+                <div className="mb-6">
+                  {children}
+                </div>
               )}
 
               <div className="flex flex-col-reverse sm:flex-row items-center sm:justify-end gap-3 mt-6">
                 <button
                   type="button"
+                  disabled={disabled}
                   onClick={() => onClose()}
-                  className="h-10 px-5 w-full sm:w-auto inline-flex items-center justify-center text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-black transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97]"
+                  className="h-10 px-5 w-full sm:w-auto inline-flex items-center justify-center text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-black transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none cursor-pointer disabled:cursor-not-allowed"
                 >
                   {cancelText}
                 </button>
                 <button
                   type="button"
+                  disabled={disabled}
                   onClick={() => onConfirm()}
-                  className="h-10 px-5 w-full sm:w-auto inline-flex items-center justify-center text-xs font-semibold text-white bg-black rounded-lg border border-black hover:bg-gray-800 shadow-xs transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                  className="h-10 px-5 w-full sm:w-auto inline-flex items-center justify-center text-xs font-semibold text-white bg-black rounded-lg border border-black hover:bg-gray-800 shadow-xs transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none cursor-pointer disabled:cursor-not-allowed"
                 >
                   {confirmText}
                 </button>

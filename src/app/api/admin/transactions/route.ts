@@ -2,9 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getAuthenticatedCaller, hasModulePermission } from '@/lib/firebase/server-auth'
-import { Product, TransactionType, ProductCategory, MetalType } from '@/lib/types'
+import { Product, Transaction, TransactionType } from '@/lib/types'
 import { gramsToMg, mgToGrams } from '@/lib/utils/weight'
-import { getTodayIST } from '@/lib/utils/date'
+import { getTodayIST, getNextDayIST, getDefaultFiscalCutoffIST } from '@/lib/utils/date'
+import {
+  isZeroBalanceLocked,
+  acquireZeroBalanceLock,
+  releaseZeroBalanceLock,
+  getClosedFiscalCutoff,
+  setClosedFiscalCutoff
+} from '@/lib/server/system-lock'
+import {
+  applyRecordTransaction,
+  applyReverseTransaction
+} from '@/lib/server/ledger'
 
 export async function GET(req: NextRequest) {
   try {
@@ -27,58 +38,124 @@ export async function GET(req: NextRequest) {
     const startDate = searchParams.get('startDate') || undefined
     const endDate = searchParams.get('endDate') || undefined
     const type = searchParams.get('type') || undefined
+    const productId = searchParams.get('productId') || undefined
     const limitCount = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10)), 200)
     const cursor = searchParams.get('cursor') || undefined
+    const excludeReversed = searchParams.get('excludeReversed') === 'true'
 
-    let queryRef: FirebaseFirestore.Query = adminDb.collection('transactions')
-
-    if (startDate && endDate) {
-      queryRef = queryRef.where('date', '>=', startDate).where('date', '<=', endDate).orderBy('date', 'desc')
-    } else if (startDate) {
-      queryRef = queryRef.where('date', '>=', startDate).orderBy('date', 'desc')
-    } else if (endDate) {
-      queryRef = queryRef.where('date', '<=', endDate).orderBy('date', 'desc')
-    } else {
-      queryRef = queryRef.orderBy('date', 'desc')
-    }
-
-    if (cursor) {
-      const cursorSnap = await adminDb.collection('transactions').doc(cursor).get()
-      if (cursorSnap.exists) {
-        queryRef = queryRef.startAfter(cursorSnap)
-      }
-    }
-
-    queryRef = queryRef.limit(limitCount)
-    const snapshot = await queryRef.get()
-
-    let items = snapshot.docs.map((docSnap) => {
+    const mapDocToTx = (docSnap: FirebaseFirestore.DocumentSnapshot): Transaction => {
       const data = docSnap.data() as Record<string, unknown>
+      const qty = Number(data.quantity || 0)
+      const price = typeof data.price === 'number' ? data.price : undefined
+      const totalAmount = typeof data.totalAmount === 'number'
+        ? data.totalAmount
+        : (price !== undefined ? price * (qty > 0 ? qty : 1) : 0)
+
       return {
         ...data,
         id: docSnap.id,
-        type: data.type as string | undefined,
-        previousWeight: typeof data.previousWeightMg === 'number' ? data.previousWeightMg / 1000 : data.previousWeight,
-        newWeight: typeof data.newWeightMg === 'number' ? data.newWeightMg / 1000 : data.newWeight,
-        weightChange: typeof data.weightChangeMg === 'number' ? data.weightChangeMg / 1000 : data.weightChange,
-        recoveredWeight: typeof data.recoveredWeightMg === 'number' ? data.recoveredWeightMg / 1000 : data.recoveredWeight,
-        pieceWeight: typeof data.pieceWeightMg === 'number' ? data.pieceWeightMg / 1000 : data.pieceWeight,
+        type: data.type as Transaction['type'],
+        totalAmount,
+        isReversed: Boolean(data.isReversed),
+        isReversal: Boolean(data.isReversal),
+        reversalOf: typeof data.reversalOf === 'string' ? data.reversalOf : undefined,
+        previousWeight: typeof data.previousWeightMg === 'number' ? data.previousWeightMg / 1000 : (data.previousWeight as number | undefined),
+        newWeight: typeof data.newWeightMg === 'number' ? data.newWeightMg / 1000 : (data.newWeight as number | undefined),
+        weightChange: typeof data.weightChangeMg === 'number' ? data.weightChangeMg / 1000 : (data.weightChange as number | undefined),
+        recoveredWeight: typeof data.recoveredWeightMg === 'number' ? data.recoveredWeightMg / 1000 : (data.recoveredWeight as number | undefined),
+        pieceWeight: typeof data.pieceWeightMg === 'number' ? data.pieceWeightMg / 1000 : (data.pieceWeight as number | undefined),
         pieceWeights: Array.isArray(data.pieceWeightsMg)
           ? data.pieceWeightsMg.map((mg: number) => mg / 1000)
           : Array.isArray(data.pieceWeights)
-            ? data.pieceWeights
+            ? (data.pieceWeights as number[])
             : undefined
-      }
-    })
-
-    if (type && type !== 'All') {
-      items = items.filter((t) => t.type === type)
+      } as Transaction
     }
 
-    const nextCursor = snapshot.docs.length === limitCount ? snapshot.docs[snapshot.docs.length - 1].id : null
-    const hasMore = snapshot.docs.length === limitCount
+    try {
+      let queryRef: FirebaseFirestore.Query = adminDb.collection('transactions')
 
-    return NextResponse.json({ success: true, transactions: items, nextCursor, hasMore })
+      if (type && type !== 'All') {
+        queryRef = queryRef.where('type', '==', type)
+      }
+
+      if (productId) {
+        queryRef = queryRef.where('productId', '==', productId)
+      }
+
+      if (startDate && endDate) {
+        queryRef = queryRef.where('date', '>=', startDate).where('date', '<=', endDate).orderBy('date', 'desc')
+      } else if (startDate) {
+        queryRef = queryRef.where('date', '>=', startDate).orderBy('date', 'desc')
+      } else if (endDate) {
+        queryRef = queryRef.where('date', '<=', endDate).orderBy('date', 'desc')
+      } else {
+        queryRef = queryRef.orderBy('date', 'desc')
+      }
+
+      if (cursor) {
+        const cursorSnap = await adminDb.collection('transactions').doc(cursor).get()
+        if (cursorSnap.exists) {
+          queryRef = queryRef.startAfter(cursorSnap)
+        }
+      }
+
+      const fetchLimit = excludeReversed ? Math.min(limitCount * 3, 200) : limitCount
+      queryRef = queryRef.limit(fetchLimit)
+      const snapshot = await queryRef.get()
+
+      let rawItems = snapshot.docs.map(mapDocToTx)
+      if (excludeReversed) {
+        rawItems = rawItems.filter((t) => !t.isReversed && !t.isReversal && !t.reversalOf && t.type !== 'reversal')
+      }
+
+      const items = rawItems.slice(0, limitCount)
+      const nextCursor = snapshot.docs.length >= fetchLimit && items.length === limitCount
+        ? snapshot.docs[snapshot.docs.length - 1].id
+        : null
+      const hasMore = rawItems.length > limitCount || (snapshot.docs.length >= fetchLimit && items.length === limitCount)
+
+      return NextResponse.json({ success: true, transactions: items, nextCursor, hasMore })
+    } catch (queryErr: unknown) {
+      // If code 9 (composite index building), fall back to querying date range and filtering type in memory
+      if ((queryErr as { code?: number })?.code === 9) {
+        let fallbackQuery: FirebaseFirestore.Query = adminDb.collection('transactions')
+        if (startDate && endDate) {
+          fallbackQuery = fallbackQuery.where('date', '>=', startDate).where('date', '<=', endDate).orderBy('date', 'desc')
+        } else if (startDate) {
+          fallbackQuery = fallbackQuery.where('date', '>=', startDate).orderBy('date', 'desc')
+        } else if (endDate) {
+          fallbackQuery = fallbackQuery.where('date', '<=', endDate).orderBy('date', 'desc')
+        } else {
+          fallbackQuery = fallbackQuery.orderBy('date', 'desc')
+        }
+
+        if (cursor) {
+          const cursorSnap = await adminDb.collection('transactions').doc(cursor).get()
+          if (cursorSnap.exists) {
+            fallbackQuery = fallbackQuery.startAfter(cursorSnap)
+          }
+        }
+
+        // Fetch larger batch to find limitCount matching items
+        const rawSnap = await fallbackQuery.limit(Math.max(limitCount * 4, 100)).get()
+        const filteredDocs = type && type !== 'All'
+          ? rawSnap.docs.filter((d) => (d.data() as Record<string, unknown>).type === type)
+          : rawSnap.docs
+
+        let rawItems = filteredDocs.map(mapDocToTx)
+        if (excludeReversed) {
+          rawItems = rawItems.filter((t) => !t.isReversed && !t.isReversal && !t.reversalOf && t.type !== 'reversal')
+        }
+
+        const items = rawItems.slice(0, limitCount)
+        const nextCursor = rawItems.length > limitCount ? rawSnap.docs[rawSnap.docs.length - 1].id : null
+        const hasMore = rawItems.length > limitCount || (rawSnap.docs.length >= Math.max(limitCount * 4, 100) && items.length === limitCount)
+
+        return NextResponse.json({ success: true, transactions: items, nextCursor, hasMore })
+      }
+      throw queryErr
+    }
   } catch (err: unknown) {
     console.error('GET /api/admin/transactions error:', err)
     const msg = err instanceof Error ? err.message : 'Failed to query transactions'
@@ -93,6 +170,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
     const { caller } = authResult
+
+    // 0. Pause new entries if a Master Zero-Balance / Archive run is currently active
+    const runLock = await isZeroBalanceLocked()
+    if (runLock.isLocked) {
+      return NextResponse.json({ error: runLock.message }, { status: 423 })
+    }
 
     const body = await req.json()
     const {
@@ -117,6 +200,27 @@ export async function POST(req: NextRequest) {
 
     if (!type || !productId || !locationId) {
       return NextResponse.json({ error: 'Missing mandatory transaction parameters' }, { status: 400 })
+    }
+
+    if (type === 'reversal') {
+      return NextResponse.json({ error: 'Reversal transactions cannot be created manually. Use the transaction reversal flow instead.' }, { status: 400 })
+    }
+
+    if (type === 'sale') {
+      if (price === undefined || price === null || price === '' || isNaN(Number(price)) || Number(price) <= 0) {
+        return NextResponse.json({ error: 'Selling price is mandatory and must be greater than ₹0' }, { status: 400 })
+      }
+    }
+
+    // 0b. Block entries dated on or before a closed fiscal cutoff
+    const closedCutoff = await getClosedFiscalCutoff()
+    if (closedCutoff && date && String(date) <= closedCutoff) {
+      return NextResponse.json(
+        {
+          error: `Entries dated on or before ${closedCutoff} are blocked. The financial period up to ${closedCutoff} has been closed and archived.`
+        },
+        { status: 400 }
+      )
     }
 
     // 1. Permission Gate based on Transaction Type
@@ -162,21 +266,13 @@ export async function POST(req: NextRequest) {
 
     // 2. Staff Assigned Location Enforcement
     // Default and lock location: staff with assignedLocationId cannot transact at unauthorized stores
-    const isSuperAdmin = caller.callerData.role === 'super_admin' || (caller.callerData.role as string) === 'admin' || !caller.callerData.role
+    const isSuperAdmin = caller.isSuperAdmin
     const userAssignedLoc = caller.callerData.assignedLocationId
     if (!isSuperAdmin && userAssignedLoc) {
-      if (type === 'sale' || type === 'return') {
-        if (locationId !== userAssignedLoc) {
-          return NextResponse.json({
-            error: `Access Denied: You are assigned to ${caller.callerData.assignedLocationName || 'another store'} and cannot record ${type}s at a different location.`
-          }, { status: 403 })
-        }
-      } else if (type === 'transfer' || type === 'melt' || type === 'adjustment') {
-        if (locationId !== userAssignedLoc) {
-          return NextResponse.json({
-            error: `Access Denied: You can only record ${type} movements at your assigned store (${caller.callerData.assignedLocationName || userAssignedLoc}).`
-          }, { status: 403 })
-        }
+      if (locationId !== userAssignedLoc) {
+        return NextResponse.json({
+          error: `Access Denied: You are assigned to ${caller.callerData.assignedLocationName || 'another store'} and cannot record ${type} transactions at a different location.`
+        }, { status: 403 })
       }
     }
 
@@ -191,88 +287,33 @@ export async function POST(req: NextRequest) {
       }
 
       const productData = productSnap.data() as Product
-      const currentTotal = Number(productData.stock || 0)
-      const currentLocMap: Record<string, number> = { ...(productData.stockByLocation || {}) }
-      const sourceLocStock = Number(currentLocMap[locationId] || 0)
-
-      let newTotal = currentTotal
-
-      switch (type) {
-        case 'purchase': {
-          const isIdol = productData.category === 'Idols'
-          // For Idols with pieceWeights, allow purchasing multiple pieces at once
-          const rawPieces: unknown[] = Array.isArray(body.pieceWeights) ? body.pieceWeights : []
-          const validPieces: number[] = rawPieces.map(Number).filter((w) => !isNaN(w) && w > 0)
-
-          if (isIdol && validPieces.length > 0) {
-            // Qty matches count of pieces
-            qty = validPieces.length
-          }
-
-          if (qty <= 0) throw new Error('Purchase quantity must be greater than 0')
-          currentLocMap[locationId] = sourceLocStock + qty
-          newTotal = currentTotal + qty
-          break
-        }
-
-        case 'sale': {
-          if (qty <= 0) throw new Error('Sale quantity must be greater than 0')
-          if (sourceLocStock < qty) {
-            throw new Error(`Insufficient stock at ${locationName}. Available: ${sourceLocStock}, requested: ${qty}`)
-          }
-          currentLocMap[locationId] = sourceLocStock - qty
-          newTotal = currentTotal - qty
-          break
-        }
-
-        case 'return': {
-          if (qty <= 0) throw new Error('Return quantity must be greater than 0')
-          currentLocMap[locationId] = sourceLocStock + qty
-          newTotal = currentTotal + qty
-          break
-        }
-
-        case 'transfer': {
-          if (qty <= 0) throw new Error('Transfer quantity must be greater than 0')
-          if (!toLocationId || toLocationId === locationId) {
-            throw new Error('Please select a distinct destination location')
-          }
-          if (sourceLocStock < qty) {
-            throw new Error(`Insufficient stock at ${locationName}. Available: ${sourceLocStock}, requested: ${qty}`)
-          }
-          const destLocStock = Number(currentLocMap[toLocationId] || 0)
-          currentLocMap[locationId] = sourceLocStock - qty
-          currentLocMap[toLocationId] = destLocStock + qty
-          break
-        }
-
-        case 'adjustment': {
-          if (qty === 0) throw new Error('Quantity adjustment cannot be 0')
-          if (sourceLocStock + qty < 0) {
-            throw new Error(`Stock at ${locationName} cannot be less than 0. Available: ${sourceLocStock}, adjustment: ${qty}`)
-          }
-          currentLocMap[locationId] = sourceLocStock + qty
-          newTotal = currentTotal + qty
-          break
-        }
-
-        case 'melt': {
-          if (qty <= 0) throw new Error('Melt quantity must be greater than 0')
-          if (sourceLocStock < qty) {
-            throw new Error(`Insufficient stock at ${locationName}. Available: ${sourceLocStock}, requested: ${qty}`)
-          }
-          currentLocMap[locationId] = sourceLocStock - qty
-          newTotal = currentTotal - qty
-          break
-        }
-
-        case 'repair': {
-          if (newWeight === undefined || newWeight === null || isNaN(Number(newWeight)) || Number(newWeight) <= 0) {
-            throw new Error('Please enter a valid new weight for the repaired item')
-          }
-          break
+      if (type === 'purchase') {
+        const isIdol = productData.category === 'Idols'
+        const rawPieces: unknown[] = Array.isArray(body.pieceWeights) ? body.pieceWeights : []
+        const validPieces: number[] = rawPieces.map(Number).filter((w) => !isNaN(w) && w > 0)
+        if (isIdol && validPieces.length > 0) {
+          qty = validPieces.length
         }
       }
+
+      if (type === 'repair') {
+        if (newWeight === undefined || newWeight === null || isNaN(Number(newWeight)) || Number(newWeight) <= 0) {
+          throw new Error('Please enter a valid new weight for the repaired item')
+        }
+      }
+
+      const ledgerResult = applyRecordTransaction({
+        productData,
+        type,
+        quantity: qty,
+        locationId,
+        locationName,
+        toLocationId,
+        toLocationName,
+        pieceWeight: body.pieceWeight !== undefined && !isNaN(Number(body.pieceWeight)) ? Number(body.pieceWeight) : undefined,
+        pieceWeights: Array.isArray(body.pieceWeights) ? body.pieceWeights : undefined,
+        newWeight: type === 'repair' ? Number(newWeight) : undefined
+      })
 
       // Write Transaction document
       const txRef = adminDb.collection('transactions').doc()
@@ -292,11 +333,16 @@ export async function POST(req: NextRequest) {
         timestamp: FieldValue.serverTimestamp(),
         operatorId: caller.callerUid,
         operatorName: caller.callerName,
-        operatorEmail: caller.callerEmail
+        operatorEmail: caller.callerEmail,
+        isReversed: false
       }
 
       if (price !== undefined && !isNaN(Number(price))) {
-        txPayload.price = Number(price)
+        const pNum = Number(price)
+        txPayload.price = pNum
+        txPayload.totalAmount = pNum * (qty > 0 ? qty : 1)
+      } else {
+        txPayload.totalAmount = 0
       }
       if (toLocationId) {
         txPayload.toLocationId = toLocationId
@@ -324,123 +370,13 @@ export async function POST(req: NextRequest) {
         txPayload.recoveredWeightMg = recMg
       }
 
-      // Handle Idol Piece Weights Registry Updates (Stored in Whole Milligrams)
-      const isIdol = productData.category === 'Idols'
-      let updatedPiecesMg: number[] = Array.isArray(productData.pieceWeightsMg)
-        ? [...productData.pieceWeightsMg]
-        : Array.isArray(productData.pieceWeights)
-          ? productData.pieceWeights.map(gramsToMg)
-          : []
-
-      const updatedPiecesByLocMg: Record<string, number[]> = {}
-      if (productData.pieceWeightsByLocationMg) {
-        Object.entries(productData.pieceWeightsByLocationMg).forEach(([loc, list]) => {
-          if (Array.isArray(list)) updatedPiecesByLocMg[loc] = [...list]
-        })
-      } else if (productData.pieceWeightsByLocation) {
-        Object.entries(productData.pieceWeightsByLocation).forEach(([loc, list]) => {
-          if (Array.isArray(list)) updatedPiecesByLocMg[loc] = list.map(gramsToMg)
-        })
-      }
-
-      const sourceLocPiecesMg = updatedPiecesByLocMg[locationId] || []
-
-      if (isIdol) {
-        if (type === 'purchase') {
-          const rawPieces: unknown[] = Array.isArray(body.pieceWeights) ? body.pieceWeights : []
-          const validPiecesMg: number[] = rawPieces.map(Number).filter((w) => !isNaN(w) && w > 0).map(gramsToMg)
-          if (validPiecesMg.length > 0) {
-            updatedPiecesByLocMg[locationId] = [...sourceLocPiecesMg, ...validPiecesMg]
-            updatedPiecesMg = [...updatedPiecesMg, ...validPiecesMg]
-            txPayload.pieceWeights = validPiecesMg.map(mgToGrams)
-            txPayload.pieceWeightsMg = validPiecesMg
-          }
-        } else if (type === 'sale') {
-          const selW = body.pieceWeight !== undefined && !isNaN(Number(body.pieceWeight)) ? Number(body.pieceWeight) : undefined
-          if (selW !== undefined) {
-            const selWMg = gramsToMg(selW)
-            txPayload.pieceWeight = mgToGrams(selWMg)
-            txPayload.pieceWeightMg = selWMg
-            const idx = sourceLocPiecesMg.indexOf(selWMg)
-            if (idx !== -1) {
-              sourceLocPiecesMg.splice(idx, 1)
-              updatedPiecesByLocMg[locationId] = sourceLocPiecesMg
-            }
-            const allIdx = updatedPiecesMg.indexOf(selWMg)
-            if (allIdx !== -1) updatedPiecesMg.splice(allIdx, 1)
-          }
-        } else if (type === 'transfer' && toLocationId) {
-          const destLocPiecesMg = updatedPiecesByLocMg[toLocationId] || []
-          const selW = body.pieceWeight !== undefined && !isNaN(Number(body.pieceWeight)) ? Number(body.pieceWeight) : undefined
-          if (selW !== undefined) {
-            const selWMg = gramsToMg(selW)
-            txPayload.pieceWeight = mgToGrams(selWMg)
-            txPayload.pieceWeightMg = selWMg
-            const idx = sourceLocPiecesMg.indexOf(selWMg)
-            if (idx !== -1) {
-              sourceLocPiecesMg.splice(idx, 1)
-              updatedPiecesByLocMg[locationId] = sourceLocPiecesMg
-              updatedPiecesByLocMg[toLocationId] = [...destLocPiecesMg, selWMg]
-            }
-          }
-        } else if (type === 'melt') {
-          const selW = body.pieceWeight !== undefined && !isNaN(Number(body.pieceWeight)) ? Number(body.pieceWeight) : undefined
-          if (selW !== undefined) {
-            const selWMg = gramsToMg(selW)
-            txPayload.pieceWeight = mgToGrams(selWMg)
-            txPayload.pieceWeightMg = selWMg
-            const idx = sourceLocPiecesMg.indexOf(selWMg)
-            if (idx !== -1) {
-              sourceLocPiecesMg.splice(idx, 1)
-              updatedPiecesByLocMg[locationId] = sourceLocPiecesMg
-            }
-            const allIdx = updatedPiecesMg.indexOf(selWMg)
-            if (allIdx !== -1) updatedPiecesMg.splice(allIdx, 1)
-          }
-        } else if (type === 'return') {
-          const selW = body.pieceWeight !== undefined && !isNaN(Number(body.pieceWeight)) ? Number(body.pieceWeight) : undefined
-          if (selW !== undefined) {
-            const selWMg = gramsToMg(selW)
-            txPayload.pieceWeight = mgToGrams(selWMg)
-            txPayload.pieceWeightMg = selWMg
-            updatedPiecesByLocMg[locationId] = [...sourceLocPiecesMg, selWMg]
-            updatedPiecesMg = [...updatedPiecesMg, selWMg]
-          }
-        }
-      }
-
+      Object.assign(txPayload, ledgerResult.txPiecePayload)
       t.set(txRef, txPayload)
 
-      // Update Product document with verified new stock and piece weights in milligrams
-      const productUpdates: Record<string, unknown> = {
-        stock: newTotal,
-        stockByLocation: currentLocMap,
+      const productUpdates = {
+        ...ledgerResult.productUpdates,
         updatedAt: FieldValue.serverTimestamp()
       }
-      if (type === 'repair' && newWeight) {
-        const nWMg = gramsToMg(newWeight)
-        productUpdates.weight = mgToGrams(nWMg)
-        productUpdates.weightMg = nWMg
-      } else if (isIdol) {
-        const updatedPiecesGrams = updatedPiecesMg.map(mgToGrams)
-        const updatedPiecesByLocGrams: Record<string, number[]> = {}
-        Object.entries(updatedPiecesByLocMg).forEach(([lId, list]) => {
-          updatedPiecesByLocGrams[lId] = list.map(mgToGrams)
-        })
-        productUpdates.pieceWeights = updatedPiecesGrams
-        productUpdates.pieceWeightsMg = updatedPiecesMg
-        productUpdates.pieceWeightsByLocation = updatedPiecesByLocGrams
-        productUpdates.pieceWeightsByLocationMg = updatedPiecesByLocMg
-        if (updatedPiecesMg.length > 0) {
-          const avgMg = Math.round(updatedPiecesMg.reduce((a, b) => a + b, 0) / updatedPiecesMg.length)
-          productUpdates.weight = mgToGrams(avgMg)
-          productUpdates.weightMg = avgMg
-        } else {
-          productUpdates.weight = 0
-          productUpdates.weightMg = 0
-        }
-      }
-
       t.update(productRef, productUpdates)
 
       // Construct detailed audit narrative for this inventory action
@@ -519,6 +455,12 @@ export async function DELETE(req: NextRequest) {
     if (tx.isReversal || tx.reversalOf) {
       return NextResponse.json({ error: 'A reversing entry cannot be reversed' }, { status: 400 })
     }
+    if (tx.isOpeningBalance || tx.isOpeningEntry) {
+      return NextResponse.json(
+        { error: 'Opening balance entries cannot be reversed. They establish the ledger baseline.' },
+        { status: 400 }
+      )
+    }
 
     // Permission Gate for Reversing Transactions
     if (txType === 'sale' && !hasModulePermission(caller, 'sales', 'delete')) {
@@ -534,6 +476,17 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden: Insufficient permissions to reverse stock movement records' }, { status: 403 })
     }
 
+    // Staff Assigned Location Enforcement for reversals
+    const isSuperAdmin = caller.isSuperAdmin
+    const userAssignedLoc = caller.callerData.assignedLocationId
+    if (!isSuperAdmin && userAssignedLoc) {
+      if (tx.locationId && tx.locationId !== userAssignedLoc) {
+        return NextResponse.json({
+          error: `Access Denied: You are assigned to ${caller.callerData.assignedLocationName || 'another store'} and cannot reverse transactions for a different location.`
+        }, { status: 403 })
+      }
+    }
+
     // Atomic Reversal via Reversing Entry (Never Delete)
     const reversalResult = await adminDb.runTransaction(async (t) => {
       const productRef = adminDb.collection('products').doc(tx.productId)
@@ -543,221 +496,47 @@ export async function DELETE(req: NextRequest) {
       const todayDate = getTodayIST()
 
       let reversingPayload: Record<string, unknown> = {}
-      let newTotal = 0
-      let currentLocMap: Record<string, number> = {}
-      let newWeight: number | undefined = undefined
 
-      if (productSnap.exists) {
-        const productData = productSnap.data() as Product
-        const currentTotal = Number(productData.stock || 0)
-        currentLocMap = { ...(productData.stockByLocation || {}) }
-        const qty = Number(tx.quantity || 0)
+      if (!productSnap.exists) {
+        throw new Error('Product associated with this transaction no longer exists')
+      }
 
-        newTotal = currentTotal
+      const productData = productSnap.data() as Product
 
-        // Reversal calculations without clamping at zero to preserve mathematical accuracy
-        switch (txType) {
-          case 'purchase': {
-            const locStock = Number(currentLocMap[tx.locationId] || 0)
-            currentLocMap[tx.locationId] = locStock - qty
-            newTotal = currentTotal - qty
-            reversingPayload = {
-              type: 'adjustment',
-              quantity: -qty,
-              locationId: tx.locationId,
-              locationName: tx.locationName,
-              notes: `Reversal of purchase #${txId}${tx.notes ? `: ${tx.notes}` : ''}`
-            }
-            break
-          }
-          case 'sale': {
-            const locStock = Number(currentLocMap[tx.locationId] || 0)
-            currentLocMap[tx.locationId] = locStock + qty
-            newTotal = currentTotal + qty
-            reversingPayload = {
-              type: 'adjustment',
-              quantity: qty,
-              locationId: tx.locationId,
-              locationName: tx.locationName,
-              notes: `Reversal of sale #${txId}${tx.customerName ? ` (${tx.customerName})` : ''}`
-            }
-            break
-          }
-          case 'return': {
-            const locStock = Number(currentLocMap[tx.locationId] || 0)
-            currentLocMap[tx.locationId] = locStock - qty
-            newTotal = currentTotal - qty
-            reversingPayload = {
-              type: 'adjustment',
-              quantity: -qty,
-              locationId: tx.locationId,
-              locationName: tx.locationName,
-              notes: `Reversal of return #${txId}`
-            }
-            break
-          }
-          case 'transfer': {
-            if (tx.toLocationId) {
-              const fromStock = Number(currentLocMap[tx.locationId] || 0)
-              const toStock = Number(currentLocMap[tx.toLocationId] || 0)
-              currentLocMap[tx.locationId] = fromStock + qty
-              currentLocMap[tx.toLocationId] = toStock - qty
-              reversingPayload = {
-                type: 'transfer',
-                quantity: qty,
-                locationId: tx.toLocationId,
-                locationName: tx.toLocationName || 'Unknown',
-                toLocationId: tx.locationId,
-                toLocationName: tx.locationName,
-                notes: `Reversal of transfer #${txId}`
-              }
-            }
-            break
-          }
-          case 'adjustment': {
-            const locStock = Number(currentLocMap[tx.locationId] || 0)
-            currentLocMap[tx.locationId] = locStock - qty
-            newTotal = currentTotal - qty
-            reversingPayload = {
-              type: 'adjustment',
-              quantity: -qty,
-              locationId: tx.locationId,
-              locationName: tx.locationName,
-              notes: `Reversal of adjustment #${txId}`
-            }
-            break
-          }
-          case 'melt': {
-            const locStock = Number(currentLocMap[tx.locationId] || 0)
-            currentLocMap[tx.locationId] = locStock + qty
-            newTotal = currentTotal + qty
-            reversingPayload = {
-              type: 'adjustment',
-              quantity: qty,
-              locationId: tx.locationId,
-              locationName: tx.locationName,
-              notes: `Reversal of melt #${txId}`
-            }
-            break
-          }
-          case 'repair': {
-            // Reverse delta weight change using integer milligram precision
-            const currentProdWMg = productData.weightMg !== undefined ? productData.weightMg : gramsToMg(productData.weight || 0)
-            const weightDeltaMg = tx.weightChangeMg !== undefined ? tx.weightChangeMg : gramsToMg(tx.weightChange || 0)
-            const newWMg = currentProdWMg - weightDeltaMg
-            newWeight = mgToGrams(newWMg)
-            reversingPayload = {
-              type: 'repair',
-              quantity: tx.quantity || 1,
-              locationId: tx.locationId,
-              locationName: tx.locationName,
-              previousWeight: mgToGrams(currentProdWMg),
-              previousWeightMg: currentProdWMg,
-              newWeight: newWeight,
-              newWeightMg: newWMg,
-              weightChange: mgToGrams(-weightDeltaMg),
-              weightChangeMg: -weightDeltaMg,
-              notes: `Reversal of repair #${txId}${tx.notes ? `: ${tx.notes}` : ''}`
-            }
-            break
-          }
+      const ledgerResult = applyReverseTransaction({
+        productData,
+        originalTx: {
+          ...tx,
+          id: txId
         }
+      })
 
-        const isIdol = productData.category === 'Idols'
-        let updatedPiecesMg: number[] = Array.isArray(productData.pieceWeightsMg)
-          ? [...productData.pieceWeightsMg]
-          : Array.isArray(productData.pieceWeights)
-            ? productData.pieceWeights.map(gramsToMg)
-            : []
+      const productUpdates = {
+        ...ledgerResult.productUpdates,
+        updatedAt: nowIso
+      }
+      t.update(productRef, productUpdates)
 
-        const updatedPiecesByLocMg: Record<string, number[]> = {}
-        if (productData.pieceWeightsByLocationMg) {
-          Object.entries(productData.pieceWeightsByLocationMg).forEach(([loc, list]) => {
-            if (Array.isArray(list)) updatedPiecesByLocMg[loc] = [...list]
-          })
-        } else if (productData.pieceWeightsByLocation) {
-          Object.entries(productData.pieceWeightsByLocation).forEach(([loc, list]) => {
-            if (Array.isArray(list)) updatedPiecesByLocMg[loc] = list.map(gramsToMg)
-          })
-        }
-        const txLocPiecesMg = updatedPiecesByLocMg[tx.locationId] || []
-
-        if (isIdol) {
-          if (tx.pieceWeightMg !== undefined || tx.pieceWeight !== undefined) {
-            const pWMg = tx.pieceWeightMg !== undefined ? Number(tx.pieceWeightMg) : gramsToMg(tx.pieceWeight)
-            if (txType === 'sale' || txType === 'melt') {
-              // Reversing sale or melt restores piece weight back to source location
-              updatedPiecesByLocMg[tx.locationId] = [...txLocPiecesMg, pWMg]
-              updatedPiecesMg = [...updatedPiecesMg, pWMg]
-            } else if (txType === 'transfer' && tx.toLocationId) {
-              // Reversing transfer moves piece weight from destination back to source
-              const destPiecesMg = updatedPiecesByLocMg[tx.toLocationId] || []
-              const idx = destPiecesMg.indexOf(pWMg)
-              if (idx !== -1) {
-                destPiecesMg.splice(idx, 1)
-                updatedPiecesByLocMg[tx.toLocationId] = destPiecesMg
-                updatedPiecesByLocMg[tx.locationId] = [...txLocPiecesMg, pWMg]
-              }
-            } else if (txType === 'return') {
-              // Reversing return removes piece weight back from location and product
-              const idx = txLocPiecesMg.indexOf(pWMg)
-              if (idx !== -1) {
-                txLocPiecesMg.splice(idx, 1)
-                updatedPiecesByLocMg[tx.locationId] = txLocPiecesMg
-              }
-              const allIdx = updatedPiecesMg.indexOf(pWMg)
-              if (allIdx !== -1) updatedPiecesMg.splice(allIdx, 1)
-            }
-          } else if ((tx.pieceWeightsMg && Array.isArray(tx.pieceWeightsMg)) || (tx.pieceWeights && Array.isArray(tx.pieceWeights))) {
-            const piecesToReverseMg = Array.isArray(tx.pieceWeightsMg) ? tx.pieceWeightsMg : (tx.pieceWeights as (number | string)[]).map((w) => gramsToMg(w))
-            if (txType === 'purchase') {
-              // Reversing purchase removes those piece weights
-              piecesToReverseMg.forEach((numWMg: number) => {
-                const idx = txLocPiecesMg.indexOf(numWMg)
-                if (idx !== -1) txLocPiecesMg.splice(idx, 1)
-                const allIdx = updatedPiecesMg.indexOf(numWMg)
-                if (allIdx !== -1) updatedPiecesMg.splice(allIdx, 1)
-              })
-              updatedPiecesByLocMg[tx.locationId] = txLocPiecesMg
-            }
-          }
-        }
-
-        const prodUpdates: Record<string, unknown> = {
-          updatedAt: nowIso
-        }
-
-        if (txType === 'repair') {
-          if (newWeight !== undefined) {
-            const nWMg = gramsToMg(newWeight)
-            prodUpdates.weight = mgToGrams(nWMg)
-            prodUpdates.weightMg = nWMg
-          }
-        } else {
-          prodUpdates.stock = newTotal
-          prodUpdates.stockByLocation = currentLocMap
-          if (isIdol) {
-            const updatedPiecesGrams = updatedPiecesMg.map(mgToGrams)
-            const updatedPiecesByLocGrams: Record<string, number[]> = {}
-            Object.entries(updatedPiecesByLocMg).forEach(([lId, list]) => {
-              updatedPiecesByLocGrams[lId] = list.map(mgToGrams)
-            })
-            prodUpdates.pieceWeights = updatedPiecesGrams
-            prodUpdates.pieceWeightsMg = updatedPiecesMg
-            prodUpdates.pieceWeightsByLocation = updatedPiecesByLocGrams
-            prodUpdates.pieceWeightsByLocationMg = updatedPiecesByLocMg
-            if (updatedPiecesMg.length > 0) {
-              const avgMg = Math.round(updatedPiecesMg.reduce((a, b) => a + b, 0) / updatedPiecesMg.length)
-              prodUpdates.weight = mgToGrams(avgMg)
-              prodUpdates.weightMg = avgMg
-            } else {
-              prodUpdates.weight = 0
-              prodUpdates.weightMg = 0
-            }
-          }
-        }
-
-        t.update(productRef, prodUpdates)
+      reversingPayload = {
+        type: 'reversal',
+        quantity: ledgerResult.reversalTxData.quantity,
+        locationId: tx.locationId,
+        locationName: tx.locationName,
+        notes: ledgerResult.reversalTxData.notes
+      }
+      if (txType === 'transfer' && tx.toLocationId) {
+        reversingPayload.locationId = tx.toLocationId
+        reversingPayload.locationName = tx.toLocationName || 'Unknown'
+        reversingPayload.toLocationId = tx.locationId
+        reversingPayload.toLocationName = tx.locationName
+      }
+      if (ledgerResult.reversalTxData.previousWeight !== undefined) {
+        reversingPayload.previousWeight = ledgerResult.reversalTxData.previousWeight
+        reversingPayload.previousWeightMg = ledgerResult.reversalTxData.previousWeightMg
+        reversingPayload.newWeight = ledgerResult.reversalTxData.newWeight
+        reversingPayload.newWeightMg = ledgerResult.reversalTxData.newWeightMg
+        reversingPayload.weightChange = ledgerResult.reversalTxData.weightChange
+        reversingPayload.weightChangeMg = ledgerResult.reversalTxData.weightChangeMg
       }
 
       // 1. Mark original transaction as reversed (Never delete)
@@ -827,23 +606,110 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  // Purge / Clear Transaction History (Master Zero-Balance)
+  // Purge / Clear Transaction History (Master Zero-Balance with Cutoff and Server-Side Lock)
+  let callerInfo: { callerUid: string; callerName: string; callerEmail: string } | null = null
+  let lockAcquired = false
+
   try {
     const authResult = await getAuthenticatedCaller(req)
     if (!authResult.ok) {
       return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
     const { caller } = authResult
+    callerInfo = {
+      callerUid: caller.callerUid,
+      callerName: caller.callerName,
+      callerEmail: caller.callerEmail
+    }
 
     if (!hasModulePermission(caller, 'archive', 'zeroBalance')) {
       return NextResponse.json({ error: 'Forbidden: Super Admin or Master Zero-Balance authorization required' }, { status: 403 })
     }
 
-    const nowIso = new Date().toISOString()
+    // 0. Require fresh sign-in / re-authentication on the server (auth_time within 5 minutes)
+    const authTime = Number(caller.decodedToken.auth_time)
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    const RECENT_LOGIN_MAX_AGE_SECONDS = 300 // 5 minutes
+    if (!authTime || nowSeconds - authTime > RECENT_LOGIN_MAX_AGE_SECONDS) {
+      return NextResponse.json(
+        {
+          error: 'Fresh authentication required: This irreversible action requires sign-in or re-authentication within the last 5 minutes. Please re-enter your password to proceed.',
+          code: 'auth/requires-recent-login'
+        },
+        { status: 401 }
+      )
+    }
 
-    // 1. Purge all historical transaction records in chunks of 400
-    const txSnap = await adminDb.collection('transactions').get()
+    const body = await req.json().catch(() => ({}))
+    const confirmationPhrase = typeof body.confirmationPhrase === 'string' ? body.confirmationPhrase.trim() : ''
+    if (confirmationPhrase !== 'CONFIRM ZERO BALANCE') {
+      return NextResponse.json(
+        { error: 'Confirmation phrase mismatch. You must type "CONFIRM ZERO BALANCE" exactly to execute this irreversible operation.' },
+        { status: 400 }
+      )
+    }
+
+    // 1. Take a server-side lock first to block overlapping runs and pause new entries
+    try {
+      await acquireZeroBalanceLock(callerInfo)
+      lockAcquired = true
+    } catch (lockErr: unknown) {
+      const msg = lockErr instanceof Error ? lockErr.message : 'Master Zero-Balance is currently locked'
+      return NextResponse.json({ error: msg }, { status: 423 })
+    }
+
+    const { expectedTransactionCount, expectedAuditCount } = body || {}
+    const cutoffDate = (body.cutoffDate ? String(body.cutoffDate).trim() : undefined) || getDefaultFiscalCutoffIST()
+    const openingDate = getNextDayIST(cutoffDate)
+
+    // 2. Build master archive on the server from every record up to cutoff date and compute SHA-256 checksum
+    const { buildMasterArchiveServer, saveArchiveServerSide } = await import('@/lib/server/archive')
+    const archiveResult = await buildMasterArchiveServer({ cutoffDate })
+    const { count: verifiedTxCount, auditCount: verifiedAuditCount } = archiveResult
+
+    // 3. Count safety checks - verify client expectations against live database
+    if (typeof expectedTransactionCount === 'number' && verifiedTxCount !== expectedTransactionCount) {
+      return NextResponse.json(
+        {
+          error: `Transaction count mismatch: archive was built with ${expectedTransactionCount} transaction(s) up to ${cutoffDate}, but database currently contains ${verifiedTxCount}. Zero-balance aborted to prevent unarchived data loss.`
+        },
+        { status: 409 }
+      )
+    }
+
+    if (typeof expectedAuditCount === 'number' && verifiedAuditCount !== expectedAuditCount) {
+      return NextResponse.json(
+        {
+          error: `Audit log count mismatch: archive was built with ${expectedAuditCount} audit log(s) up to ${cutoffDate}, but database currently contains ${verifiedAuditCount}. Zero-balance aborted to prevent unarchived data loss.`
+        },
+        { status: 409 }
+      )
+    }
+
+    // 4. Save archive server-side in system_archives with count and checksum recorded
+    // PURGE CANNOT PROCEED UNLESS SERVER-SIDE ARCHIVE IS SAFELY PERSISTED
+    const savedArchive = await saveArchiveServerSide(archiveResult, callerInfo)
+
+    // 5. Fetch current transaction and audit documents for deletion up to cutoff
+    const txSnap = await adminDb.collection('transactions').where('date', '<=', cutoffDate).get()
     const count = txSnap.size
+
+    const cutoffTimeThreshold = new Date(`${cutoffDate}T23:59:59.999+05:30`).getTime()
+    const allAuditSnap = await adminDb.collection('audit_logs').get()
+    const auditDocsToDelete = allAuditSnap.docs.filter((d) => {
+      const data = d.data()
+      const ts = data.timestamp || data.createdAt
+      let ms = Infinity
+      if (ts) {
+        if (typeof ts === 'object' && '_seconds' in ts) ms = (ts as { _seconds: number })._seconds * 1000
+        else if (typeof ts === 'object' && 'toDate' in ts) ms = (ts as { toDate: () => Date }).toDate().getTime()
+        else ms = new Date(String(ts)).getTime()
+      }
+      return ms <= cutoffTimeThreshold
+    })
+    const auditCount = auditDocsToDelete.length
+
+    // 6. Purge historical transaction records up to cutoff in chunks of 400
     if (count > 0) {
       const chunkSize = 400
       for (let i = 0; i < txSnap.docs.length; i += chunkSize) {
@@ -854,8 +720,8 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    // 2. Post consolidated opening balance records for any products with active stock
-    // This preserves ledger integrity so derived stock continues to match without disruption
+    // 6. Post consolidated opening balance records dated openingDate (e.g. 1 April)
+    // Marked with isOpeningBalance: true so they cannot be reversed
     const prodsSnap = await adminDb.collection('products').get()
     if (!prodsSnap.empty) {
       const rolloverDocs: { ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown> }[] = []
@@ -879,8 +745,10 @@ export async function PUT(req: NextRequest) {
                   quantity: numStock,
                   locationId: locId,
                   locationName: 'Rollover Opening Balance',
-                  date: getTodayIST(),
-                  notes: 'Rollover opening balance post Master Zero-Balance',
+                  date: openingDate,
+                  notes: `Rollover opening balance as of ${openingDate} following cutoff ${cutoffDate}`,
+                  isOpeningBalance: true,
+                  isOpeningEntry: true,
                   createdAt: FieldValue.serverTimestamp(),
                   timestamp: FieldValue.serverTimestamp(),
                   operatorId: caller.callerUid,
@@ -904,20 +772,18 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    // 3. Scrub audit trail and activity log
-    const auditSnap = await adminDb.collection('audit_logs').get()
-    const auditCount = auditSnap.size
+    // 7. Scrub audit trail up to cutoff
     if (auditCount > 0) {
       const chunkSize = 400
-      for (let i = 0; i < auditSnap.docs.length; i += chunkSize) {
-        const chunk = auditSnap.docs.slice(i, i + chunkSize)
+      for (let i = 0; i < auditDocsToDelete.length; i += chunkSize) {
+        const chunk = auditDocsToDelete.slice(i, i + chunkSize)
         const batch = adminDb.batch()
         chunk.forEach((d) => batch.delete(d.ref))
         await batch.commit()
       }
     }
 
-    // 4. Record single clean post-reset audit log entry for the new baseline with server timestamp
+    // 8. Record single clean post-reset audit log entry for the new baseline with server timestamp
     await adminDb.collection('audit_logs').add({
       userId: caller.callerUid,
       userName: caller.callerName,
@@ -926,15 +792,37 @@ export async function PUT(req: NextRequest) {
       entityType: 'archive',
       entityId: 'master_zero_balance',
       entityName: 'System Reset',
-      description: `Master Zero-Balance executed: purged ${count} transaction(s) and scrubbed ${auditCount} audit log entry/entries. System ledger and activity log reset to a clean slate.`,
+      description: `Master Zero-Balance executed up to cutoff ${cutoffDate}: verified and purged ${count} transaction(s) and scrubbed ${auditCount} audit log(s). Opening balances established on ${openingDate}. All future entries on or before ${cutoffDate} blocked.`,
+      metadata: {
+        cutoffDate,
+        openingDate,
+        purgedTransactions: count,
+        scrubbedAuditLogs: auditCount
+      },
       timestamp: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp()
     })
 
-    return NextResponse.json({ success: true, count, auditCount })
+    // 9. Permanently store the closed fiscal cutoff date so past entries are blocked
+    await setClosedFiscalCutoff(cutoffDate, openingDate, callerInfo)
+
+    return NextResponse.json({
+      success: true,
+      archiveId: savedArchive.archiveId,
+      checksum: savedArchive.checksum,
+      count: verifiedTxCount,
+      auditCount: verifiedAuditCount,
+      cutoffDate,
+      openingDate,
+      archive: archiveResult.archive
+    })
   } catch (err: unknown) {
     console.error('PUT /api/admin/transactions error:', err)
     const msg = err instanceof Error ? err.message : 'Failed to clear transactions'
     return NextResponse.json({ error: msg }, { status: 500 })
+  } finally {
+    if (lockAcquired) {
+      await releaseZeroBalanceLock()
+    }
   }
 }

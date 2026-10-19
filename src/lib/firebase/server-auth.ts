@@ -4,7 +4,7 @@ import {
   SUPER_ADMIN_PERMISSIONS,
   EMPTY_PERMISSIONS
 } from '@/lib/constants/permissions'
-import { UserPermissions } from '@/lib/types'
+import { UserPermissions, UserRole } from '@/lib/types'
 
 export const HARDCODED_PROJECT_ID = FIREBASE_PROJECT_ID
 export const EXPECTED_ISSUER = `https://securetoken.google.com/${HARDCODED_PROJECT_ID}`
@@ -47,8 +47,8 @@ export async function getAuthenticatedCaller(req: NextRequest): Promise<AuthResu
   }
 
   try {
-    // 1. Verify token signature against Google's public x509 certs
-    const decoded = await adminAuth.verifyIdToken(token)
+    // 1. Verify token signature against Google's public x509 certs & enforce revocation checks
+    const decoded = await adminAuth.verifyIdToken(token, true)
 
     // 2. Strict Hard-coded checks for Project ID, Audience, Issuer, and Expiry
     if (decoded.aud !== HARDCODED_PROJECT_ID) {
@@ -80,19 +80,19 @@ export async function getAuthenticatedCaller(req: NextRequest): Promise<AuthResu
       return { ok: false, status: 403, error: 'Forbidden: Admin account is suspended' }
     }
 
-    // Resolve role: existing admin profile without explicit role or with 'admin' maps to 'super_admin'
-    const role =
-      (callerData.role === 'admin' || callerData.role === 'super_admin' || !callerData.role)
-        ? 'super_admin'
-        : callerData.role
+    // STRICT DEFAULT DENY:
+    // Missing role or permissions must NEVER grant super_admin or full access.
+    // If role is missing or empty, access is strictly denied.
+    const rawRole = typeof callerData.role === 'string' ? callerData.role.trim() : ''
+    if (!rawRole) {
+      return { ok: false, status: 403, error: 'Forbidden: Admin account has no assigned role. Access denied.' }
+    }
 
-    const isSuperAdmin =
-      role === 'super_admin' ||
-      decoded.role === 'super_admin' ||
-      decoded.role === 'admin'
+    const role = rawRole as UserRole
+    const isSuperAdmin = role === 'super_admin'
 
-    // DEFAULT TO NO ACCESS: If permissions field is missing, default strictly to EMPTY_PERMISSIONS
-    // (Only an explicit active super_admin receives SUPER_ADMIN_PERMISSIONS)
+    // DEFAULT TO NO ACCESS: Non-super_admin with missing permissions strictly receives EMPTY_PERMISSIONS (zero access).
+    // Only an explicit active super_admin receives SUPER_ADMIN_PERMISSIONS.
     const callerPermissions: UserPermissions = isSuperAdmin
       ? SUPER_ADMIN_PERMISSIONS
       : (callerData.permissions || EMPTY_PERMISSIONS)

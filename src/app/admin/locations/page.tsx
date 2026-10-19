@@ -25,30 +25,6 @@ export default function AdminLocations() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const [locs, prods] = await Promise.all([getLocations(), getProducts()])
-      setLocations(locs)
-
-      // Count total stock units held in each location
-      const counts: Record<string, number> = {}
-      locs.forEach(l => { counts[l.id] = 0 })
-      prods.forEach(p => {
-        if (p.stockByLocation) {
-          Object.entries(p.stockByLocation).forEach(([locId, qty]) => {
-            counts[locId] = (counts[locId] || 0) + Number(qty || 0)
-          })
-        }
-      })
-      setStockCounts(counts)
-    } catch (err: unknown) {
-      console.error('Failed to load locations', err)
-      setError('Could not load locations. Please check your connection.')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   useEffect(() => {
     let ignore = false
@@ -72,7 +48,8 @@ export default function AdminLocations() {
       .catch((err: unknown) => {
         if (!ignore) {
           console.error('Failed to load locations', err)
-          setError('Could not load locations. Please check your connection.')
+          const msg = err instanceof Error ? err.message : 'Could not load locations. Please check your connection.'
+          setError(msg)
           setLoading(false)
         }
       })

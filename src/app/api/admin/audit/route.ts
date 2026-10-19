@@ -31,13 +31,25 @@ export async function GET(req: NextRequest) {
     }
     const { caller } = authResult
 
-    if (!hasModulePermission(caller, 'users', 'view')) {
-      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to view audit logs' }, { status: 403 })
+    const canAccess =
+      hasModulePermission(caller, 'users', 'view') ||
+      hasModulePermission(caller, 'archive', 'zeroBalance') ||
+      hasModulePermission(caller, 'reports', 'export') ||
+      hasModulePermission(caller, 'reports', 'view')
+
+    if (!canAccess) {
+      return NextResponse.json(
+        { error: 'Forbidden: Insufficient permissions to view or export audit logs' },
+        { status: 403 }
+      )
     }
 
     const { searchParams } = new URL(req.url)
+    const isExport = searchParams.get('export') === 'true' || searchParams.get('limit') === 'all'
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
-    const limitCount = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10)), 500)
+    const limitCount = isExport
+      ? 100000
+      : Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50', 10)), 500)
     const userIdFilter = searchParams.get('userId')
     const entityTypeFilter = searchParams.get('entityType')
     const actionFilter = searchParams.get('action')
@@ -54,26 +66,34 @@ export async function GET(req: NextRequest) {
       query = query.where('action', '==', actionFilter)
     }
 
-    // Always order by createdAt descending at the database level so newest entries come first
     let snap: FirebaseFirestore.QuerySnapshot
     let totalCount = 0
     const offset = (page - 1) * limitCount
 
-    try {
-      // Attempt ordered query with count
-      const orderedQuery = query.orderBy('createdAt', 'desc')
+    if (isExport) {
       try {
-        const countSnap = await query.count().get()
-        totalCount = countSnap.data().count
+        snap = await query.orderBy('createdAt', 'desc').get()
       } catch {
-        totalCount = 0
+        snap = await query.get()
       }
-      snap = await orderedQuery.offset(offset).limit(limitCount).get()
-    } catch (err: unknown) {
-      console.warn('Notice: Firestore ordered query fallback with in-memory sort:', err)
-      // Fallback if composite index is creating: retrieve by collection order and sort
-      const fallbackQuery = adminDb.collection('audit_logs').orderBy('createdAt', 'desc')
-      snap = await fallbackQuery.offset(offset).limit(limitCount).get()
+      totalCount = snap.size
+    } else {
+      try {
+        // Attempt ordered query with count
+        const orderedQuery = query.orderBy('createdAt', 'desc')
+        try {
+          const countSnap = await query.count().get()
+          totalCount = countSnap.data().count
+        } catch {
+          totalCount = 0
+        }
+        snap = await orderedQuery.offset(offset).limit(limitCount).get()
+      } catch (err: unknown) {
+        console.warn('Notice: Firestore ordered query fallback with in-memory sort:', err)
+        // Fallback if composite index is creating: retrieve by collection order and sort
+        const fallbackQuery = adminDb.collection('audit_logs').orderBy('createdAt', 'desc')
+        snap = await fallbackQuery.offset(offset).limit(limitCount).get()
+      }
     }
 
     const logs: AuditLogEntry[] = []

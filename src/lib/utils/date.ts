@@ -100,3 +100,32 @@ export function formatDateTimeIST(input: Date | string | number): string {
     hour12: true
   }).format(date) + ' IST'
 }
+
+/**
+ * Returns the next calendar day in YYYY-MM-DD format (e.g. "2026-03-31" -> "2026-04-01").
+ */
+export function getNextDayIST(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  dt.setUTCDate(dt.getUTCDate() + 1)
+  const nextY = dt.getUTCFullYear()
+  const nextM = String(dt.getUTCMonth() + 1).padStart(2, '0')
+  const nextD = String(dt.getUTCDate()).padStart(2, '0')
+  return `${nextY}-${nextM}-${nextD}`
+}
+
+/**
+ * Returns the default Indian financial year cutoff date (31 March).
+ * If today is before 31 March of the current year, returns last year's 31 March;
+ * otherwise returns this year's 31 March (e.g. "2026-03-31").
+ */
+export function getDefaultFiscalCutoffIST(): string {
+  const today = getTodayIST()
+  const year = parseInt(today.slice(0, 4), 10)
+  const march31ThisYear = `${year}-03-31`
+  if (today < march31ThisYear) {
+    return `${year - 1}-03-31`
+  }
+  return march31ThisYear
+}
+

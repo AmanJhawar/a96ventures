@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react'
-import { Trash2, MessageSquare, ChevronDown, Lock } from 'lucide-react'
+import { Trash2, ChevronDown, Lock } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { getInquiriesPage, deleteInquiry, updateInquiryStatus } from '@/lib/services/inquiry.service'

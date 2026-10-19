@@ -145,3 +145,83 @@ export const ROLE_LABELS: Record<UserRole, { label: string; description: string 
     description: 'Individually selected permissions tailored to specific responsibilities.'
   }
 }
+
+export const MODULE_SHORT_CODES: Record<keyof UserPermissions, string> = {
+  products: 'prd',
+  purchases: 'pur',
+  movements: 'mov',
+  sales: 'sal',
+  returns: 'ret',
+  inquiries: 'inq',
+  locations: 'loc',
+  brands: 'brd',
+  team: 'tem',
+  portfolio: 'prt',
+  reports: 'rep',
+  archive: 'arc',
+  users: 'usr'
+}
+
+export const ACTION_SHORT_CODES: Record<string, string> = {
+  view: 'v',
+  add: 'a',
+  edit: 'e',
+  delete: 'd',
+  transfer: 't',
+  adjustment: 'j',
+  repair: 'r',
+  melt: 'm',
+  export: 'x',
+  zeroBalance: 'z',
+  uploadArchive: 'u'
+}
+
+export const SHORT_TO_MODULE: Record<string, keyof UserPermissions> = Object.fromEntries(
+  Object.entries(MODULE_SHORT_CODES).map(([k, v]) => [v, k as keyof UserPermissions])
+)
+
+export const SHORT_TO_ACTION: Record<string, string> = Object.fromEntries(
+  Object.entries(ACTION_SHORT_CODES).map(([k, v]) => [v, k])
+)
+
+/**
+ * Compresses UserPermissions to an array of short codes for granted permissions only (e.g. ['prd:v', 'sal:v']).
+ * Minimizes Firebase Custom Claims footprint from ~851 bytes down to ~50-120 bytes, far below the 1,000-byte token limit.
+ */
+export function permissionsToShortCodes(permissions: UserPermissions): string[] {
+  const codes: string[] = []
+  if (!permissions || typeof permissions !== 'object') return codes
+
+  for (const [moduleKey, actions] of Object.entries(permissions)) {
+    const modCode = MODULE_SHORT_CODES[moduleKey as keyof UserPermissions] || moduleKey
+    if (actions && typeof actions === 'object') {
+      for (const [actionKey, isGranted] of Object.entries(actions as Record<string, boolean>)) {
+        if (isGranted === true) {
+          const actCode = ACTION_SHORT_CODES[actionKey] || actionKey
+          codes.push(`${modCode}:${actCode}`)
+        }
+      }
+    }
+  }
+  return codes
+}
+
+/**
+ * Reconstructs a full UserPermissions object from an array of short codes.
+ */
+export function shortCodesToPermissions(codes: string[]): UserPermissions {
+  const result: UserPermissions = JSON.parse(JSON.stringify(EMPTY_PERMISSIONS))
+  if (!Array.isArray(codes)) return result
+
+  for (const code of codes) {
+    if (typeof code !== 'string') continue
+    const [modCode, actCode] = code.split(':')
+    const moduleKey = SHORT_TO_MODULE[modCode] || (modCode as keyof UserPermissions)
+    const actionKey = SHORT_TO_ACTION[actCode] || actCode
+
+    if (result[moduleKey] && typeof (result[moduleKey] as Record<string, boolean>)[actionKey] === 'boolean') {
+      (result[moduleKey] as Record<string, boolean>)[actionKey] = true
+    }
+  }
+  return result
+}

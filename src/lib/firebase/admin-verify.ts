@@ -6,7 +6,7 @@
  * hard-coded checks for project ID, audience, issuer, and expiration.
  */
 
-import { adminAuth, adminDb, FIREBASE_PROJECT_ID } from '@/lib/firebase/admin'
+import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { DecodedIdToken } from 'firebase-admin/auth'
 
 // HARD-CODED PROJECT ID: Enforces absolute immunity against cross-project token leakage
@@ -37,8 +37,8 @@ export async function verifyAdminToken(authHeader: string | null): Promise<Verif
   }
 
   try {
-    // 1. Cryptographically verify signature using Google's public certs
-    const decoded = await adminAuth.verifyIdToken(token)
+    // 1. Cryptographically verify signature using Google's public certs & enforce revocation checks
+    const decoded = await adminAuth.verifyIdToken(token, true)
 
     // 2. Strict Hard-coded Audience Validation
     if (decoded.aud !== HARDCODED_PROJECT_ID) {

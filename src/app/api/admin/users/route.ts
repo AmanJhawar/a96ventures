@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminAuth, adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { randomBytes } from 'crypto'
 import {
-  ROLE_PRESETS,
   SUPER_ADMIN_PERMISSIONS,
-  EMPTY_PERMISSIONS
+  EMPTY_PERMISSIONS,
+  permissionsToShortCodes
 } from '@/lib/constants/permissions'
 import { AdminUser, UserPermissions, UserRole, UserStatus } from '@/lib/types'
-import { getAuthenticatedCaller, hasModulePermission as hasPermission } from '@/lib/firebase/server-auth'
+import { getAuthenticatedCaller } from '@/lib/firebase/server-auth'
 
 // Helper: Wrapper for getAuthenticatedCaller to match route expectations
 async function getCaller(req: NextRequest) {
@@ -40,9 +41,26 @@ export async function GET(req: NextRequest) {
     const snap = await adminDb.collection('admins').get()
     const users: AdminUser[] = []
 
-    snap.forEach((doc) => {
+    for (const doc of snap.docs) {
       const data = doc.data()
-      const role: UserRole = data.role || 'custom'
+      let role = data.role as UserRole | undefined
+      // Set roles on any old records with no role: default to 'custom' (no unearned super_admin access)
+      if (!role) {
+        role = 'custom'
+        await doc.ref.update({
+          role: 'custom',
+          permissions: data.permissions || EMPTY_PERMISSIONS,
+          updatedAt: new Date().toISOString()
+        })
+      }
+      const status: UserStatus = (data.status as UserStatus) || 'active'
+      if (!data.status) {
+        await doc.ref.update({
+          status: 'active',
+          updatedAt: new Date().toISOString()
+        })
+      }
+
       // STRICT DEFAULT DENY: Missing permissions field must never fall open or load presets
       const permissions: UserPermissions =
         role === 'super_admin'
@@ -55,7 +73,7 @@ export async function GET(req: NextRequest) {
         displayName: data.displayName || data.name || data.email?.split('@')[0] || 'User',
         phoneNumber: data.phoneNumber || '',
         role,
-        status: (data.status as UserStatus) || 'active',
+        status,
         assignedLocationId: data.assignedLocationId || undefined,
         assignedLocationName: data.assignedLocationName || undefined,
         permissions,
@@ -65,7 +83,7 @@ export async function GET(req: NextRequest) {
         createdById: data.createdById,
         createdByEmail: data.createdByEmail
       })
-    })
+    }
 
     users.sort((a, b) => a.displayName.localeCompare(b.displayName))
 
@@ -120,10 +138,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden: Only Super Admins can create Super Admin accounts' }, { status: 403 })
     }
 
-    // Passwords must be at least 6 characters. Generate one if omitted.
+    // Passwords must be at least 6 characters. Generate a secure random password if omitted.
     const cleanPassword = password && String(password).length >= 6
       ? String(password)
-      : Math.random().toString(36).slice(-8) + 'A9!'
+      : randomBytes(24).toString('base64')
 
     // 1. Create User in Firebase Auth
     let userRecord
@@ -145,11 +163,11 @@ export async function POST(req: NextRequest) {
         ? SUPER_ADMIN_PERMISSIONS
         : (permissions || EMPTY_PERMISSIONS)
 
-    // 2. Set Custom User Claims on Firebase Auth token
+    // 2. Set Custom User Claims on Firebase Auth token using compact short codes to stay well under 1,000-byte limit
     await adminAuth.setCustomUserClaims(userRecord.uid, {
       role: userRole,
       status: status,
-      permissions: resolvedPermissions
+      perms: permissionsToShortCodes(resolvedPermissions)
     })
 
     const now = new Date().toISOString()
@@ -209,8 +227,7 @@ export async function POST(req: NextRequest) {
         id: userRecord.uid,
         ...adminDocData
       },
-      emailSent,
-      temporaryPassword: password ? undefined : cleanPassword
+      emailSent
     })
   } catch (err: unknown) {
     console.error('POST /api/admin/users error:', err)
@@ -309,15 +326,16 @@ export async function PUT(req: NextRequest) {
     // When an account is suspended, wipe permissions to prevent any latent access
     const finalPermissions: UserPermissions = isSuspended ? EMPTY_PERMISSIONS : updatedPermissions
 
-    // 2. Set updated Custom Claims (claim checked in Firestore security rules)
+    // 2. Set updated Custom Claims using compact short codes to stay well under 1,000-byte token limit
     await adminAuth.setCustomUserClaims(id, {
       role: updatedRole,
       status: updatedStatus,
-      permissions: finalPermissions
+      perms: permissionsToShortCodes(finalPermissions)
     })
 
-    // 3. Immediately revoke all refresh tokens and sessions upon suspension
-    if (isSuspended) {
+    // 3. Immediately revoke all refresh tokens and sessions upon suspension OR ANY role change
+    const isRoleChanged = role !== undefined && role !== currentData.role
+    if (isSuspended || isRoleChanged) {
       try {
         await adminAuth.revokeRefreshTokens(id)
       } catch (revokeErr) {

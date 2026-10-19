@@ -19,6 +19,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ revalidated: true, now: Date.now() })
   } catch (err) {
     console.error('Error revalidating path:', path, err)
-    return NextResponse.json({ message: 'Error revalidating', error: String(err) }, { status: 500 })
+    return NextResponse.json({ message: 'Internal server error while revalidating path' }, { status: 500 })
   }
 }

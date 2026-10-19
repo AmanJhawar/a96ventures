@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Plus,
   Trash2,
@@ -8,23 +8,20 @@ import {
   AlertCircle,
   X,
   Check,
-  ShieldCheck,
-  ShieldAlert,
   History,
   Users,
   Search,
-  Filter,
-  ArrowRight,
-  UserCheck,
-  Clock,
   MapPin,
   Lock,
   Unlock,
-  AlertTriangle,
   Mail,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Download,
+  Upload,
+  Archive
 } from 'lucide-react'
+import { useArchive } from '@/lib/context/ArchiveContext'
 import { AdminUser, UserRole, UserStatus, UserPermissions, AuditLogEntry, Location } from '@/lib/types'
 import {
   getAdminUsers,
@@ -34,7 +31,7 @@ import {
   updateUserStatus,
   sendPasswordResetEmail
 } from '@/lib/services/users.service'
-import { getAuditLogs } from '@/lib/services/audit.service'
+import { getAuditLogs, exportFullAuditTrail } from '@/lib/services/audit.service'
 import { getLocations } from '@/lib/services/inventory.service'
 import {
   ROLE_PRESETS,
@@ -56,7 +53,7 @@ import { EASE_OUT } from '@/components/motion-transitions'
 type UsersTab = 'directory' | 'audit'
 
 export default function AdminUsersPage() {
-  const { adminUser: currentLoggedUser, isSuperAdmin } = usePermissions()
+  const { adminUser: currentLoggedUser, isSuperAdmin, hasPermission } = usePermissions()
 
   // Primary Data State
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -71,7 +68,7 @@ export default function AdminUsersPage() {
   // Filter States - Audit
   const [auditSearch, setAuditSearch] = useState('')
   const [auditEntityFilter, setAuditEntityFilter] = useState<string>('all')
-  const [auditActionFilter, setAuditActionFilter] = useState<string>('all')
+  const auditActionFilter = 'all'
 
   // Form Drawer State
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -92,34 +89,9 @@ export default function AdminUsersPage() {
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
   const [statusTarget, setStatusTarget] = useState<AdminUser | null>(null)
 
-  // Load All Data
-  const loadData = async () => {
-    if (!isSuperAdmin) {
-      setLoading(false)
-      return
-    }
-    try {
-      const [uList, aList, locList] = await Promise.all([
-        getAdminUsers(),
-        getAuditLogs({ limitCount: 500 }),
-        getLocations()
-      ])
-      setUsers(uList)
-      setAuditLogs(aList)
-      setLocations(locList)
-    } catch (err) {
-      console.error('Failed to load users data:', err)
-      const msg = err instanceof Error ? err.message : 'Unable to load users data'
-      toast.error(msg)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
     let ignore = false
     if (!isSuperAdmin) {
-      setLoading(false)
       return
     }
 
@@ -144,6 +116,7 @@ export default function AdminUsersPage() {
           setLoading(false)
         }
       })
+
     return () => {
       ignore = true
     }
@@ -169,9 +142,29 @@ export default function AdminUsersPage() {
     return users.filter((u) => u.role === selectedRoleFilter)
   }, [users, selectedRoleFilter])
 
+  // Shared Offline Archive state
+  const { archivedSession, loadArchiveFromFile, exitArchive } = useArchive()
+  const archiveFileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const handleArchiveUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      await loadArchiveFromFile(file)
+      setActiveTab('audit')
+    } finally {
+      if (e.target) e.target.value = ''
+    }
+  }
+
+  // Active audit logs (switches to archived logs when an archive is loaded)
+  const currentAuditLogs = useMemo(() => {
+    return archivedSession ? archivedSession.auditLogs : auditLogs
+  }, [archivedSession, auditLogs])
+
   // Filtered Audit Logs
   const filteredAuditLogs = useMemo(() => {
-    return auditLogs.filter((entry) => {
+    return currentAuditLogs.filter((entry) => {
       const matchSearch =
         auditSearch === '' ||
         entry.description.toLowerCase().includes(auditSearch.toLowerCase()) ||
@@ -183,21 +176,40 @@ export default function AdminUsersPage() {
 
       return matchSearch && matchEntity && matchAction
     })
-  }, [auditLogs, auditSearch, auditEntityFilter, auditActionFilter])
+  }, [currentAuditLogs, auditSearch, auditEntityFilter, auditActionFilter])
 
   // Audit Logs Pagination State
   const [auditPage, setAuditPage] = useState(1)
   const auditPageSize = 25
   const totalAuditPages = Math.ceil(filteredAuditLogs.length / auditPageSize) || 1
+  const safeAuditPage = Math.min(Math.max(1, auditPage), totalAuditPages)
   const paginatedAuditLogs = useMemo(() => {
-    const start = (auditPage - 1) * auditPageSize
+    const start = (safeAuditPage - 1) * auditPageSize
     return filteredAuditLogs.slice(start, start + auditPageSize)
-  }, [filteredAuditLogs, auditPage, auditPageSize])
+  }, [filteredAuditLogs, safeAuditPage, auditPageSize])
 
-  // Reset page when search or filters change
-  useEffect(() => {
-    setAuditPage(1)
-  }, [auditSearch, auditEntityFilter, auditActionFilter])
+  const [exportingAudit, setExportingAudit] = useState(false)
+
+  const handleExportAuditTrail = async () => {
+    try {
+      setExportingAudit(true)
+      toast.loading('Exporting full audit trail from server...', { id: 'audit-export' })
+      const { count } = await exportFullAuditTrail({
+        entityType: auditEntityFilter,
+        action: auditActionFilter
+      })
+      toast.success('Audit trail export complete', {
+        id: 'audit-export',
+        description: `Exported ${count} audit record(s) to CSV.`
+      })
+    } catch (err: unknown) {
+      console.error('Failed to export audit trail:', err)
+      const msg = err instanceof Error ? err.message : 'Failed to export audit trail'
+      toast.error('Export failed', { id: 'audit-export', description: msg })
+    } finally {
+      setExportingAudit(false)
+    }
+  }
 
   // Handle Opening Form for Add
   const handleOpenAdd = () => {
@@ -321,8 +333,7 @@ export default function AdminUsersPage() {
             assignedLocationName: locName,
             permissions: payloadPermissions,
             ...(formPassword.trim() ? { password: formPassword.trim() } : {})
-          },
-          actorInfo
+          }
         )
         setUsers((prev) =>
           prev.map((u) =>
@@ -372,13 +383,9 @@ export default function AdminUsersPage() {
         setUsers((prev) => [newUser, ...prev])
 
         if (createResult.emailSent) {
-          toast.success(`User created! Set-password link emailed to ${formEmail}`)
-        } else if (createResult.temporaryPassword) {
-          toast.success(`User created! Initial password: ${createResult.temporaryPassword}`, {
-            duration: 10000
-          })
+          toast.success(`User created! A secure set-password link was emailed to ${formEmail}`)
         } else {
-          toast.success('New user created successfully')
+          toast.success('New user created successfully. Password setup link has been sent.')
         }
       }
 
@@ -396,10 +403,7 @@ export default function AdminUsersPage() {
   const executeDelete = async () => {
     if (!deleteTarget) return
     try {
-      await deleteAdminUser(deleteTarget.id, {
-        id: currentLoggedUser?.id || 'admin',
-        email: currentLoggedUser?.email || 'admin@a96ventures.com'
-      })
+      await deleteAdminUser(deleteTarget.id)
       setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id))
       toast.success('User deleted')
       setDeleteTarget(null)
@@ -414,10 +418,7 @@ export default function AdminUsersPage() {
     if (!statusTarget) return
     const newStatus: UserStatus = statusTarget.status === 'active' ? 'suspended' : 'active'
     try {
-      await updateUserStatus(statusTarget.id, newStatus, {
-        id: currentLoggedUser?.id || 'admin',
-        email: currentLoggedUser?.email || 'admin@a96ventures.com'
-      })
+      await updateUserStatus(statusTarget.id, newStatus)
       setUsers((prev) => prev.map((u) => (u.id === statusTarget.id ? { ...u, status: newStatus } : u)))
       toast.success(newStatus === 'active' ? 'Account activated' : 'Account suspended')
       setStatusTarget(null)
@@ -427,7 +428,7 @@ export default function AdminUsersPage() {
     }
   }
 
-  if (!loading && !isSuperAdmin) {
+  if (!isSuperAdmin) {
     return (
       <div className="w-full py-16 flex flex-col items-center justify-center text-center">
         <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4 text-gray-500">
@@ -489,7 +490,7 @@ export default function AdminUsersPage() {
             }`}
         >
           <History size={16} />
-          Audit Trail & Activity Log ({auditLogs.length})
+          Audit Trail & Activity Log ({currentAuditLogs.length})
         </button>
       </div>
 
@@ -1054,6 +1055,67 @@ export default function AdminUsersPage() {
       {/* Tab 2: Audit Trail */}
       {activeTab === 'audit' && (
         <div className="space-y-6">
+          <input
+            type="file"
+            ref={archiveFileInputRef}
+            accept=".json,application/json"
+            onChange={handleArchiveUpload}
+            className="hidden"
+          />
+
+          {/* Offline Archive Viewer Active Notification */}
+          {archivedSession && (
+            <div className={`p-4 rounded-xl flex items-center justify-between flex-wrap gap-3 border ${
+              archivedSession.verification.status === 'tampered'
+                ? 'bg-red-50/70 border-red-300'
+                : archivedSession.verification.status === 'verified'
+                  ? 'bg-emerald-50/60 border-emerald-300'
+                  : 'bg-gray-50 border-gray-300'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                  archivedSession.verification.status === 'tampered'
+                    ? 'bg-red-600 text-white'
+                    : archivedSession.verification.status === 'verified'
+                      ? 'bg-emerald-700 text-white'
+                      : 'bg-black text-white'
+                }`}>
+                  <Archive size={16} />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-black flex items-center gap-2 flex-wrap">
+                    Viewing Offline Archive: {archivedSession.filename}
+                    {archivedSession.verification.status === 'verified' && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        ✓ Cryptographically Verified (SHA-256)
+                      </span>
+                    )}
+                    {archivedSession.verification.status === 'tampered' && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-300 animate-pulse">
+                        ⚠️ TAMPER WARNING: Checksum Mismatch (Altered File)
+                      </span>
+                    )}
+                    {archivedSession.verification.status === 'unverified' && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                        ⚠️ Legacy Archive (No Checksum)
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-600 mt-0.5">
+                    {archivedSession.auditLogs.length} historical audit entries · {archivedSession.transactions.length} inventory transactions · Exported {new Date(archivedSession.exportedAt).toLocaleDateString()}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={exitArchive}
+                className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:text-black hover:bg-gray-100 transition-[background-color,transform] active:scale-[0.97]"
+              >
+                <X size={13} />
+                Exit Archive View
+              </button>
+            </div>
+          )}
+
           {/* Audit Search & Filters */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
             <div className="relative flex-1 max-w-md">
@@ -1062,25 +1124,54 @@ export default function AdminUsersPage() {
                 type="text"
                 placeholder="Search audit narrative, user, or entity..."
                 value={auditSearch}
-                onChange={(e) => setAuditSearch(e.target.value)}
+                onChange={(e) => {
+                  setAuditSearch(e.target.value)
+                  setAuditPage(1)
+                }}
                 className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
               />
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Entity:</span>
-              {(['all', 'product', 'sale', 'movement', 'purchase', 'user', 'archive'] as const).map((ent) => (
+            <div className="flex items-center gap-3 overflow-x-auto pb-1 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Entity:</span>
+                {(['all', 'product', 'sale', 'movement', 'purchase', 'user', 'archive'] as const).map((ent) => (
+                  <button
+                    key={ent}
+                    onClick={() => {
+                      setAuditEntityFilter(ent)
+                      setAuditPage(1)
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${auditEntityFilter === ent
+                        ? 'bg-black text-white border border-black shadow-xs'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                      }`}
+                  >
+                    {ent}
+                  </button>
+                ))}
+              </div>
+
+              {hasPermission('archive', 'uploadArchive') && (
                 <button
-                  key={ent}
-                  onClick={() => setAuditEntityFilter(ent)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${auditEntityFilter === ent
-                      ? 'bg-black text-white border border-black shadow-xs'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
-                    }`}
+                  onClick={() => archiveFileInputRef.current?.click()}
+                  title="Upload an offline archive JSON to inspect historical audit logs"
+                  className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-black rounded-lg text-xs font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] shrink-0"
                 >
-                  {ent}
+                  <Upload size={14} />
+                  Upload Archive
                 </button>
-              ))}
+              )}
+
+              <button
+                onClick={handleExportAuditTrail}
+                disabled={exportingAudit || Boolean(archivedSession)}
+                className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-black rounded-lg text-xs font-semibold transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] shrink-0 disabled:opacity-40"
+                title="Export complete audit trail on the server to CSV"
+              >
+                <Download size={14} />
+                {exportingAudit ? 'Exporting...' : 'Export Audit Trail'}
+              </button>
             </div>
           </div>
 

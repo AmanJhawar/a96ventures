@@ -199,18 +199,17 @@ export async function DELETE(req: NextRequest) {
 
     const locData = locSnap.data() || {}
 
-    // Verify no product holds stock at this location
+    // Verify no product holds stock at this location (including archived products)
     const prodsSnap = await adminDb.collection('products').get()
     const hasStock = prodsSnap.docs.some((doc) => {
       const p = doc.data()
-      if (p.isArchived) return false
       const locStock = p.stockByLocation?.[id] || 0
       return Number(locStock) > 0
     })
 
     if (hasStock) {
       return NextResponse.json({
-        error: 'Cannot delete this location because products currently hold stock here. Transfer or adjust stock first.'
+        error: 'Cannot delete this location because active or archived products currently hold stock here. Transfer or adjust stock first.'
       }, { status: 400 })
     }
 

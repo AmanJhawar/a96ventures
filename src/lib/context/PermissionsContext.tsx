@@ -38,11 +38,11 @@ export function PermissionsProvider({
   children: React.ReactNode
   adminUser: AdminUser | null
 }) {
-  // Root admin profile (super_admin or legacy admin) retains full super admin privileges
+  // Root admin profile (super_admin) retains full super admin privileges. Missing role never grants access.
   const isSuperAdmin = Boolean(
     adminUser &&
     adminUser.status === 'active' &&
-    (adminUser.role === 'super_admin' || (adminUser.role as string) === 'admin' || !adminUser.role)
+    adminUser.role === 'super_admin'
   )
 
   const permissions = useMemo(() => {

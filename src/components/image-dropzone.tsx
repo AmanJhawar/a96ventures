@@ -14,7 +14,7 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleUpload = async (file: File) => {
+  const handleUpload = useCallback(async (file: File) => {
     if (!file || !file.type.startsWith('image/')) return
 
     setIsUploading(true)
@@ -72,7 +72,7 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
         fileInputRef.current.value = ''
       }
     }
-  }
+  }, [onChange])
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -89,7 +89,7 @@ export function ImageDropzone({ value, onChange }: ImageDropzoneProps) {
     setIsDragging(false)
     const file = e.dataTransfer.files?.[0]
     if (file) handleUpload(file)
-  }, [])
+  }, [handleUpload])
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

@@ -8,9 +8,10 @@ import Link from 'next/link'
 import { LogOut, LayoutDashboard, Users, Briefcase, Bookmark, MessageSquare, Menu, X, ShoppingCart, Warehouse, MapPin, BarChart3, ShieldCheck, Lock, Shield } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
-import { AdminUser, UserPermissions, UserRole } from '@/lib/types'
+import { AdminUser, UserPermissions, UserRole, UserStatus } from '@/lib/types'
 import { PermissionsProvider, usePermissions } from '@/lib/context/PermissionsContext'
-import { SUPER_ADMIN_PERMISSIONS, EMPTY_PERMISSIONS } from '@/lib/constants/permissions'
+import { ArchiveProvider } from '@/lib/context/ArchiveContext'
+import { SUPER_ADMIN_PERMISSIONS, EMPTY_PERMISSIONS, shortCodesToPermissions } from '@/lib/constants/permissions'
 import { TwoFactorModal } from '@/components/two-factor-modal'
 
 interface NavItemConfig {
@@ -243,13 +244,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             return
           }
 
-          // Resolve role: existing admin profile without explicit role or with 'admin' maps to 'super_admin'
-          const role: UserRole =
-            (data.role === 'admin' || data.role === 'super_admin' || !data.role)
-              ? 'super_admin'
-              : (data.role as UserRole)
+          // STRICT DEFAULT DENY:
+          // A missing role must NEVER default to super_admin.
+          if (!data.role) {
+            setUser(currentUser)
+            setAdminUser(null)
+            setProfileError('Access Denied: Administrator profile has no assigned role. Access is strictly denied.')
+            setLoading(false)
+            return
+          }
+
+          const role: UserRole = data.role as UserRole
           const isSuperAdmin = role === 'super_admin'
-          const status = data.status || 'active'
+          const status: UserStatus = (data.status as UserStatus) || 'active'
+
+          // If the profile document lacks a status field, persist the worked-out status
+          if (!data.status) {
+            try {
+              const { updateDoc } = await import('firebase/firestore/lite')
+              await updateDoc(doc(db, 'admins', currentUser.uid), {
+                status: 'active'
+              })
+            } catch (statusWriteErr) {
+              console.warn('Notice: Failed to auto-populate missing status field:', statusWriteErr)
+            }
+          }
 
           // If the auth token doesn't have custom claims yet, sync with server
           if (!claims.role) {
@@ -275,7 +294,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           const permissions: UserPermissions =
             isSuperAdmin
               ? SUPER_ADMIN_PERMISSIONS
-              : (data.permissions || (claims.permissions as UserPermissions) || EMPTY_PERMISSIONS)
+              : (data.permissions || (Array.isArray(claims.perms) ? shortCodesToPermissions(claims.perms as string[]) : undefined) || (claims.permissions as UserPermissions) || EMPTY_PERMISSIONS)
 
           const loaded: AdminUser = {
             id: currentUser.uid,
@@ -283,7 +302,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             displayName: data.displayName || data.name || currentUser.displayName || 'User',
             phoneNumber: data.phoneNumber || '',
             role,
-            status: data.status,
+            status,
             assignedLocationId: data.assignedLocationId || undefined,
             assignedLocationName: data.assignedLocationName || undefined,
             permissions,
@@ -418,69 +437,71 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <PermissionsProvider adminUser={adminUser}>
-      <div className="min-h-screen flex flex-col md:flex-row bg-gray-50 text-black">
-        {/* Mobile Top Bar */}
-        <div className="md:hidden bg-white border-b border-gray-200 p-4 flex items-center justify-between sticky top-0 z-20">
-          <span className="text-lg font-bold tracking-tight">A96 Admin</span>
-          <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -mr-2 text-gray-500 hover:text-black transition-[color,transform] active:scale-[0.97]">
-            <Menu size={24} />
-          </button>
-        </div>
-
-        {/* Desktop Sidebar */}
-        <aside className="w-64 bg-white border-r border-gray-200 flex flex-col hidden md:flex sticky top-0 h-screen shrink-0">
-          <SidebarContent
-            setIsMobileMenuOpen={setIsMobileMenuOpen}
-            adminUser={adminUser}
-            onOpenTwoFactor={() => setIsTwoFactorOpen(true)}
-          />
-        </aside>
-
-        {/* Mobile Sidebar Overlay */}
-        <AnimatePresence>
-          {isMobileMenuOpen && (
-            <div className="md:hidden fixed inset-0 z-30" onClick={() => setIsMobileMenuOpen(false)}>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2, ease: EASE_OUT }}
-                className="absolute inset-0 bg-black/50"
-              />
-              <motion.aside
-                initial={{ opacity: shouldReduceMotion ? 0 : 1, transform: shouldReduceMotion ? "none" : "translateX(-100%)" }}
-                animate={{ opacity: 1, transform: shouldReduceMotion ? "none" : "translateX(0%)" }}
-                exit={{ opacity: shouldReduceMotion ? 0 : 1, transform: shouldReduceMotion ? "none" : "translateX(-100%)" }}
-                transition={{ duration: shouldReduceMotion ? 0.15 : 0.25, ease: [0.32, 0.72, 0, 1] }}
-                className="relative w-64 bg-white h-full flex flex-col z-10"
-                onClick={e => e.stopPropagation()}
-              >
-                <SidebarContent
-                  setIsMobileMenuOpen={setIsMobileMenuOpen}
-                  adminUser={adminUser}
-                  onOpenTwoFactor={() => setIsTwoFactorOpen(true)}
-                />
-              </motion.aside>
-            </div>
-          )}
-        </AnimatePresence>
-
-        {/* Main Content */}
-        <main className="flex-1 p-6 md:p-12 overflow-y-auto min-h-screen">
-          <div className={pathname.startsWith('/admin/inventory') || pathname.startsWith('/admin/sales') || pathname.startsWith('/admin/reports') || pathname.startsWith('/admin/users') ? 'w-full max-w-7xl mx-auto' : 'max-w-6xl mx-auto'}>
-            <AdminPageGate>
-              {children}
-            </AdminPageGate>
+      <ArchiveProvider>
+        <div className="min-h-screen flex flex-col md:flex-row bg-gray-50 text-black">
+          {/* Mobile Top Bar */}
+          <div className="md:hidden bg-white border-b border-gray-200 p-4 flex items-center justify-between sticky top-0 z-20">
+            <span className="text-lg font-bold tracking-tight">A96 Admin</span>
+            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -mr-2 text-gray-500 hover:text-black transition-[color,transform] active:scale-[0.97]">
+              <Menu size={24} />
+            </button>
           </div>
-        </main>
 
-        {/* Two-Step Verification (MFA) Modal */}
-        <TwoFactorModal
-          isOpen={isTwoFactorOpen}
-          onClose={() => setIsTwoFactorOpen(false)}
-          user={user}
-        />
-      </div>
+          {/* Desktop Sidebar */}
+          <aside className="w-64 bg-white border-r border-gray-200 flex flex-col hidden md:flex sticky top-0 h-screen shrink-0">
+            <SidebarContent
+              setIsMobileMenuOpen={setIsMobileMenuOpen}
+              adminUser={adminUser}
+              onOpenTwoFactor={() => setIsTwoFactorOpen(true)}
+            />
+          </aside>
+
+          {/* Mobile Sidebar Overlay */}
+          <AnimatePresence>
+            {isMobileMenuOpen && (
+              <div className="md:hidden fixed inset-0 z-30" onClick={() => setIsMobileMenuOpen(false)}>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2, ease: EASE_OUT }}
+                  className="absolute inset-0 bg-black/50"
+                />
+                <motion.aside
+                  initial={{ opacity: shouldReduceMotion ? 0 : 1, transform: shouldReduceMotion ? "none" : "translateX(-100%)" }}
+                  animate={{ opacity: 1, transform: shouldReduceMotion ? "none" : "translateX(0%)" }}
+                  exit={{ opacity: shouldReduceMotion ? 0 : 1, transform: shouldReduceMotion ? "none" : "translateX(-100%)" }}
+                  transition={{ duration: shouldReduceMotion ? 0.15 : 0.25, ease: [0.32, 0.72, 0, 1] }}
+                  className="relative w-64 bg-white h-full flex flex-col z-10"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <SidebarContent
+                    setIsMobileMenuOpen={setIsMobileMenuOpen}
+                    adminUser={adminUser}
+                    onOpenTwoFactor={() => setIsTwoFactorOpen(true)}
+                  />
+                </motion.aside>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* Main Content */}
+          <main className="flex-1 p-6 md:p-12 overflow-y-auto min-h-screen">
+            <div className={pathname.startsWith('/admin/inventory') || pathname.startsWith('/admin/sales') || pathname.startsWith('/admin/reports') || pathname.startsWith('/admin/users') ? 'w-full max-w-7xl mx-auto' : 'max-w-6xl mx-auto'}>
+              <AdminPageGate>
+                {children}
+              </AdminPageGate>
+            </div>
+          </main>
+
+          {/* Two-Step Verification (MFA) Modal */}
+          <TwoFactorModal
+            isOpen={isTwoFactorOpen}
+            onClose={() => setIsTwoFactorOpen(false)}
+            user={user}
+          />
+        </div>
+      </ArchiveProvider>
     </PermissionsProvider>
   )
 }

@@ -48,7 +48,6 @@ export interface CreateAdminUserParams {
 
 export interface CreateUserResult {
   id: string
-  temporaryPassword?: string
   emailSent?: boolean
 }
 
@@ -72,7 +71,6 @@ export async function createAdminUser(params: CreateAdminUserParams): Promise<Cr
   const data = await res.json()
   return {
     id: data.user?.id || data.id,
-    temporaryPassword: data.temporaryPassword,
     emailSent: data.emailSent
   }
 }
@@ -102,8 +100,7 @@ export async function sendPasswordResetEmail(id: string): Promise<boolean> {
  */
 export async function updateAdminUser(
   id: string,
-  updates: Partial<AdminUser> & { password?: string },
-  _actor?: { id: string; email: string }
+  updates: Partial<AdminUser> & { password?: string }
 ): Promise<void> {
   const headers = await getAuthHeaders()
   const res = await fetch('/api/admin/users', {
@@ -121,10 +118,7 @@ export async function updateAdminUser(
 /**
  * Delete a user account via the server Admin API.
  */
-export async function deleteAdminUser(
-  id: string,
-  _actor?: { id: string; email: string }
-): Promise<void> {
+export async function deleteAdminUser(id: string): Promise<void> {
   const headers = await getAuthHeaders()
   const res = await fetch(`/api/admin/users?id=${encodeURIComponent(id)}`, {
     method: 'DELETE',
@@ -142,8 +136,7 @@ export async function deleteAdminUser(
  */
 export async function updateUserStatus(
   id: string,
-  status: UserStatus,
-  actor?: { id: string; email: string }
+  status: UserStatus
 ): Promise<void> {
-  await updateAdminUser(id, { status }, actor)
+  await updateAdminUser(id, { status })
 }

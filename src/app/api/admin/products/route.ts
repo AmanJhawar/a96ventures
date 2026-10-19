@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getAuthenticatedCaller, hasModulePermission } from '@/lib/firebase/server-auth'
-import { ProductCategory, MetalType } from '@/lib/types'
+import { ProductCategory, MetalType, Product } from '@/lib/types'
 import { gramsToMg, mgToGrams, calculateAverageWeight } from '@/lib/utils/weight'
 import { getTodayIST } from '@/lib/utils/date'
 
@@ -117,6 +117,14 @@ export async function POST(req: NextRequest) {
       initQty = validPieceWeights.length
     }
 
+    const isSuperAdmin = caller.isSuperAdmin
+    const userAssignedLoc = caller.callerData.assignedLocationId
+    if (!isSuperAdmin && userAssignedLoc && initialLocationId && initialLocationId !== userAssignedLoc) {
+      return NextResponse.json({
+        error: `Access Denied: You are assigned to ${caller.callerData.assignedLocationName || 'another store'} and cannot initialize stock at a different location.`
+      }, { status: 403 })
+    }
+
     if (initQty > 0 && initialLocationId) {
       stockByLocation[initialLocationId] = initQty
       totalStock = initQty
@@ -125,8 +133,6 @@ export async function POST(req: NextRequest) {
         pieceWeightsByLocationMg[initialLocationId] = validPieceWeightsMg
       }
     }
-
-    const nowIso = new Date().toISOString()
     const cleanName = String(name).trim()
 
     // Create Product, initial transaction, and audit log atomically in a single batch
@@ -237,6 +243,11 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
 
+    const currentProduct = productSnap.data() as Product
+    const currentCategory = (currentProduct.category === 'MMTC PAMP' ? 'Bullions' : currentProduct.category) as ProductCategory
+    const currentMetal = currentProduct.metal as MetalType
+    const currentStock = Number(currentProduct.stock || 0)
+
     // Separate brand from category
     let cleanCategory: ProductCategory = category as ProductCategory
     let cleanBrand = brand ? String(brand).trim() : ''
@@ -254,6 +265,32 @@ export async function PUT(req: NextRequest) {
 
     const cleanMetal = metal as MetalType
     const cleanPurity = String(purity).trim()
+
+    // Lock category and metal once a product has entries or stock
+    const isCategoryChanging = cleanCategory !== currentCategory
+    const isMetalChanging = cleanMetal !== currentMetal
+
+    if (isCategoryChanging || isMetalChanging) {
+      let hasEntries = currentStock > 0
+      if (!hasEntries && currentProduct.stockByLocation) {
+        hasEntries = Object.values(currentProduct.stockByLocation).some((s) => Number(s) > 0)
+      }
+      if (!hasEntries) {
+        const txSnap = await adminDb.collection('transactions')
+          .where('productId', '==', id)
+          .limit(1)
+          .get()
+        if (!txSnap.empty) {
+          hasEntries = true
+        }
+      }
+
+      if (hasEntries) {
+        return NextResponse.json({
+          error: 'Cannot change category or metal: this product already has inventory history or stock. Category and metal are permanently locked once a product has entries.'
+        }, { status: 400 })
+      }
+    }
 
     // Tie purity to metal
     const validPurities = ALLOWED_PURITIES_BY_METAL[cleanMetal] || ['999.9']
@@ -282,30 +319,26 @@ export async function PUT(req: NextRequest) {
     const isIdol = cleanCategory === 'Idols'
     let numWeight = Number(weight)
 
-    const rawPieces: unknown[] = Array.isArray(body.pieceWeights) ? body.pieceWeights : []
-    const validPieceWeights: number[] = rawPieces.map(Number).filter((w) => !isNaN(w) && w > 0)
-    const validPieceWeightsMg: number[] = validPieceWeights.map(gramsToMg)
-
     if (isIdol) {
-      if (validPieceWeights.length > 0) {
-        numWeight = calculateAverageWeight(validPieceWeights)
-      } else if (isNaN(numWeight) || numWeight < 0) {
-        numWeight = 0
-      }
+      // For Idols, weight is managed through its pieces.
+      // Editing an idol product must NEVER replace its piece list or touch per-location lists/stock.
+      // Change pieces only through purchases and adjustments.
+      numWeight = Number(currentProduct.weight || 0)
     } else {
       if (isNaN(numWeight) || numWeight <= 0) {
         return NextResponse.json({ error: 'Product weight is mandatory and must be greater than 0g' }, { status: 400 })
       }
     }
 
-    const weightMg = gramsToMg(numWeight)
+    const weightMg = isIdol
+      ? (currentProduct.weightMg !== undefined ? currentProduct.weightMg : gramsToMg(numWeight))
+      : gramsToMg(numWeight)
     numWeight = mgToGrams(weightMg)
 
-    const nowIso = new Date().toISOString()
     const cleanName = String(name).trim()
 
-    // Note: Stock is strictly NOT modified by PUT /api/admin/products.
-    // Stock can only be changed via verified transactions (/api/admin/transactions).
+    // Note: Stock and pieceWeights are strictly NOT modified by PUT /api/admin/products.
+    // Stock and pieces can only be changed via verified transactions (/api/admin/transactions).
     const updatePayload: Record<string, unknown> = {
       name: cleanName,
       category: cleanCategory,
@@ -316,11 +349,6 @@ export async function PUT(req: NextRequest) {
       weightMg,
       purity: cleanPurity,
       updatedAt: FieldValue.serverTimestamp()
-    }
-
-    if (isIdol && validPieceWeights.length > 0) {
-      updatePayload.pieceWeights = validPieceWeights.map(w => mgToGrams(gramsToMg(w)))
-      updatePayload.pieceWeightsMg = validPieceWeightsMg
     }
 
     await productDocRef.update(updatePayload)
@@ -373,7 +401,6 @@ export async function DELETE(req: NextRequest) {
 
     const pData = snap.data()!
     const stock = Number(pData.stock || 0)
-    const nowIso = new Date().toISOString()
 
     // Archive instead of delete: keeps stock ledger and historical transactions intact
     await productDocRef.update({

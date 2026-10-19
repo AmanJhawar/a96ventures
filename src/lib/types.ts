@@ -45,7 +45,7 @@ export type ProductCategory = 'Bullions' | 'Idols' | 'MMTC PAMP';
 
 export type ProductBrand = 'MMTC PAMP' | 'Local';
 
-export type TransactionType = 'purchase' | 'sale' | 'return' | 'transfer' | 'adjustment' | 'repair' | 'melt';
+export type TransactionType = 'purchase' | 'sale' | 'return' | 'transfer' | 'adjustment' | 'repair' | 'melt' | 'reversal';
 
 export interface Location {
   id: string;
@@ -88,6 +88,7 @@ export interface Transaction {
   metal?: MetalType;
   quantity: number;
   price?: number; // per unit (for purchase, sale, return)
+  totalAmount?: number; // total value (price * quantity)
   locationId: string;
   locationName: string;
   toLocationId?: string; // for transfer
@@ -115,6 +116,19 @@ export interface Transaction {
   reversalTransactionId?: string;
   isReversal?: boolean;
   reversalOf?: string; // Points to the original transaction ID this reverses
+  isOpeningBalance?: boolean;
+  isOpeningEntry?: boolean;
+}
+
+export interface TransactionStats {
+  salesCount: number;
+  salesUnits: number;
+  salesRevenue: number;
+  returnsCount: number;
+  returnsUnits: number;
+  returnsAmount: number;
+  netRevenue: number;
+  productSalesStats?: Record<string, { unitsSold: number; totalRevenue: number; salesCount: number }>;
 }
 
 // ==========================================

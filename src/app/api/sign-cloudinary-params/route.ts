@@ -2,7 +2,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken } from '@/lib/firebase/admin-verify';
 import { adminDb } from '@/lib/firebase/admin';
-import { UserPermissions } from '@/lib/types';
+import { UserPermissions, UserRole } from '@/lib/types';
 import { SUPER_ADMIN_PERMISSIONS, EMPTY_PERMISSIONS } from '@/lib/constants/permissions';
 
 // Strictly server-controlled folder destinations
@@ -38,15 +38,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Forbidden: Admin account is suspended' }, { status: 403 });
     }
 
-    // Resolve role: existing admin profile without explicit role or with 'admin' maps to 'super_admin'
-    const role =
-      (adminData.role === 'admin' || adminData.role === 'super_admin' || !adminData.role)
-        ? 'super_admin'
-        : adminData.role;
+    // STRICT DEFAULT DENY:
+    // Missing role must NEVER default to super_admin.
+    const rawRole = typeof adminData.role === 'string' ? adminData.role.trim() : '';
+    if (!rawRole) {
+      return NextResponse.json({ message: 'Forbidden: Admin account has no assigned role. Access denied.' }, { status: 403 });
+    }
 
+    const role = rawRole as UserRole;
     const isSuperAdmin = role === 'super_admin';
 
     // DEFAULT TO NO ACCESS: If permissions field is missing, default strictly to EMPTY_PERMISSIONS
+    // (Only an explicit active super_admin receives SUPER_ADMIN_PERMISSIONS)
     const permissions: UserPermissions = isSuperAdmin
       ? SUPER_ADMIN_PERMISSIONS
       : (adminData.permissions || EMPTY_PERMISSIONS);
