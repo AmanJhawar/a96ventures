@@ -61,6 +61,45 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
     users: { view: false, add: false, edit: false, delete: false }
   }
 
+function toIsoString(val: unknown): string {
+  if (!val) return ''
+  if (typeof val === 'string') return val
+  if (typeof val === 'number') {
+    const d = new Date(val)
+    return isNaN(d.getTime()) ? '' : d.toISOString()
+  }
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? '' : val.toISOString()
+  }
+  if (typeof val === 'object' && val !== null) {
+    if ('toDate' in val && typeof (val as { toDate: () => Date }).toDate === 'function') {
+      try {
+        const d = (val as { toDate: () => Date }).toDate()
+        return isNaN(d.getTime()) ? '' : d.toISOString()
+      } catch {
+        // ignore
+      }
+    }
+    if ('toMillis' in val && typeof (val as { toMillis: () => number }).toMillis === 'function') {
+      try {
+        const d = new Date((val as { toMillis: () => number }).toMillis())
+        return isNaN(d.getTime()) ? '' : d.toISOString()
+      } catch {
+        // ignore
+      }
+    }
+    if ('seconds' in val && typeof (val as { seconds: number }).seconds === 'number') {
+      const d = new Date((val as { seconds: number }).seconds * 1000)
+      return isNaN(d.getTime()) ? '' : d.toISOString()
+    }
+    if ('_seconds' in val && typeof (val as { _seconds: number })._seconds === 'number') {
+      const d = new Date((val as { _seconds: number })._seconds * 1000)
+      return isNaN(d.getTime()) ? '' : d.toISOString()
+    }
+  }
+  return String(val || '')
+}
+
   const snap = await getDocs(collection(db, 'admins'))
   const users: AdminUser[] = []
   snap.forEach((d) => {
@@ -75,12 +114,12 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
       assignedLocationName: data.assignedLocationName || undefined,
       permissions: data.permissions || defaultPermissions,
       phoneNumber: data.phoneNumber || undefined,
-      createdAt: data.createdAt || now,
-      updatedAt: data.updatedAt || now,
-      lastLoginAt: data.lastLoginAt
+      createdAt: toIsoString(data.createdAt) || now,
+      updatedAt: toIsoString(data.updatedAt) || now,
+      lastLoginAt: data.lastLoginAt ? toIsoString(data.lastLoginAt) : undefined
     })
   })
-  return users
+  return users.sort((a, b) => String(a.displayName || '').localeCompare(String(b.displayName || '')))
 }
 
 export interface CreateAdminUserParams {

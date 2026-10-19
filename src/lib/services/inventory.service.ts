@@ -71,10 +71,10 @@ export async function getLocations(): Promise<Location[]> {
       id: d.id,
       name: data.name || '',
       description: data.description || '',
-      createdAt: data.createdAt
+      createdAt: toIsoString(data.createdAt) || ''
     });
   });
-  return locs.sort((a, b) => a.name.localeCompare(b.name));
+  return locs.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
 }
 
 export async function addLocation(data: { name: string; description?: string }): Promise<string> {
@@ -186,6 +186,45 @@ function getTimestampMs(ts: unknown): number {
   return 0;
 }
 
+function toIsoString(val: unknown): string {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number') {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? '' : d.toISOString();
+  }
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? '' : val.toISOString();
+  }
+  if (typeof val === 'object' && val !== null) {
+    if ('toDate' in val && typeof (val as { toDate: () => Date }).toDate === 'function') {
+      try {
+        const d = (val as { toDate: () => Date }).toDate();
+        return isNaN(d.getTime()) ? '' : d.toISOString();
+      } catch {
+        // ignore
+      }
+    }
+    if ('toMillis' in val && typeof (val as { toMillis: () => number }).toMillis === 'function') {
+      try {
+        const d = new Date((val as { toMillis: () => number }).toMillis());
+        return isNaN(d.getTime()) ? '' : d.toISOString();
+      } catch {
+        // ignore
+      }
+    }
+    if ('seconds' in val && typeof (val as { seconds: number }).seconds === 'number') {
+      const d = new Date((val as { seconds: number }).seconds * 1000);
+      return isNaN(d.getTime()) ? '' : d.toISOString();
+    }
+    if ('_seconds' in val && typeof (val as { _seconds: number })._seconds === 'number') {
+      const d = new Date((val as { _seconds: number })._seconds * 1000);
+      return isNaN(d.getTime()) ? '' : d.toISOString();
+    }
+  }
+  return String(val || '');
+}
+
 export async function getProducts(): Promise<Product[]> {
   const prodsSnap = await getDocs(collection(db, 'products'));
 
@@ -249,7 +288,7 @@ export async function getProducts(): Promise<Product[]> {
     const timeA = getTimestampMs(a.updatedAt || a.createdAt);
     const timeB = getTimestampMs(b.updatedAt || b.createdAt);
     if (timeB !== timeA) return timeB - timeA;
-    return a.name.localeCompare(b.name);
+    return String(a.name || '').localeCompare(String(b.name || ''));
   });
 }
 
@@ -550,10 +589,10 @@ export async function getTransactionsPage(options: TransactionFilterOptions = {}
       recoveredWeight: data.recoveredWeight,
       pieceWeights: data.pieceWeights,
       pieceWeight: data.pieceWeight,
-      date: data.date,
+      date: toIsoString(data.date) || String(data.date || ''),
       isReversed: Boolean(data.isReversed || data.reversed),
-      reversedAt: data.reversedAt,
-      createdAt: data.createdAt
+      reversedAt: data.reversedAt ? toIsoString(data.reversedAt) : undefined,
+      createdAt: toIsoString(data.createdAt) || String(data.createdAt || '')
     });
   });
 

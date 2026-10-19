@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       } as Location)
     })
 
-    items.sort((a, b) => a.name.localeCompare(b.name))
+    items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
     return NextResponse.json({ success: true, locations: items })
   } catch (err: unknown) {
     console.error('GET /api/admin/locations error:', err)

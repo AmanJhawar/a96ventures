@@ -1198,8 +1198,9 @@ export default function AdminUsersPage() {
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm divide-y divide-gray-100">
               {paginatedAuditLogs.map((log) => {
                 const dateObj = new Date(log.timestamp)
-                const dateStr = dateObj.toLocaleDateString()
-                const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                const isValid = !isNaN(dateObj.getTime())
+                const dateStr = isValid ? dateObj.toLocaleDateString() : '—'
+                const timeStr = isValid ? dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''
 
                 return (
                   <div key={log.id} className="p-4 sm:p-5 hover:bg-gray-50/70 transition-[background-color] duration-100">

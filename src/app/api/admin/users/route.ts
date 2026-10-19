@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    users.sort((a, b) => a.displayName.localeCompare(b.displayName))
+    users.sort((a, b) => String(a.displayName || '').localeCompare(String(b.displayName || '')))
 
     return NextResponse.json({ users })
   } catch (err: unknown) {

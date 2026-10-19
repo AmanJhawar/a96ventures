@@ -128,6 +128,45 @@ export async function exportFullAuditTrail(options?: {
   return { count }
 }
 
+function toIsoString(val: unknown): string {
+  if (!val) return ''
+  if (typeof val === 'string') return val
+  if (typeof val === 'number') {
+    const d = new Date(val)
+    return isNaN(d.getTime()) ? '' : d.toISOString()
+  }
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? '' : val.toISOString()
+  }
+  if (typeof val === 'object' && val !== null) {
+    if ('toDate' in val && typeof (val as { toDate: () => Date }).toDate === 'function') {
+      try {
+        const d = (val as { toDate: () => Date }).toDate()
+        return isNaN(d.getTime()) ? '' : d.toISOString()
+      } catch {
+        // ignore
+      }
+    }
+    if ('toMillis' in val && typeof (val as { toMillis: () => number }).toMillis === 'function') {
+      try {
+        const d = new Date((val as { toMillis: () => number }).toMillis())
+        return isNaN(d.getTime()) ? '' : d.toISOString()
+      } catch {
+        // ignore
+      }
+    }
+    if ('seconds' in val && typeof (val as { seconds: number }).seconds === 'number') {
+      const d = new Date((val as { seconds: number }).seconds * 1000)
+      return isNaN(d.getTime()) ? '' : d.toISOString()
+    }
+    if ('_seconds' in val && typeof (val as { _seconds: number })._seconds === 'number') {
+      const d = new Date((val as { _seconds: number })._seconds * 1000)
+      return isNaN(d.getTime()) ? '' : d.toISOString()
+    }
+  }
+  return String(val || '')
+}
+
 /**
  * Fetch audit logs via server code or client query.
  */
@@ -153,7 +192,11 @@ export async function getAuditLogs(filters?: GetAuditLogsFilter): Promise<AuditL
 
       if (res.ok) {
         const data = await res.json()
-        return data.logs || []
+        const rawLogs: AuditLogEntry[] = data.logs || []
+        return rawLogs.map((log) => ({
+          ...log,
+          timestamp: toIsoString(log.timestamp) || new Date().toISOString()
+        }))
       }
     }
   } catch (apiErr) {
@@ -171,7 +214,7 @@ export async function getAuditLogs(filters?: GetAuditLogsFilter): Promise<AuditL
 
     logs.push({
       id: d.id,
-      timestamp: data.timestamp || data.createdAt || '',
+      timestamp: toIsoString(data.timestamp || data.createdAt) || new Date().toISOString(),
       userId: data.userId || '',
       userName: data.userName || '',
       userEmail: data.userEmail || '',
@@ -187,7 +230,7 @@ export async function getAuditLogs(filters?: GetAuditLogsFilter): Promise<AuditL
     })
   })
 
-  logs.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
+  logs.sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))
   const limit = filters?.limitCount || 50
   return logs.slice(0, limit)
 }
