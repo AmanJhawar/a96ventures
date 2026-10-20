@@ -877,7 +877,6 @@ export default function AdminUsersPage() {
                       disabled={formSubmitting}
                       className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
                     >
-                      <Check size={16} />
                       {formSubmitting ? 'Saving...' : editingUserId ? 'Update User' : 'Create User'}
                     </button>
                   </div>

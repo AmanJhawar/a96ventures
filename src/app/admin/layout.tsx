@@ -34,8 +34,8 @@ const navItems: NavItemConfig[] = [
   { name: 'Brands', href: '/admin/brands', icon: Bookmark, module: 'brands', action: 'view' },
 ]
 
-// 15 minutes of inactivity for staff handling cash/stock
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000
+// 30 minutes of inactivity for staff handling cash/stock
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000
 const ADMIN_LAST_ACTIVITY_KEY = 'admin_last_activity'
 
 
@@ -379,7 +379,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => unsubscribe()
   }, [router])
 
-  // Idle session timeout (15 minutes of inactivity for staff handling cash/stock)
+  // Idle session timeout (30 minutes of inactivity for staff handling cash/stock)
   useEffect(() => {
     if (!user) return
 

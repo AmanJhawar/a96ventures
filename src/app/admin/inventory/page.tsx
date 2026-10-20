@@ -23,7 +23,8 @@ import {
   History,
   Trash2,
   ShieldCheck,
-  AlertTriangle
+  AlertTriangle,
+  Pencil
 } from 'lucide-react'
 
 export interface PurchaseLineItem {
@@ -47,6 +48,7 @@ import {
   deleteProduct,
   recordTransaction,
   deleteTransaction,
+  updateTransaction,
   clearTransactionHistory,
   getTransactionsPage,
   downloadArchiveById
@@ -207,6 +209,17 @@ export default function AdminInventory() {
   ])
   const [purchaseSubmitting, setPurchaseSubmitting] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
+
+  // Edit Purchase modal state (Super Admin only)
+  const [editingPurchase, setEditingPurchase] = useState<Transaction | null>(null)
+  const [editPurchaseDate, setEditPurchaseDate] = useState('')
+  const [editPurchaseLocationId, setEditPurchaseLocationId] = useState('')
+  const [editPurchaseQuantity, setEditPurchaseQuantity] = useState('1')
+  const [editPurchasePrice, setEditPurchasePrice] = useState('')
+  const [editPurchaseVendorName, setEditPurchaseVendorName] = useState('')
+  const [editPurchaseNotes, setEditPurchaseNotes] = useState('')
+  const [editPurchaseSubmitting, setEditPurchaseSubmitting] = useState(false)
+  const [editPurchaseError, setEditPurchaseError] = useState<string | null>(null)
 
   // Movement modal / form state
   const [isMovementFormOpen, setIsMovementFormOpen] = useState(false)
@@ -640,6 +653,72 @@ export default function AdminInventory() {
 
     return { totalUnits, totalWeightGrams, grandTotal }
   }, [purchaseItems, products])
+
+  const isPurchaseFormValid = useMemo(() => {
+    if (!purchaseLocationId.trim() || !purchaseDate.trim() || purchaseItems.length === 0) {
+      return false
+    }
+    return purchaseItems.every((item) => {
+      if (!item.productId.trim()) return false
+      const prod = products.find((p) => p.id === item.productId)
+      if (prod?.category === 'Idols') {
+        return item.pieceWeights.length > 0
+      }
+      const q = Number(item.quantity)
+      return !isNaN(q) && q > 0
+    })
+  }, [purchaseLocationId, purchaseDate, purchaseItems, products])
+
+  const isMovementFormValid = useMemo(() => {
+    if (!movementProductId.trim() || !movementLocationId.trim() || !movementDate.trim()) {
+      return false
+    }
+    const q = Number(movementQty)
+    if (isNaN(q) || q <= 0) return false
+
+    const prod = products.find((p) => p.id === movementProductId)
+    if (prod?.category === 'Idols' && !movementPieceWeight) {
+      return false
+    }
+
+    if (movementType === 'transfer') {
+      if (!movementToLocationId.trim() || movementToLocationId === movementLocationId) return false
+    } else if (movementType === 'repair') {
+      const nw = Number(movementNewWeight)
+      if (isNaN(nw) || nw <= 0) return false
+    } else if (movementType === 'melt') {
+      const rw = Number(movementRecoveredWeight)
+      if (isNaN(rw) || rw <= 0) return false
+    }
+    return true
+  }, [
+    movementProductId,
+    movementLocationId,
+    movementDate,
+    movementQty,
+    movementType,
+    movementToLocationId,
+    movementNewWeight,
+    movementRecoveredWeight,
+    movementPieceWeight,
+    products
+  ])
+
+  const isProductFormValid = useMemo(() => {
+    if (!prodName.trim() || !prodSku.trim() || !prodPurity.trim()) return false
+    const w = Number(prodWeight)
+    if (isNaN(w) || w <= 0) return false
+    return true
+  }, [prodName, prodSku, prodPurity, prodWeight])
+
+  const isEditPurchaseValid = useMemo(() => {
+    if (!editPurchaseDate.trim() || !editPurchaseLocationId.trim()) return false
+    const q = Number(editPurchaseQuantity)
+    if (isNaN(q) || q <= 0) return false
+    const p = Number(editPurchasePrice)
+    if (isNaN(p) || p < 0) return false
+    return true
+  }, [editPurchaseDate, editPurchaseLocationId, editPurchaseQuantity, editPurchasePrice])
 
   // Selected product in movement modal
   const selectedMovementProduct = useMemo(() => {
@@ -1536,6 +1615,87 @@ export default function AdminInventory() {
     }
   }
 
+  const handleOpenEditPurchase = (tx: Transaction) => {
+    setEditingPurchase(tx)
+    setEditPurchaseDate(tx.date || getTodayIST())
+    setEditPurchaseLocationId(tx.locationId || '')
+    setEditPurchaseQuantity(String(tx.quantity || 1))
+    setEditPurchasePrice(tx.price !== undefined ? String(tx.price) : '')
+    setEditPurchaseVendorName(tx.vendorName || '')
+    setEditPurchaseNotes(tx.notes || '')
+    setEditPurchaseError(null)
+  }
+
+  const handleSaveEditPurchase = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingPurchase) return
+
+    const qty = Number(editPurchaseQuantity)
+    if (isNaN(qty) || qty < 1) {
+      setEditPurchaseError('Quantity must be at least 1')
+      return
+    }
+
+    const priceNum = Number(editPurchasePrice)
+    if (isNaN(priceNum) || priceNum < 0) {
+      setEditPurchaseError('Unit cost must be a valid non-negative number')
+      return
+    }
+
+    setEditPurchaseSubmitting(true)
+    setEditPurchaseError(null)
+
+    try {
+      const res = await updateTransaction(editingPurchase.id, {
+        quantity: qty,
+        price: priceNum,
+        locationId: editPurchaseLocationId,
+        locationName: locationMap.get(editPurchaseLocationId) || editingPurchase.locationName,
+        date: editPurchaseDate,
+        vendorName: editPurchaseVendorName,
+        notes: editPurchaseNotes
+      })
+
+      const updated = res.transaction
+      setTransactions((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)))
+
+      const oldQty = Number(editingPurchase.quantity || 1)
+      const oldLoc = editingPurchase.locationId
+      const newLoc = editPurchaseLocationId
+      const qtyDiff = qty - oldQty
+
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.id !== editingPurchase.productId) return p
+          const locStock = { ...(p.stockByLocation || {}) }
+          let totalStock = p.stock || 0
+          if (oldLoc === newLoc) {
+            locStock[oldLoc] = (locStock[oldLoc] || 0) + qtyDiff
+            totalStock += qtyDiff
+          } else {
+            locStock[oldLoc] = Math.max(0, (locStock[oldLoc] || 0) - oldQty)
+            locStock[newLoc] = (locStock[newLoc] || 0) + qty
+            totalStock += qtyDiff
+          }
+          return {
+            ...p,
+            stock: Math.max(0, totalStock),
+            stockByLocation: locStock
+          }
+        })
+      )
+
+      toast.success('Purchase entry updated successfully')
+      setEditingPurchase(null)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update purchase'
+      setEditPurchaseError(msg)
+      toast.error(msg)
+    } finally {
+      setEditPurchaseSubmitting(false)
+    }
+  }
+
   // Quick header sort toggle
   const toggleSort = (field: 'name' | 'sku' | 'weight' | 'stock' | 'date') => {
     if (field === 'date') {
@@ -2348,10 +2508,9 @@ export default function AdminInventory() {
                 </button>
                 <button
                   type="submit"
-                  disabled={productFormSubmitting}
-                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                  disabled={productFormSubmitting || !isProductFormValid}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none transition-[background-color,opacity,transform] duration-150 active:scale-[0.97]"
                 >
-                  <Check size={16} />
                   {productFormSubmitting ? 'Saving...' : editingProductId ? 'Update Product' : 'Create Product'}
                 </button>
               </div>
@@ -2667,10 +2826,9 @@ export default function AdminInventory() {
                   </button>
                   <button
                     type="submit"
-                    disabled={purchaseSubmitting || purchaseTotals.totalUnits === 0}
-                    className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-black/85 rounded-lg shadow-xs transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50 inline-flex items-center gap-2"
+                    disabled={purchaseSubmitting || !isPurchaseFormValid}
+                    className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-black/85 rounded-lg shadow-xs transition-[background-color,opacity,transform] duration-150 active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none inline-flex items-center gap-2"
                   >
-                    <Check size={14} />
                     {purchaseSubmitting ? (
                       <>
                         <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -3189,10 +3347,9 @@ export default function AdminInventory() {
                 </button>
                 <button
                   type="submit"
-                  disabled={movementSubmitting}
-                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                  disabled={movementSubmitting || !isMovementFormValid}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none transition-[background-color,opacity,transform] duration-150 active:scale-[0.97]"
                 >
-                  <Check size={16} />
                   {movementSubmitting ? 'Recording...' : `Confirm ${movementType.charAt(0).toUpperCase() + movementType.slice(1)}`}
                 </button>
               </div>
@@ -3505,15 +3662,26 @@ export default function AdminInventory() {
                           )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {!archivedSession && hasPermission('purchases', 'delete') && !tx.isReversed && !tx.reversalOf && !tx.isOpeningBalance && !tx.isOpeningEntry && (
-                            <button
-                              onClick={() => setDeleteTxTarget(tx)}
-                              title="Post reversing entry"
-                              className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                            >
-                              <RotateCcw size={14} />
-                            </button>
-                          )}
+                          <div className="flex items-center justify-end gap-1">
+                            {!archivedSession && isSuperAdmin && !tx.isReversed && !tx.reversalOf && !tx.isOpeningBalance && !tx.isOpeningEntry && (
+                              <button
+                                onClick={() => handleOpenEditPurchase(tx)}
+                                title="Edit purchase (Super Admin)"
+                                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                            {!archivedSession && hasPermission('purchases', 'delete') && !tx.isReversed && !tx.reversalOf && !tx.isOpeningBalance && !tx.isOpeningEntry && (
+                              <button
+                                onClick={() => setDeleteTxTarget(tx)}
+                                title="Post reversing entry"
+                                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                              >
+                                <RotateCcw size={14} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )
@@ -4021,6 +4189,170 @@ export default function AdminInventory() {
           </div>
         </div>
       </ConfirmModal>
+
+      {/* Super Admin Edit Purchase Modal */}
+      <AnimatePresence>
+        {editingPurchase && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.16, ease: EASE_OUT }}
+              className="w-full max-w-lg bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden"
+            >
+              <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-black">Edit Purchase Entry</h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-black text-white">
+                      Super Admin
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Correct recorded purchase details. Inventory stock levels update automatically.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingPurchase(null)}
+                  className="p-1.5 text-gray-400 hover:text-black rounded-lg hover:bg-gray-100 transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {editPurchaseError && (
+                <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 flex items-center gap-2">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>{editPurchaseError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveEditPurchase} className="p-6 space-y-4">
+                {/* Product Summary banner */}
+                <div className="p-3 bg-gray-50 border border-gray-200/80 rounded-xl flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-semibold text-black block">{editingPurchase.productName}</span>
+                    <span className="text-[11px] text-gray-500">
+                      {editingPurchase.metal} · {editingPurchase.category} {editingPurchase.brand ? `· ${editingPurchase.brand}` : ''}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono text-gray-400">ID: {editingPurchase.id.slice(-6)}</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                      Purchase Date <span className="text-red-500">*</span>
+                    </label>
+                    <CustomDatePicker
+                      value={editPurchaseDate}
+                      onChange={setEditPurchaseDate}
+                      placeholder="Select purchase date"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                      Store Location <span className="text-red-500">*</span>
+                    </label>
+                    <CustomSelect
+                      value={editPurchaseLocationId}
+                      onValueChange={setEditPurchaseLocationId}
+                      options={locationOptions}
+                      placeholder="Select location..."
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                      Quantity Restocked <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={editPurchaseQuantity}
+                      onChange={(e) => setEditPurchaseQuantity(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                      Unit Cost (₹) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      required
+                      value={editPurchasePrice}
+                      onChange={(e) => setEditPurchasePrice(e.target.value)}
+                      placeholder="e.g. 12000"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    />
+                  </div>
+                </div>
+
+                {/* Live total display */}
+                <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Total Purchase Value:</span>
+                  <span className="font-bold text-black text-sm">
+                    ₹{((Number(editPurchaseQuantity) || 0) * (Number(editPurchasePrice) || 0)).toLocaleString('en-IN')}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Supplier / Vendor Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editPurchaseVendorName}
+                    onChange={(e) => setEditPurchaseVendorName(e.target.value)}
+                    placeholder="e.g. MMTC PAMP Refinery"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Invoice / Reference Notes
+                  </label>
+                  <input
+                    type="text"
+                    value={editPurchaseNotes}
+                    onChange={(e) => setEditPurchaseNotes(e.target.value)}
+                    placeholder="e.g. PO #PO-9921 / Challan #440"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                  />
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditingPurchase(null)}
+                    className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={editPurchaseSubmitting || !isEditPurchaseValid}
+                    className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-black/85 rounded-lg shadow-xs transition-[background-color,opacity,transform] duration-150 active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none inline-flex items-center gap-2"
+                  >
+                    {editPurchaseSubmitting ? 'Saving Changes...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

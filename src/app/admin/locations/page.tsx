@@ -239,7 +239,6 @@ export default function AdminLocations() {
                   disabled={submitting}
                   className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
                 >
-                  <Check size={16} />
                   {submitting ? 'Saving...' : editingId ? 'Update' : 'Save'}
                 </button>
               </div>

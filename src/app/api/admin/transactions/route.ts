@@ -984,3 +984,232 @@ export async function PUT(req: NextRequest) {
     }
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const authResult = await getAuthenticatedCaller(req)
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+    }
+    const { caller } = authResult
+
+    // Only Super Admins can directly modify existing transaction ledger entries
+    if (!caller.isSuperAdmin) {
+      return NextResponse.json(
+        { error: 'Forbidden: Only Super Admins are authorized to edit recorded transactions' },
+        { status: 403 }
+      )
+    }
+
+    const body = await req.json().catch(() => ({}))
+    const { id, quantity, price, locationId, locationName, date, customerName, vendorName, notes } = body
+
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ error: 'Missing or invalid transaction ID' }, { status: 400 })
+    }
+
+    const txRef = adminDb.collection('transactions').doc(id)
+    const txSnap = await txRef.get()
+    if (!txSnap.exists) {
+      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
+    }
+
+    const currentTx = txSnap.data() as Transaction
+
+    if (currentTx.isReversed || currentTx.reversalOf || currentTx.type === 'reversal') {
+      return NextResponse.json(
+        { error: 'Cannot modify a reversed transaction or reversal entry' },
+        { status: 400 }
+      )
+    }
+
+    // Fiscal Cutoff validation
+    const closedCutoff = await getClosedFiscalCutoff()
+    if (closedCutoff && (currentTx.date <= closedCutoff || (date && String(date).trim() <= closedCutoff))) {
+      return NextResponse.json(
+        { error: `Entries on or before closed fiscal cutoff (${closedCutoff}) are archived and locked` },
+        { status: 400 }
+      )
+    }
+
+    const targetDate = date ? String(date).trim() : currentTx.date
+    if (date && !isValidDateStringIST(targetDate)) {
+      return NextResponse.json(
+        { error: `Invalid transaction date: "${date}". Date must be in YYYY-MM-DD format.` },
+        { status: 400 }
+      )
+    }
+
+    if (price !== undefined && (isNaN(Number(price)) || Number(price) < 0)) {
+      return NextResponse.json({ error: 'Price must be a valid non-negative number' }, { status: 400 })
+    }
+
+    if (quantity !== undefined && (isNaN(Number(quantity)) || Number(quantity) < 1)) {
+      return NextResponse.json({ error: 'Quantity must be at least 1' }, { status: 400 })
+    }
+
+    const oldQty = Number(currentTx.quantity || 1)
+    const newQty = quantity !== undefined ? Number(quantity) : oldQty
+    const oldLoc = currentTx.locationId
+    const newLoc = locationId ? String(locationId).trim() : oldLoc
+
+    const updatedTxData = await adminDb.runTransaction(async (t) => {
+      const lockRef = getZeroBalanceLockRef()
+      const lockSnap = await t.get(lockRef)
+      assertNotZeroBalanceLocked(lockSnap)
+
+      // Adjust product stock if product is linked and quantity or location changed
+      if (currentTx.productId) {
+        const prodRef = adminDb.collection('products').doc(currentTx.productId)
+        const prodSnap = await t.get(prodRef)
+        if (prodSnap.exists) {
+          const prodData = prodSnap.data() as Product
+          let currentStock = Number(prodData.stock || 0)
+          const stockByLoc = { ...((prodData.stockByLocation as Record<string, number>) || {}) }
+
+          if (currentTx.type === 'sale') {
+            if (oldLoc === newLoc) {
+              const diff = newQty - oldQty
+              const locStock = Number(stockByLoc[oldLoc] || 0)
+              if (diff > 0 && locStock < diff) {
+                throw new Error(
+                  `Insufficient stock at ${currentTx.locationName || 'store'}. Available: ${locStock}, additional units needed: ${diff}`
+                )
+              }
+              currentStock -= diff
+              stockByLoc[oldLoc] = locStock - diff
+            } else {
+              // Restore oldQty to old location
+              stockByLoc[oldLoc] = Number(stockByLoc[oldLoc] || 0) + oldQty
+              // Deduct newQty from new location
+              const newLocStock = Number(stockByLoc[newLoc] || 0)
+              if (newLocStock < newQty) {
+                throw new Error(
+                  `Insufficient stock at destination location. Available: ${newLocStock}, needed: ${newQty}`
+                )
+              }
+              stockByLoc[newLoc] = newLocStock - newQty
+              currentStock -= (newQty - oldQty)
+            }
+          } else if (currentTx.type === 'purchase') {
+            if (oldLoc === newLoc) {
+              const diff = newQty - oldQty
+              const locStock = Number(stockByLoc[oldLoc] || 0)
+              if (diff < 0 && locStock < Math.abs(diff)) {
+                throw new Error(
+                  `Cannot reduce purchase quantity by ${Math.abs(diff)}: current location stock is only ${locStock}`
+                )
+              }
+              currentStock += diff
+              stockByLoc[oldLoc] = locStock + diff
+            } else {
+              // Revert old purchase from old location
+              const oldLocStock = Number(stockByLoc[oldLoc] || 0)
+              if (oldLocStock < oldQty) {
+                throw new Error(
+                  `Cannot reassign location: ${currentTx.locationName || 'original store'} only has ${oldLocStock} units in stock`
+                )
+              }
+              stockByLoc[oldLoc] = oldLocStock - oldQty
+              // Add new purchase to new location
+              stockByLoc[newLoc] = Number(stockByLoc[newLoc] || 0) + newQty
+              currentStock += (newQty - oldQty)
+            }
+          }
+
+          t.update(prodRef, {
+            stock: Math.max(0, currentStock),
+            stockByLocation: stockByLoc,
+            updatedAt: new Date().toISOString()
+          })
+        }
+      }
+
+      const finalPrice = price !== undefined ? Number(price) : currentTx.price
+      const finalTotal = finalPrice !== undefined ? finalPrice * newQty : (currentTx.totalAmount || 0)
+      const finalLocationName = locationName || (newLoc === oldLoc ? currentTx.locationName : newLoc)
+      const finalNotes = notes !== undefined ? String(notes).trim() : (currentTx.notes || '')
+
+      const updatePayload: Record<string, unknown> = {
+        quantity: newQty,
+        price: finalPrice,
+        totalAmount: finalTotal,
+        locationId: newLoc,
+        locationName: finalLocationName,
+        date: targetDate,
+        notes: finalNotes,
+        lastEditedBy: caller.callerEmail,
+        lastEditedByName: caller.callerName,
+        lastEditedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      }
+
+      if (customerName !== undefined) {
+        updatePayload.customerName = String(customerName).trim()
+      }
+      if (vendorName !== undefined) {
+        updatePayload.vendorName = String(vendorName).trim()
+      }
+
+      t.update(txRef, updatePayload)
+
+      // Audit Log
+      const auditRef = adminDb.collection('audit_logs').doc()
+      t.set(auditRef, {
+        userId: caller.callerUid,
+        userName: caller.callerName,
+        userEmail: caller.callerEmail,
+        action: 'transaction_modified',
+        entityType: 'transaction',
+        entityId: id,
+        entityName: `${currentTx.type.toUpperCase()}: ${currentTx.productName}`,
+        description: `Super Admin ${caller.callerName} updated ${currentTx.type} transaction #${id}. Qty: ${oldQty} -> ${newQty}, Price: ₹${currentTx.price || 0} -> ₹${finalPrice || 0}, Location: ${currentTx.locationName} -> ${finalLocationName}, Date: ${currentTx.date} -> ${targetDate}`,
+        metadata: {
+          transactionId: id,
+          type: currentTx.type,
+          previous: {
+            quantity: oldQty,
+            price: currentTx.price,
+            locationId: oldLoc,
+            locationName: currentTx.locationName,
+            date: currentTx.date,
+            customerName: currentTx.customerName,
+            vendorName: currentTx.vendorName,
+            notes: currentTx.notes
+          },
+          updated: {
+            quantity: newQty,
+            price: finalPrice,
+            locationId: newLoc,
+            locationName: finalLocationName,
+            date: targetDate,
+            customerName: updatePayload.customerName,
+            vendorName: updatePayload.vendorName,
+            notes: finalNotes
+          }
+        },
+        timestamp: FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp()
+      })
+
+      return {
+        ...currentTx,
+        ...updatePayload,
+        id,
+        quantity: newQty,
+        price: finalPrice,
+        totalAmount: finalTotal,
+        locationId: newLoc,
+        locationName: finalLocationName,
+        date: targetDate,
+        notes: finalNotes
+      }
+    })
+
+    return NextResponse.json({ success: true, transaction: updatedTxData })
+  } catch (err: unknown) {
+    console.error('PATCH /api/admin/transactions error:', err)
+    const msg = err instanceof Error ? err.message : 'Failed to update transaction'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}

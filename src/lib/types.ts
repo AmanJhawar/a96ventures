@@ -94,6 +94,7 @@ export interface Transaction {
   toLocationId?: string; // for transfer
   toLocationName?: string; // for transfer
   customerName?: string; // for sale, return
+  vendorName?: string; // for purchase
   notes?: string;
   weight?: number; // total weight (in grams)
   weightMg?: number; // total weight (in whole milligrams)

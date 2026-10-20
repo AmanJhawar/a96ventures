@@ -818,6 +818,37 @@ export async function reverseTransaction(tx: Transaction): Promise<{ reversingTr
 export const deleteTransaction = reverseTransaction;
 
 /**
+ * Update an existing transaction (Super Admin only).
+ */
+export async function updateTransaction(
+  id: string,
+  data: {
+    quantity?: number;
+    price?: number;
+    locationId?: string;
+    locationName?: string;
+    date?: string;
+    customerName?: string;
+    vendorName?: string;
+    notes?: string;
+  }
+): Promise<{ success: boolean; transaction: Transaction }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/transactions', {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ id, ...data })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to update transaction (${res.status})`);
+  }
+
+  return res.json();
+}
+
+/**
  * Builds the complete master archive on the server from every record up to cutoffDate.
  */
 export async function fetchMasterArchive(options?: { cutoffDate?: string }): Promise<{

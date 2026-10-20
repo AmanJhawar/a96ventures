@@ -13,7 +13,8 @@ import {
   PackageCheck,
   Lock,
   Calendar,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react'
 
 export interface SaleLineItem {
@@ -30,7 +31,8 @@ import {
   getTransactionsPage,
   getTransactionStats,
   recordTransaction,
-  deleteTransaction
+  deleteTransaction,
+  updateTransaction
 } from '@/lib/services/inventory.service'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
@@ -106,6 +108,17 @@ export default function AdminSales() {
 
   // Delete modal state
   const [deleteTxTarget, setDeleteTxTarget] = useState<Transaction | null>(null)
+
+  // Edit Sale modal state (Super Admin only)
+  const [editingSale, setEditingSale] = useState<Transaction | null>(null)
+  const [editSaleDate, setEditSaleDate] = useState('')
+  const [editSaleLocationId, setEditSaleLocationId] = useState('')
+  const [editSaleQuantity, setEditSaleQuantity] = useState('1')
+  const [editSalePrice, setEditSalePrice] = useState('')
+  const [editSaleCustomerName, setEditSaleCustomerName] = useState('')
+  const [editSaleNotes, setEditSaleNotes] = useState('')
+  const [editSaleSubmitting, setEditSaleSubmitting] = useState(false)
+  const [editSaleError, setEditSaleError] = useState<string | null>(null)
 
   // Date Range State
   const [dateRangePreset, setDateRangePreset] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all')
@@ -313,6 +326,74 @@ export default function AdminSales() {
   const isReturnProductAnIdol = useMemo(() => {
     return selectedReturnProduct?.category === 'Idols'
   }, [selectedReturnProduct])
+
+  // Form completion validation states
+  const isSaleFormValid = useMemo(() => {
+    const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : saleLocationId
+    if (!effectiveLocId || !saleDate.trim() || saleItems.length === 0) return false
+
+    const requiredStockPerProduct: Record<string, number> = {}
+    const chosenPiecesPerProduct: Record<string, Set<number>> = {}
+
+    for (const item of saleItems) {
+      if (!item.productId.trim()) return false
+      const prod = products.find((p) => p.id === item.productId)
+      if (!prod) return false
+
+      const isIdol = prod.category === 'Idols'
+      if (isIdol && !item.pieceWeight) return false
+
+      const qty = isIdol ? 1 : Number(item.quantity)
+      if (isNaN(qty) || qty <= 0) return false
+
+      const unitPrice = Number(item.price)
+      if (isNaN(unitPrice) || unitPrice <= 0) return false
+
+      if (isIdol && item.pieceWeight) {
+        const pw = Number(item.pieceWeight)
+        if (!chosenPiecesPerProduct[prod.id]) {
+          chosenPiecesPerProduct[prod.id] = new Set()
+        }
+        if (chosenPiecesPerProduct[prod.id].has(pw)) return false
+        chosenPiecesPerProduct[prod.id].add(pw)
+      }
+
+      requiredStockPerProduct[prod.id] = (requiredStockPerProduct[prod.id] || 0) + qty
+      const available = prod.stockByLocation?.[effectiveLocId] || 0
+      if (requiredStockPerProduct[prod.id] > available) return false
+    }
+
+    return true
+  }, [isLocationLocked, userAssignedLocationId, saleLocationId, saleDate, saleItems, products])
+
+  const isReturnFormValid = useMemo(() => {
+    const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : returnLocationId
+    if (!effectiveLocId || !returnProductId.trim() || !returnDate.trim()) return false
+    const prod = products.find((p) => p.id === returnProductId)
+    if (!prod) return false
+    const isIdol = prod.category === 'Idols'
+    if (isIdol) {
+      const numW = Number(returnPieceWeight)
+      if (isNaN(numW) || numW <= 0) return false
+    } else {
+      const q = Number(returnQty)
+      if (isNaN(q) || q <= 0) return false
+    }
+    if (returnPrice.trim()) {
+      const p = Number(returnPrice)
+      if (isNaN(p) || p < 0) return false
+    }
+    return true
+  }, [isLocationLocked, userAssignedLocationId, returnLocationId, returnProductId, returnDate, products, returnPieceWeight, returnQty, returnPrice])
+
+  const isEditSaleValid = useMemo(() => {
+    if (!editSaleDate.trim() || !editSaleLocationId.trim() || !editSalePrice.trim()) return false
+    const q = Number(editSaleQuantity)
+    if (isNaN(q) || q < 1) return false
+    const p = Number(editSalePrice)
+    if (isNaN(p) || p < 0) return false
+    return true
+  }, [editSaleDate, editSaleLocationId, editSaleQuantity, editSalePrice])
 
   const saleLocationOptions: SelectOption[] = useMemo(() => {
     return locations
@@ -775,6 +856,99 @@ export default function AdminSales() {
       console.error('Failed to reverse transaction', err)
       const msg = err instanceof Error ? err.message : 'Failed to reverse transaction'
       toast.error(msg)
+    }
+  }
+
+  const handleOpenEditSale = (tx: Transaction) => {
+    setEditingSale(tx)
+    setEditSaleDate(tx.date || getTodayIST())
+    setEditSaleLocationId(tx.locationId || '')
+    setEditSaleQuantity(String(tx.quantity || 1))
+    setEditSalePrice(tx.price !== undefined ? String(tx.price) : '')
+    setEditSaleCustomerName(tx.customerName || '')
+    setEditSaleNotes(tx.notes || '')
+    setEditSaleError(null)
+  }
+
+  const handleSaveEditSale = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingSale) return
+
+    const qty = Number(editSaleQuantity)
+    if (isNaN(qty) || qty < 1) {
+      setEditSaleError('Quantity must be at least 1')
+      return
+    }
+
+    const priceNum = Number(editSalePrice)
+    if (isNaN(priceNum) || priceNum < 0) {
+      setEditSaleError('Price must be a valid non-negative number')
+      return
+    }
+
+    setEditSaleSubmitting(true)
+    setEditSaleError(null)
+
+    try {
+      const res = await updateTransaction(editingSale.id, {
+        quantity: qty,
+        price: priceNum,
+        locationId: editSaleLocationId,
+        locationName: locationMap.get(editSaleLocationId) || editingSale.locationName,
+        date: editSaleDate,
+        customerName: editSaleCustomerName,
+        notes: editSaleNotes
+      })
+
+      const updated = res.transaction
+      setSalesList((prev) => prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)))
+
+      const oldQty = Number(editingSale.quantity || 1)
+      const oldPrice = Number(editingSale.price || 0)
+      const oldTotal = oldQty * oldPrice
+      const newTotal = qty * priceNum
+      const qtyDiff = qty - oldQty
+      const revDiff = newTotal - oldTotal
+
+      setStats((prev) => ({
+        ...prev,
+        salesUnits: prev.salesUnits + qtyDiff,
+        salesRevenue: prev.salesRevenue + revDiff,
+        netRevenue: prev.netRevenue + revDiff
+      }))
+
+      // Update product stock in local products state if quantity or location changed
+      const oldLoc = editingSale.locationId
+      const newLoc = editSaleLocationId
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.id !== editingSale.productId) return p
+          const locStock = { ...(p.stockByLocation || {}) }
+          let totalStock = p.stock || 0
+          if (oldLoc === newLoc) {
+            locStock[oldLoc] = (locStock[oldLoc] || 0) - qtyDiff
+            totalStock -= qtyDiff
+          } else {
+            locStock[oldLoc] = (locStock[oldLoc] || 0) + oldQty
+            locStock[newLoc] = (locStock[newLoc] || 0) - qty
+            totalStock -= qtyDiff
+          }
+          return {
+            ...p,
+            stock: Math.max(0, totalStock),
+            stockByLocation: locStock
+          }
+        })
+      )
+
+      toast.success('Sale entry updated successfully')
+      setEditingSale(null)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update sale'
+      setEditSaleError(msg)
+      toast.error(msg)
+    } finally {
+      setEditSaleSubmitting(false)
     }
   }
 
@@ -1356,10 +1530,9 @@ export default function AdminSales() {
                   </button>
                   <button
                     type="submit"
-                    disabled={saleSubmitting || saleTotals.totalUnits === 0}
-                    className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-black/85 rounded-lg shadow-xs transition-[background-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50 inline-flex items-center gap-2"
+                    disabled={saleSubmitting || !isSaleFormValid}
+                    className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-black/85 rounded-lg shadow-xs transition-[background-color,opacity,transform] duration-150 active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none inline-flex items-center gap-2"
                   >
-                    <Check size={14} />
                     {saleSubmitting ? (
                       <>
                         <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1553,10 +1726,9 @@ export default function AdminSales() {
                 </button>
                 <button
                   type="submit"
-                  disabled={returnSubmitting}
-                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                  disabled={returnSubmitting || !isReturnFormValid}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none transition-[background-color,opacity,transform] duration-150 active:scale-[0.97]"
                 >
-                  <Check size={16} />
                   {returnSubmitting ? 'Recording...' : 'Accept Return & Add Stock'}
                 </button>
               </div>
@@ -1633,7 +1805,7 @@ export default function AdminSales() {
                           {tx.locationName}
                         </td>
                         <td className="px-6 py-4 text-right tabular-nums font-semibold text-black">
-                          −{tx.quantity}
+                          {tx.quantity}
                           {tx.pieceWeight && (
                             <div className="text-[11px] font-mono text-gray-500">
                               ({formatWeight(tx.pieceWeight)})
@@ -1660,15 +1832,26 @@ export default function AdminSales() {
                           )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {hasPermission('sales', 'delete') && !tx.isReversed && !tx.reversalOf && (
-                            <button
-                              onClick={() => setDeleteTxTarget(tx)}
-                              title="Post reversing entry (restores stock)"
-                              className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                            >
-                              <RotateCcw size={14} />
-                            </button>
-                          )}
+                          <div className="flex items-center justify-end gap-1">
+                            {isSuperAdmin && !tx.isReversed && !tx.reversalOf && (
+                              <button
+                                onClick={() => handleOpenEditSale(tx)}
+                                title="Edit sale (Super Admin)"
+                                className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                            {hasPermission('sales', 'delete') && !tx.isReversed && !tx.reversalOf && (
+                              <button
+                                onClick={() => setDeleteTxTarget(tx)}
+                                title="Post reversing entry (restores stock)"
+                                className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                              >
+                                <RotateCcw size={14} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )
@@ -1855,6 +2038,170 @@ export default function AdminSales() {
         onConfirm={executeDeleteTransaction}
         onClose={() => setDeleteTxTarget(null)}
       />
+
+      {/* Super Admin Edit Sale Modal */}
+      <AnimatePresence>
+        {editingSale && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.16, ease: EASE_OUT }}
+              className="w-full max-w-lg bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden"
+            >
+              <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-black">Edit Sale Entry</h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-black text-white">
+                      Super Admin
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Correct recorded sale details. Stock adjustments apply automatically.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingSale(null)}
+                  className="p-1.5 text-gray-400 hover:text-black rounded-lg hover:bg-gray-100 transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {editSaleError && (
+                <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 flex items-center gap-2">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>{editSaleError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveEditSale} className="p-6 space-y-4">
+                {/* Product Summary banner */}
+                <div className="p-3 bg-gray-50 border border-gray-200/80 rounded-xl flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-semibold text-black block">{editingSale.productName}</span>
+                    <span className="text-[11px] text-gray-500">
+                      {editingSale.metal} · {editingSale.category} {editingSale.brand ? `· ${editingSale.brand}` : ''}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono text-gray-400">ID: {editingSale.id.slice(-6)}</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                      Sale Date <span className="text-red-500">*</span>
+                    </label>
+                    <CustomDatePicker
+                      value={editSaleDate}
+                      onChange={setEditSaleDate}
+                      placeholder="Select sale date"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                      Store Location <span className="text-red-500">*</span>
+                    </label>
+                    <CustomSelect
+                      value={editSaleLocationId}
+                      onValueChange={setEditSaleLocationId}
+                      options={saleLocationOptions}
+                      placeholder="Select location..."
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                      Quantity Sold <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={editSaleQuantity}
+                      onChange={(e) => setEditSaleQuantity(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                      Unit Price (₹) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      required
+                      value={editSalePrice}
+                      onChange={(e) => setEditSalePrice(e.target.value)}
+                      placeholder="e.g. 15000"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    />
+                  </div>
+                </div>
+
+                {/* Live total display */}
+                <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Total Sale Amount:</span>
+                  <span className="font-bold text-black text-sm">
+                    ₹{((Number(editSaleQuantity) || 0) * (Number(editSalePrice) || 0)).toLocaleString('en-IN')}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Customer Name / Entity
+                  </label>
+                  <input
+                    type="text"
+                    value={editSaleCustomerName}
+                    onChange={(e) => setEditSaleCustomerName(e.target.value)}
+                    placeholder="e.g. Rajesh Kumar"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                    Invoice / Notes
+                  </label>
+                  <input
+                    type="text"
+                    value={editSaleNotes}
+                    onChange={(e) => setEditSaleNotes(e.target.value)}
+                    placeholder="e.g. Tax Invoice #INV-001"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                  />
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSale(null)}
+                    className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={editSaleSubmitting || !isEditSaleValid}
+                    className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-black/85 rounded-lg shadow-xs transition-[background-color,opacity,transform] duration-150 active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none inline-flex items-center gap-2"
+                  >
+                    {editSaleSubmitting ? 'Saving Changes...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

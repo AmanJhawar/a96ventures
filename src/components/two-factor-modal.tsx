@@ -287,7 +287,6 @@ function TwoFactorModalDialog({ onClose, user }: { onClose: () => void; user: Us
                         disabled={isEnrolling}
                         className="h-10 px-5 bg-black text-white hover:bg-gray-800 disabled:opacity-50 rounded-lg text-xs font-semibold transition-[background-color,transform] active:scale-[0.97] whitespace-nowrap flex items-center gap-1.5"
                       >
-                        <Check size={14} />
                         {isEnrolling ? 'Activating...' : 'Activate 2-Step Login'}
                       </button>
                     </div>
