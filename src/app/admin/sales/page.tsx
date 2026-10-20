@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import {
   ShoppingCart,
   Plus,
   AlertCircle,
   X,
-  Check,
   RotateCcw,
   IndianRupee,
   TrendingUp,
@@ -17,7 +17,8 @@ import {
   Trash2,
   Pencil,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  ExternalLink
 } from 'lucide-react'
 
 export interface SaleLineItem {
@@ -31,13 +32,16 @@ export interface SaleLineItem {
 export interface SaleBill {
   billKey: string
   invoiceNo: string
+  orderId?: string
   date: string
   customerName: string
+  customerId?: string
   locationName: string
   locationId: string
   items: Transaction[]
   totalQuantity: number
   totalAmount: number
+  paymentModes?: string[]
   hasReversed: boolean
   hasActive: boolean
 }
@@ -54,7 +58,11 @@ function formatDateDisplay(rawDate?: string) {
   return rawDate
 }
 
-import { Product, Location, Transaction, ProductCategory, MetalType, TransactionStats } from '@/lib/types'
+import { Product, Location, Transaction, ProductCategory, MetalType, TransactionStats, Customer, Order, OrderPayment } from '@/lib/types'
+import CustomerPicker from '@/components/customer-picker'
+import PaymentSplit from '@/components/payment-split'
+import { rupeesToPaise } from '@/lib/utils/money'
+import { gramsToMg } from '@/lib/utils/weight'
 import {
   getProducts,
   getLocations,
@@ -74,9 +82,7 @@ import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatWeight } from '@/lib/utils/weight'
 import { getTodayIST, getDaysAgoIST } from '@/lib/utils/date'
-import { Button } from '@/components/ui/button'
 import { SkeletonTable } from '@/components/ui/skeleton'
-import { FormError } from '@/components/ui/form-error'
 
 const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
 
@@ -152,7 +158,13 @@ export default function AdminSales() {
   // Sale form state (multi-item)
   const [isSaleFormOpen, setIsSaleFormOpen] = useState(false)
   const [saleLocationId, setSaleLocationId] = useState('')
-  const [saleCustomerName, setSaleCustomerName] = useState('')
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [isWalkInCustomer, setIsWalkInCustomer] = useState(false)
+  const [salePayments, setSalePayments] = useState<OrderPayment[]>([])
+  const [isPaymentBalanced, setIsPaymentBalanced] = useState(false)
+  const [ordersList, setOrdersList] = useState<Order[]>([])
+  const [reverseOrderTarget, setReverseOrderTarget] = useState<SaleBill | null>(null)
+  const [reversingOrder, setReversingOrder] = useState(false)
   const [saleDate, setSaleDate] = useState(() => getTodayIST())
   const [saleNotes, setSaleNotes] = useState('')
   const [saleItems, setSaleItems] = useState<SaleLineItem[]>([
@@ -247,6 +259,15 @@ export default function AdminSales() {
           setReturnsCursor(returnsPageRes.nextCursor)
           setReturnsHasMore(returnsPageRes.hasMore)
           setLoading(false)
+
+          fetch('/api/admin/orders?limit=100')
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+              if (!ignore && data?.orders) {
+                setOrdersList(data.orders)
+              }
+            })
+            .catch((err) => console.error('Failed to load orders', err))
         }
       })
       .catch((err: unknown) => {
@@ -324,27 +345,42 @@ export default function AdminSales() {
     )
   }, [salesList, selectedCategory, selectedMetal])
 
+  // Orders map for fast lookup
+  const ordersMap = useMemo(() => {
+    const map = new Map<string, Order>()
+    for (const o of ordersList) {
+      map.set(o.id, o)
+    }
+    return map
+  }, [ordersList])
+
   // Group sales transactions into bills/invoices
   const saleBills: SaleBill[] = useMemo(() => {
     const billMap = new Map<string, SaleBill>()
 
     for (const tx of filteredSales) {
-      const invoiceKey = (tx.notes && tx.notes.trim())
-        ? `${tx.notes.trim()}_${tx.date}_${tx.locationId}`
-        : tx.id
+      const order = tx.orderId ? ordersMap.get(tx.orderId) : undefined
+      const invoiceKey = tx.orderId
+        ? `order_${tx.orderId}`
+        : (tx.notes && tx.notes.trim())
+          ? `${tx.notes.trim()}_${tx.date}_${tx.locationId}`
+          : tx.id
 
       let bill = billMap.get(invoiceKey)
       if (!bill) {
         bill = {
           billKey: invoiceKey,
-          invoiceNo: tx.notes?.trim() || `TX-${tx.id.slice(0, 8).toUpperCase()}`,
+          invoiceNo: order?.orderNo || tx.notes?.trim() || `TX-${tx.id.slice(0, 8).toUpperCase()}`,
+          orderId: tx.orderId,
           date: tx.date,
-          customerName: tx.customerName || '',
+          customerName: order?.customerSnapshot?.displayName || tx.customerName || '',
+          customerId: order?.customerId || tx.customerId,
           locationName: tx.locationName || '',
           locationId: tx.locationId,
           items: [],
           totalQuantity: 0,
           totalAmount: 0,
+          paymentModes: order?.payments?.map((p) => p.mode),
           hasReversed: false,
           hasActive: false
         }
@@ -354,7 +390,7 @@ export default function AdminSales() {
       bill.items.push(tx)
       bill.totalQuantity += tx.quantity || 1
       bill.totalAmount += (tx.price || 0) * (tx.quantity || 1)
-      if (tx.isReversed) {
+      if (tx.isReversed || order?.isReversed || (order as { status?: string })?.status === 'reversed') {
         bill.hasReversed = true
       } else {
         bill.hasActive = true
@@ -362,7 +398,7 @@ export default function AdminSales() {
     }
 
     return Array.from(billMap.values())
-  }, [filteredSales])
+  }, [filteredSales, ordersMap])
 
   // Filtered returns
   const filteredReturns = useMemo(() => {
@@ -427,6 +463,10 @@ export default function AdminSales() {
     return { totalUnits, totalWeightGrams, grandTotal }
   }, [saleItems, products])
 
+  const saleTotalsPaise = useMemo(() => {
+    return rupeesToPaise(saleTotals.grandTotal)
+  }, [saleTotals.grandTotal])
+
   const selectedReturnProduct = useMemo(() => {
     return products.find((p) => p.id === returnProductId)
   }, [products, returnProductId])
@@ -439,6 +479,8 @@ export default function AdminSales() {
   const isSaleFormValid = useMemo(() => {
     const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : saleLocationId
     if (!effectiveLocId || !saleDate.trim() || saleItems.length === 0) return false
+    if (!selectedCustomer && !isWalkInCustomer) return false
+    if (!isPaymentBalanced || salePayments.length === 0) return false
 
     const requiredStockPerProduct: Record<string, number> = {}
     const chosenPiecesPerProduct: Record<string, Set<number>> = {}
@@ -472,7 +514,18 @@ export default function AdminSales() {
     }
 
     return true
-  }, [isLocationLocked, userAssignedLocationId, saleLocationId, saleDate, saleItems, products])
+  }, [
+    isLocationLocked,
+    userAssignedLocationId,
+    saleLocationId,
+    saleDate,
+    saleItems,
+    products,
+    selectedCustomer,
+    isWalkInCustomer,
+    isPaymentBalanced,
+    salePayments
+  ])
 
   const isReturnFormValid = useMemo(() => {
     const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : returnLocationId
@@ -527,7 +580,11 @@ export default function AdminSales() {
   const handleOpenSaleForm = () => {
     setSaleLocationId(isLocationLocked && userAssignedLocationId ? userAssignedLocationId : '')
     setSaleCustomerName('')
-    setSaleDate('')
+    setSelectedCustomer(null)
+    setIsWalkInCustomer(false)
+    setSalePayments([])
+    setIsPaymentBalanced(false)
+    setSaleDate(getTodayIST())
     setSaleNotes('')
     setSaleError(null)
 
@@ -681,44 +738,76 @@ export default function AdminSales() {
     setSaleError(null)
 
     try {
-      const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
-      const invoiceRef = saleNotes.trim() || `INV-${Date.now().toString(36).toUpperCase()}`
-
-      const createdTransactions: Transaction[] = []
-      for (const it of validatedItems) {
-        const { transaction: createdTx } = await recordTransaction({
-          type: 'sale',
-          productId: it.prod.id,
-          productName: it.prod.name,
-          category: it.prod.category,
-          brand: it.prod.brand,
-          metal: it.prod.metal,
-          quantity: it.qty,
-          pieceWeight: it.pieceWeight,
-          price: it.price,
-          locationId: effectiveLocId,
-          locationName: locName,
-          customerName: saleCustomerName,
-          date: saleDate,
-          notes: invoiceRef
-        })
-        createdTransactions.push(createdTx)
+      if (!selectedCustomer && !isWalkInCustomer) {
+        setSaleError('Please select a customer or choose Walk-in customer')
+        return
+      }
+      if (!isPaymentBalanced || salePayments.length === 0) {
+        setSaleError('Payment amounts must balance the grand total exactly before recording')
+        return
       }
 
-      setIsSaleFormOpen(false)
-      toast.success(
-        validatedItems.length === 1
-          ? 'Sale recorded successfully'
-          : `Recorded sale with ${validatedItems.length} items successfully`
-      )
+      const payload = {
+        type: 'sale',
+        customerId: selectedCustomer ? selectedCustomer.id : undefined,
+        locationId: effectiveLocId,
+        date: saleDate,
+        lines: validatedItems.map((it) => ({
+          productId: it.prod.id,
+          qty: it.qty,
+          pieceWeightMg: it.pieceWeight ? gramsToMg(it.pieceWeight) : undefined,
+          unitPricePaise: rupeesToPaise(it.price)
+        })),
+        payments: salePayments,
+        notes: saleNotes.trim() || undefined
+      }
 
-      setSalesList((prev) => [...createdTransactions, ...prev])
-      const totalSaleAmt = validatedItems.reduce((sum, it) => sum + it.price * it.qty, 0)
-      const totalUnits = validatedItems.reduce((sum, it) => sum + it.qty, 0)
+      const res = await fetch('/api/admin/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to record sale order')
+      }
+
+      const createdOrder: Order = data.order
+
+      setIsSaleFormOpen(false)
+      toast.success(`Bill ${createdOrder.orderNo} recorded successfully`)
+
+      setOrdersList((prev) => [createdOrder, ...prev])
+
+      const newTransactions: Transaction[] = createdOrder.lines.map((l) => ({
+        id: l.transactionId,
+        orderId: createdOrder.id,
+        type: 'sale' as const,
+        productId: l.productId,
+        productName: l.productName,
+        category: l.category,
+        brand: l.brand,
+        metal: l.metal,
+        quantity: l.qty,
+        pieceWeight: l.pieceWeightMg ? l.pieceWeightMg / 1000 : undefined,
+        price: l.unitPricePaise / 100,
+        locationId: createdOrder.locationId,
+        locationName: createdOrder.locationName,
+        customerId: createdOrder.customerId,
+        customerName: createdOrder.customerSnapshot?.displayName || selectedCustomer?.displayName || undefined,
+        date: createdOrder.date,
+        notes: createdOrder.orderNo,
+        createdAt: createdOrder.createdAt
+      }))
+
+      setSalesList((prev) => [...newTransactions, ...prev])
+      const totalSaleAmt = createdOrder.totals.amountPaise / 100
+      const totalUnits = createdOrder.totals.totalQty
 
       setStats((prev) => ({
         ...prev,
-        salesCount: prev.salesCount + validatedItems.length,
+        salesCount: prev.salesCount + newTransactions.length,
         salesUnits: prev.salesUnits + totalUnits,
         salesRevenue: prev.salesRevenue + totalSaleAmt,
         netRevenue: prev.netRevenue + totalSaleAmt
@@ -765,6 +854,84 @@ export default function AdminSales() {
       toast.error(msg)
     } finally {
       setSaleSubmitting(false)
+    }
+  }
+
+  // Reverse complete Order Bill with atomic inventory restoration
+  const handleConfirmReverseOrder = async () => {
+    if (!reverseOrderTarget || !reverseOrderTarget.orderId) return
+    try {
+      setReversingOrder(true)
+      const res = await fetch(`/api/admin/orders/${reverseOrderTarget.orderId}/reverse`, {
+        method: 'POST'
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to reverse order')
+      }
+
+      const reversedOrder: Order = data.order
+      toast.success(`Bill ${reversedOrder.orderNo} reversed successfully`)
+
+      setOrdersList((prev) =>
+        prev.map((o) => (o.id === reversedOrder.id ? { ...o, isReversed: true } : o))
+      )
+
+      const lineTxIds = new Set(reversedOrder.lines.map((l) => l.transactionId))
+      setSalesList((prev) =>
+        prev.map((t) => (lineTxIds.has(t.id) ? { ...t, isReversed: true } : t))
+      )
+
+      const totalOrderAmt = reversedOrder.totals.amountPaise / 100
+      const totalOrderUnits = reversedOrder.totals.totalQty
+      setStats((prev) => ({
+        ...prev,
+        salesCount: Math.max(0, prev.salesCount - reversedOrder.lines.length),
+        salesUnits: Math.max(0, prev.salesUnits - totalOrderUnits),
+        salesRevenue: Math.max(0, prev.salesRevenue - totalOrderAmt),
+        netRevenue: Math.max(0, prev.netRevenue - totalOrderAmt)
+      }))
+
+      setProducts((prev) => {
+        let updated = [...prev]
+        for (const line of reversedOrder.lines) {
+          updated = updated.map((p) => {
+            if (p.id !== line.productId) return p
+            const locId = reversedOrder.locationId
+            const currentLocStock = p.stockByLocation?.[locId] || 0
+            const updatedLocStock = currentLocStock + line.qty
+            const updatedStockByLoc = { ...p.stockByLocation, [locId]: updatedLocStock }
+            const updatedTotalStock = (p.stock || 0) + line.qty
+
+            let updatedPieces = p.pieceWeights
+            let updatedPiecesByLoc = p.pieceWeightsByLocation
+            if (line.pieceWeightMg) {
+              const restoredWeightGrams = line.pieceWeightMg / 1000
+              const locPieces = p.pieceWeightsByLocation?.[locId] || []
+              updatedPiecesByLoc = { ...p.pieceWeightsByLocation, [locId]: [...locPieces, restoredWeightGrams] }
+              const allPieces = p.pieceWeights || []
+              updatedPieces = [...allPieces, restoredWeightGrams]
+            }
+
+            return {
+              ...p,
+              stock: updatedTotalStock,
+              stockByLocation: updatedStockByLoc,
+              pieceWeights: updatedPieces,
+              pieceWeightsByLocation: updatedPiecesByLoc
+            }
+          })
+        }
+        return updated
+      })
+
+      setReverseOrderTarget(null)
+    } catch (err: unknown) {
+      console.error('Error reversing order', err)
+      const msg = err instanceof Error ? err.message : 'Failed to reverse order'
+      toast.error(msg)
+    } finally {
+      setReversingOrder(false)
     }
   }
 
@@ -1394,15 +1561,27 @@ export default function AdminSales() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Customer Name / Entity
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Rajesh Kumar"
-                    value={saleCustomerName}
-                    onChange={(e) => setSaleCustomerName(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                  <CustomerPicker
+                    selectedCustomer={selectedCustomer}
+                    isWalkIn={isWalkInCustomer}
+                    onSelectCustomer={(cust) => {
+                      setSelectedCustomer(cust)
+                      if (cust) {
+                        setIsWalkInCustomer(false)
+                        setSaleCustomerName(cust.displayName)
+                      }
+                    }}
+                    onSelectWalkIn={() => {
+                      setIsWalkInCustomer(true)
+                      setSelectedCustomer(null)
+                      setSaleCustomerName('')
+                    }}
+                    onClear={() => {
+                      setSelectedCustomer(null)
+                      setIsWalkInCustomer(false)
+                      setSaleCustomerName('')
+                    }}
+                    disabled={saleSubmitting}
                   />
                 </div>
 
@@ -1593,6 +1772,19 @@ export default function AdminSales() {
                     )
                   })}
                 </div>
+              </div>
+
+              {/* Payment Split */}
+              <div className="pt-2">
+                <PaymentSplit
+                  totalPaise={saleTotalsPaise}
+                  payments={salePayments}
+                  onChange={(payments, isBalanced) => {
+                    setSalePayments(payments)
+                    setIsPaymentBalanced(isBalanced)
+                  }}
+                  disabled={saleSubmitting}
+                />
               </div>
 
               {/* Order Summary Footer */}
@@ -1899,7 +2091,30 @@ export default function AdminSales() {
                             {formatDateDisplay(bill.date)}
                           </td>
                           <td className="px-5 py-4 font-semibold text-black">
-                            {bill.customerName || <span className="text-gray-400 font-normal italic">Walk-in Customer</span>}
+                            {bill.customerId ? (
+                              <Link
+                                href={`/admin/customers/${bill.customerId}`}
+                                className="inline-flex items-center gap-1.5 text-black hover:underline group-hover:text-blue-600 transition-[color] duration-150"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <span>{bill.customerName || 'View Customer'}</span>
+                                <ExternalLink size={12} className="text-gray-400" />
+                              </Link>
+                            ) : (
+                              bill.customerName || <span className="text-gray-400 font-normal italic">Walk-in Customer</span>
+                            )}
+                            {bill.paymentModes && bill.paymentModes.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {bill.paymentModes.map((mode) => (
+                                  <span
+                                    key={mode}
+                                    className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-gray-100 text-gray-700 border border-gray-200"
+                                  >
+                                    {mode === 'old_metal' ? 'Metal' : mode}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </td>
                           <td className="px-5 py-4 text-xs text-gray-700">
                             {bill.locationName}
@@ -1926,8 +2141,12 @@ export default function AdminSales() {
                               {hasPermission('sales', 'delete') && bill.hasActive && (
                                 <button
                                   onClick={() => {
-                                    const activeItem = bill.items.find((i) => !i.isReversed && !i.reversalOf)
-                                    if (activeItem) setDeleteTxTarget(activeItem)
+                                    if (bill.orderId) {
+                                      setReverseOrderTarget(bill)
+                                    } else {
+                                      const activeItem = bill.items.find((i) => !i.isReversed && !i.reversalOf)
+                                      if (activeItem) setDeleteTxTarget(activeItem)
+                                    }
                                   }}
                                   title="Post reversing entry (restores stock)"
                                   className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
@@ -2188,6 +2407,17 @@ export default function AdminSales() {
         confirmText="Post Reversing Entry"
         onConfirm={executeDeleteTransaction}
         onClose={() => setDeleteTxTarget(null)}
+      />
+
+      {/* Order Reversal Modal */}
+      <ConfirmModal
+        isOpen={!!reverseOrderTarget}
+        title="Reverse Sale Bill"
+        description={`Posting a reversing entry will reverse bill ${reverseOrderTarget?.invoiceNo || ''} and all ${reverseOrderTarget?.items.length || 0} line item(s), restore all sold stock back into the location, and recalculate customer statistics. This action cannot be undone. Continue?`}
+        confirmText={reversingOrder ? 'Reversing...' : 'Reverse Bill'}
+        disabled={reversingOrder}
+        onConfirm={handleConfirmReverseOrder}
+        onClose={() => setReverseOrderTarget(null)}
       />
 
       {/* Super Admin Edit Sale Modal */}
