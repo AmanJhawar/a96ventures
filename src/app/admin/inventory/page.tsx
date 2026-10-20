@@ -1185,6 +1185,14 @@ export default function AdminInventory() {
     )
   }
 
+  const broadcastTxUpdate = () => {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      const bc = new BroadcastChannel('a96-tx-updates')
+      bc.postMessage({ type: 'transaction-updated' })
+      bc.close()
+    }
+  }
+
   const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault()
     const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : purchaseLocationId
@@ -1314,6 +1322,7 @@ export default function AdminInventory() {
           ? 'Purchase recorded successfully'
           : `Recorded purchase with ${validatedItems.length} items successfully`
       )
+      broadcastTxUpdate()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record purchase'
       setPurchaseError(msg)
@@ -1636,6 +1645,7 @@ export default function AdminInventory() {
 
       toast.success('Reversing entry posted successfully')
       setDeleteTxTarget(null)
+      broadcastTxUpdate()
     } catch (err: unknown) {
       console.error('Failed to reverse transaction', err)
       const msg = err instanceof Error ? err.message : 'Failed to reverse transaction'
@@ -1715,6 +1725,7 @@ export default function AdminInventory() {
 
       toast.success('Purchase entry updated successfully')
       setEditingPurchase(null)
+      broadcastTxUpdate()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update purchase'
       setEditPurchaseError(msg)

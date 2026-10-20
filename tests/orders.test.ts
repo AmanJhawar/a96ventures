@@ -394,8 +394,8 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
         purity: '999'
       }
 
-      let writtenVisit: Record<string, unknown> | null = null
-      let updatedCustomerStats: Record<string, unknown> | null = null
+      let writtenVisit: any = null
+      let updatedCustomerStats: any = null
 
       const fakeTransaction = {
         get: vi.fn(async (ref: { path: string }) => {
@@ -530,8 +530,8 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
         purity: '999'
       }
 
-      let restoredCustomerStats: Record<string, unknown> | null = null
-      let restoredProductUpdates: Record<string, unknown> | null = null
+      let restoredCustomerStats: any = null
+      let restoredProductUpdates: any = null
 
       const fakeTransaction = {
         get: vi.fn(async (ref: { path: string }) => {

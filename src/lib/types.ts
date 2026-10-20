@@ -135,7 +135,9 @@ export interface TransactionStats {
   returnsUnits: number;
   returnsAmount: number;
   netRevenue: number;
-  productSalesStats?: Record<string, { unitsSold: number; totalRevenue: number; salesCount: number }>;
+  profit: number;
+  costOfGoodsSold?: number;
+  productSalesStats?: Record<string, { unitsSold: number; totalRevenue: number; salesCount: number; profit?: number; cost?: number }>;
 }
 
 // ==========================================

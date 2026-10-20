@@ -119,7 +119,7 @@ describe('Visits API and Follow-ups (Phase 5)', () => {
       }
 
       let writtenVisit: Visit | null = null
-      let updatedCustomerStats: Record<string, unknown> | null = null
+      let updatedCustomerStats: any = null
 
       const fakeTransaction = {
         get: vi.fn(async (ref: { path: string }) => {
@@ -206,8 +206,8 @@ describe('Visits API and Follow-ups (Phase 5)', () => {
         followUpDone: false
       }
 
-      let updatedPriorVisit: Record<string, unknown> | null = null
-      let updatedCustomerStats: Record<string, unknown> | null = null
+      let updatedPriorVisit: any = null
+      let updatedCustomerStats: any = null
 
       const fakeTransaction = {
         get: vi.fn(async (ref: { path: string }) => {
@@ -368,7 +368,7 @@ describe('Visits API and Follow-ups (Phase 5)', () => {
         followUpDone: false
       }
 
-      let updatedCustomerStats: Record<string, unknown> | null = null
+      let updatedCustomerStats: any = null
       let deletedPath: string | null = null
 
       const fakeTransaction = {

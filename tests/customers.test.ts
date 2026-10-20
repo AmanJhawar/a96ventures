@@ -108,7 +108,7 @@ describe('Customer API & Validation (Phase 3)', () => {
         { field: 'phone', label: 'Phone', oldValue: '9876543210', newValue: '9876543211' }
       ]
 
-      const sanitized = redactAuditDiffs(diffs)
+      const sanitized = redactAuditDiffs(diffs)!
       expect(sanitized[0].oldValue).toBe('[redacted]')
       expect(sanitized[0].newValue).toBe('[redacted]')
       expect(sanitized[1].oldValue).toBe('9876543210')
@@ -121,7 +121,7 @@ describe('Customer API & Validation (Phase 3)', () => {
   })
 
   describe('Caller Permissions & Authorization Hierarchy', () => {
-    const superAdminCaller: AuthenticatedCaller = {
+    const superAdminCaller: any = {
       callerUid: 'super_admin_1',
       callerEmail: 'admin@a96ventures.com',
       callerName: 'Super Admin',
@@ -131,7 +131,7 @@ describe('Customer API & Validation (Phase 3)', () => {
       permissions: SUPER_ADMIN_PERMISSIONS
     }
 
-    const cashierCaller: AuthenticatedCaller = {
+    const cashierCaller: any = {
       callerUid: 'cashier_1',
       callerEmail: 'cashier@a96ventures.com',
       callerName: 'Cashier Staff',
@@ -141,7 +141,7 @@ describe('Customer API & Validation (Phase 3)', () => {
       permissions: SALES_CASHIER_PERMISSIONS
     }
 
-    const managerCaller: AuthenticatedCaller = {
+    const managerCaller: any = {
       callerUid: 'manager_1',
       callerEmail: 'manager@a96ventures.com',
       callerName: 'Store Manager',

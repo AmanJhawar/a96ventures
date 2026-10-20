@@ -1,4 +1,4 @@
-import { Product, TransactionType } from '@/lib/types'
+import { Product, TransactionType, Transaction } from '@/lib/types'
 import { gramsToMg, mgToGrams } from '@/lib/utils/weight'
 
 export interface NormalizedProductLedgerState {
@@ -328,7 +328,7 @@ export function applyRecordTransaction(params: RecordLedgerParams): RecordLedger
 
 export interface ReverseLedgerParams {
   productData: Partial<Product> | Record<string, unknown>
-  originalTx: Record<string, unknown>
+  originalTx: Partial<Transaction> | Record<string, unknown>
 }
 
 export interface ReverseLedgerResult {

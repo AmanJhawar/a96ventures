@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -151,7 +151,8 @@ export default function AdminSales() {
     returnsCount: 0,
     returnsUnits: 0,
     returnsAmount: 0,
-    netRevenue: 0
+    netRevenue: 0,
+    profit: 0
   })
   const [loading, setLoading] = useState(true)
 
@@ -283,6 +284,58 @@ export default function AdminSales() {
       ignore = true
     }
   }, [effectiveStartDate, effectiveEndDate, userAssignedLocationId])
+
+  const refreshStats = useCallback(async () => {
+    try {
+      const serverStats = await getTransactionStats({
+        startDate: effectiveStartDate || undefined,
+        endDate: effectiveEndDate || undefined,
+        locationId: userAssignedLocationId || undefined
+      })
+      if (serverStats) {
+        setStats(serverStats)
+      }
+    } catch (err) {
+      console.warn('Failed to refresh stats:', err)
+    }
+  }, [effectiveStartDate, effectiveEndDate, userAssignedLocationId])
+
+  const broadcastTxUpdate = useCallback(() => {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      const bc = new BroadcastChannel('a96-tx-updates')
+      bc.postMessage({ type: 'transaction-updated' })
+      bc.close()
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleFocus = () => {
+      refreshStats()
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshStats()
+      }
+    }
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    let bc: BroadcastChannel | null = null
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      bc = new BroadcastChannel('a96-tx-updates')
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'transaction-updated') {
+          refreshStats()
+        }
+      }
+    }
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
+      if (bc) bc.close()
+    }
+  }, [refreshStats])
 
   // Load More Handlers
   const handleLoadMoreSales = async () => {
@@ -812,8 +865,11 @@ export default function AdminSales() {
         salesCount: prev.salesCount + newTransactions.length,
         salesUnits: prev.salesUnits + totalUnits,
         salesRevenue: prev.salesRevenue + totalSaleAmt,
-        netRevenue: prev.netRevenue + totalSaleAmt
+        netRevenue: prev.netRevenue + totalSaleAmt,
+        profit: (prev.profit ?? prev.netRevenue) + totalSaleAmt
       }))
+      broadcastTxUpdate()
+      refreshStats()
 
       setProducts((prev) => {
         let updated = [...prev]
@@ -891,8 +947,11 @@ export default function AdminSales() {
         salesCount: Math.max(0, prev.salesCount - reversedOrder.lines.length),
         salesUnits: Math.max(0, prev.salesUnits - totalOrderUnits),
         salesRevenue: Math.max(0, prev.salesRevenue - totalOrderAmt),
-        netRevenue: Math.max(0, prev.netRevenue - totalOrderAmt)
+        netRevenue: Math.max(0, prev.netRevenue - totalOrderAmt),
+        profit: Math.max(0, (prev.profit ?? prev.netRevenue) - totalOrderAmt)
       }))
+      broadcastTxUpdate()
+      refreshStats()
 
       setProducts((prev) => {
         let updated = [...prev]
@@ -1003,8 +1062,11 @@ export default function AdminSales() {
         returnsCount: prev.returnsCount + 1,
         returnsUnits: prev.returnsUnits + qty,
         returnsAmount: prev.returnsAmount + retAmt,
-        netRevenue: prev.netRevenue - retAmt
+        netRevenue: prev.netRevenue - retAmt,
+        profit: (prev.profit ?? prev.netRevenue) - retAmt
       }))
+      broadcastTxUpdate()
+      refreshStats()
       setProducts((prev) =>
         prev.map((p) => {
           if (p.id !== prod.id) return p
@@ -1065,7 +1127,8 @@ export default function AdminSales() {
           salesCount: Math.max(0, prev.salesCount - 1),
           salesUnits: Math.max(0, prev.salesUnits - targetQty),
           salesRevenue: Math.max(0, prev.salesRevenue - targetTotal),
-          netRevenue: Math.max(0, prev.netRevenue - targetTotal)
+          netRevenue: Math.max(0, prev.netRevenue - targetTotal),
+          profit: Math.max(0, (prev.profit ?? prev.netRevenue) - targetTotal)
         }))
       } else if (isTargetReturn) {
         setReturnsList((prev) => {
@@ -1077,9 +1140,12 @@ export default function AdminSales() {
           returnsCount: Math.max(0, prev.returnsCount - 1),
           returnsUnits: Math.max(0, prev.returnsUnits - targetQty),
           returnsAmount: Math.max(0, prev.returnsAmount - targetTotal),
-          netRevenue: prev.netRevenue + targetTotal
+          netRevenue: prev.netRevenue + targetTotal,
+          profit: (prev.profit ?? prev.netRevenue) + targetTotal
         }))
       }
+      broadcastTxUpdate()
+      refreshStats()
 
       // Reverse stock on product locally
       const targetProdId = deleteTxTarget.productId
@@ -1191,8 +1257,11 @@ export default function AdminSales() {
         ...prev,
         salesUnits: prev.salesUnits + qtyDiff,
         salesRevenue: prev.salesRevenue + revDiff,
-        netRevenue: prev.netRevenue + revDiff
+        netRevenue: prev.netRevenue + revDiff,
+        profit: (prev.profit ?? prev.netRevenue) + revDiff
       }))
+      broadcastTxUpdate()
+      refreshStats()
 
       // Update product stock in local products state if quantity or location changed
       const oldLoc = editingSale.locationId
@@ -1327,16 +1396,20 @@ export default function AdminSales() {
 
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs uppercase font-semibold tracking-wider text-gray-500">Net Sales</span>
+            <span className="text-xs uppercase font-semibold tracking-wider text-gray-500">Profit</span>
             <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700">
               <TrendingUp size={14} />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-black tabular-nums tracking-tight">
-              ₹{stats.netRevenue.toLocaleString('en-IN')}
+            <div className={`text-2xl font-bold tabular-nums tracking-tight ${
+              (stats.profit ?? stats.netRevenue) < 0 ? 'text-rose-600' : 'text-black'
+            }`}>
+              {(stats.profit ?? stats.netRevenue) < 0
+                ? `-₹${Math.abs(stats.profit ?? stats.netRevenue).toLocaleString('en-IN')}`
+                : `₹${(stats.profit ?? stats.netRevenue).toLocaleString('en-IN')}`}
             </div>
-            <div className="text-xs text-gray-400 mt-1 font-medium">Sales minus returns</div>
+            <div className="text-xs text-gray-400 mt-1 font-medium">Revenue minus cost</div>
           </div>
         </div>
       </div>

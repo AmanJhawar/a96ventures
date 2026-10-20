@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     let returnsUnits = 0
     let returnsAmount = 0
 
-    const productSalesStats: Record<string, { unitsSold: number; totalRevenue: number; salesCount: number }> = {}
+    const productSalesStats: Record<string, { unitsSold: number; totalRevenue: number; salesCount: number; profit?: number; cost?: number }> = {}
 
     // 1. Compute Sales Totals with Firestore Aggregation Queries
     let salesQuery: FirebaseFirestore.Query = adminDb.collection('transactions').where('type', '==', 'sale')
@@ -111,14 +111,66 @@ export async function GET(req: NextRequest) {
       // Document scan fallback handles it below
     }
 
-    // 3. Document scan for per-product stats AND ground-truth non-reversed totals
+    // 3. Purchase cost basis map for calculating COGS (Cost of Goods Sold)
+    const productCostMap = new Map<string, { totalCost: number; totalQty: number; lastUnitPrice: number }>()
+
+    try {
+      const [purchasesSnap, openingsSnap] = await Promise.all([
+        adminDb.collection('transactions')
+          .where('type', '==', 'purchase')
+          .select('productId', 'quantity', 'price', 'totalAmount', 'type', 'isReversed', 'isReversal', 'reversalOf')
+          .get()
+          .catch(() => null),
+        adminDb.collection('transactions')
+          .where('type', '==', 'opening')
+          .select('productId', 'quantity', 'price', 'totalAmount', 'type', 'isReversed', 'isReversal', 'reversalOf')
+          .get()
+          .catch(() => null)
+      ])
+
+      const processCostDoc = (docSnap: FirebaseFirestore.DocumentSnapshot) => {
+        const d = docSnap.data()
+        if (!d) return
+        if (d.isReversed === true || d.isReversal === true || Boolean(d.reversalOf)) return
+
+        const pId = String(d.productId || '')
+        if (!pId) return
+
+        const qty = Number(d.quantity || 0)
+        const price = typeof d.price === 'number' ? d.price : 0
+        const amt = typeof d.totalAmount === 'number'
+          ? d.totalAmount
+          : price * (qty > 0 ? qty : 1)
+
+        if (!productCostMap.has(pId)) {
+          productCostMap.set(pId, { totalCost: 0, totalQty: 0, lastUnitPrice: 0 })
+        }
+        const entry = productCostMap.get(pId)!
+        if (price > 0 || amt > 0) {
+          entry.totalCost += amt
+          entry.totalQty += (qty > 0 ? qty : 1)
+          entry.lastUnitPrice = price > 0 ? price : amt / (qty > 0 ? qty : 1)
+        }
+      }
+
+      purchasesSnap?.docs.forEach(processCostDoc)
+      openingsSnap?.docs.forEach(processCostDoc)
+    } catch (costErr) {
+      console.warn('Failed to compute product cost basis:', costErr)
+    }
+
+    // 4. Document scan for per-product stats, COGS, and ground-truth non-reversed totals
     let cleanSalesCount = 0
     let cleanSalesUnits = 0
     let cleanSalesRevenue = 0
+    let cleanSalesCost = 0
 
     let cleanReturnsCount = 0
     let cleanReturnsUnits = 0
     let cleanReturnsAmount = 0
+    let cleanReturnsCost = 0
+
+    const productDocCostMap = new Map<string, number>()
 
     try {
       let salesDocsSnap: FirebaseFirestore.QuerySnapshot
@@ -129,6 +181,66 @@ export async function GET(req: NextRequest) {
         if (startDate) fallbackQ = fallbackQ.where('date', '>=', startDate)
         if (endDate) fallbackQ = fallbackQ.where('date', '<=', endDate)
         salesDocsSnap = await fallbackQ.select('productId', 'quantity', 'price', 'totalAmount', 'type', 'locationId', 'isReversed', 'isReversal', 'reversalOf').get()
+      }
+
+      let returnsDocsSnap: FirebaseFirestore.QuerySnapshot
+      try {
+        returnsDocsSnap = await returnsQuery.select('productId', 'quantity', 'price', 'totalAmount', 'type', 'locationId', 'isReversed', 'isReversal', 'reversalOf').get()
+      } catch {
+        let fallbackQ: FirebaseFirestore.Query = adminDb.collection('transactions')
+        if (startDate) fallbackQ = fallbackQ.where('date', '>=', startDate)
+        if (endDate) fallbackQ = fallbackQ.where('date', '<=', endDate)
+        returnsDocsSnap = await fallbackQ.select('productId', 'quantity', 'price', 'totalAmount', 'type', 'locationId', 'isReversed', 'isReversal', 'reversalOf').get()
+      }
+
+      // Check if any product needs fallback cost from product catalog doc
+      const missingCostProductIds = new Set<string>()
+      salesDocsSnap.docs.forEach((docSnap) => {
+        const d = docSnap.data()
+        const pId = String(d.productId || '')
+        if (pId && (!productCostMap.has(pId) || productCostMap.get(pId)!.totalCost <= 0)) {
+          missingCostProductIds.add(pId)
+        }
+      })
+      returnsDocsSnap.docs.forEach((docSnap) => {
+        const d = docSnap.data()
+        const pId = String(d.productId || '')
+        if (pId && (!productCostMap.has(pId) || productCostMap.get(pId)!.totalCost <= 0)) {
+          missingCostProductIds.add(pId)
+        }
+      })
+
+      if (missingCostProductIds.size > 0) {
+        const missingList = Array.from(missingCostProductIds)
+        for (let i = 0; i < missingList.length; i += 30) {
+          const chunk = missingList.slice(i, i + 30)
+          try {
+            const pSnap = await adminDb.collection('products')
+              .where('__name__', 'in', chunk)
+              .select('cost', 'costPrice', 'purchasePrice')
+              .get()
+            pSnap.docs.forEach((pDoc) => {
+              const d = pDoc.data()
+              const cost = Number(d.cost || d.costPrice || d.purchasePrice || 0)
+              if (cost > 0) {
+                productDocCostMap.set(pDoc.id, cost)
+              }
+            })
+          } catch {
+            // Ignore catalog lookup error
+          }
+        }
+      }
+
+      const getProductUnitCost = (pId: string): number => {
+        const entry = productCostMap.get(pId)
+        if (entry && entry.totalQty > 0 && entry.totalCost > 0) {
+          return entry.totalCost / entry.totalQty
+        }
+        if (entry && entry.lastUnitPrice > 0) {
+          return entry.lastUnitPrice
+        }
+        return productDocCostMap.get(pId) || 0
       }
 
       salesDocsSnap.docs.forEach((docSnap) => {
@@ -151,25 +263,21 @@ export async function GET(req: NextRequest) {
         cleanSalesRevenue += amt
 
         const pId = String(d.productId || '')
+        const unitCost = pId ? getProductUnitCost(pId) : 0
+        const lineCost = unitCost * qty
+        cleanSalesCost += lineCost
+
         if (pId) {
           if (!productSalesStats[pId]) {
-            productSalesStats[pId] = { unitsSold: 0, totalRevenue: 0, salesCount: 0 }
+            productSalesStats[pId] = { unitsSold: 0, totalRevenue: 0, salesCount: 0, profit: 0, cost: 0 }
           }
           productSalesStats[pId].unitsSold += qty
           productSalesStats[pId].totalRevenue += amt
           productSalesStats[pId].salesCount++
+          productSalesStats[pId].cost = (productSalesStats[pId].cost || 0) + lineCost
+          productSalesStats[pId].profit = productSalesStats[pId].totalRevenue - productSalesStats[pId].cost
         }
       })
-
-      let returnsDocsSnap: FirebaseFirestore.QuerySnapshot
-      try {
-        returnsDocsSnap = await returnsQuery.select('quantity', 'price', 'totalAmount', 'type', 'locationId', 'isReversed', 'isReversal', 'reversalOf').get()
-      } catch {
-        let fallbackQ: FirebaseFirestore.Query = adminDb.collection('transactions')
-        if (startDate) fallbackQ = fallbackQ.where('date', '>=', startDate)
-        if (endDate) fallbackQ = fallbackQ.where('date', '<=', endDate)
-        returnsDocsSnap = await fallbackQ.select('quantity', 'price', 'totalAmount', 'type', 'locationId', 'isReversed', 'isReversal', 'reversalOf').get()
-      }
 
       returnsDocsSnap.docs.forEach((docSnap) => {
         const d = docSnap.data()
@@ -189,6 +297,11 @@ export async function GET(req: NextRequest) {
         cleanReturnsCount++
         cleanReturnsUnits += qty
         cleanReturnsAmount += amt
+
+        const pId = String(d.productId || '')
+        const unitCost = pId ? getProductUnitCost(pId) : 0
+        const lineCost = unitCost * qty
+        cleanReturnsCost += lineCost
       })
 
       // Ground truth clean totals ensure exact correspondence between top sellers and executive cards
@@ -214,6 +327,8 @@ export async function GET(req: NextRequest) {
     }
 
     const netRevenue = salesRevenue - returnsAmount
+    const costOfGoodsSold = Math.max(0, cleanSalesCost - cleanReturnsCost)
+    const profit = netRevenue - costOfGoodsSold
 
     const stats: TransactionStats = {
       salesCount,
@@ -223,6 +338,8 @@ export async function GET(req: NextRequest) {
       returnsUnits,
       returnsAmount,
       netRevenue,
+      profit,
+      costOfGoodsSold,
       productSalesStats
     }
 

@@ -508,12 +508,46 @@ export async function getTransactionStats(options?: {
     returnsUnits: 0,
     returnsAmount: 0,
     netRevenue: 0,
+    profit: 0,
+    costOfGoodsSold: 0,
     productSalesStats: {}
   };
 
+  // 1. Calculate product purchase unit costs
+  const prodCostMap = new Map<string, { totalCost: number; totalQty: number; lastPrice?: number }>();
   snap.forEach((d) => {
     const tx = d.data();
-    if (tx.isReversed || tx.reversed) return;
+    if (tx.isReversed || tx.reversed || tx.isReversal || tx.reversalOf) return;
+    if (tx.type === 'purchase' || tx.type === 'opening') {
+      const pId = String(tx.productId || '');
+      if (!pId) return;
+      const qty = Number(tx.quantity || 0);
+      const price = Number(tx.price || 0);
+      const amt = Number(tx.totalAmount ?? (price * (qty > 0 ? qty : 1)));
+      if (!prodCostMap.has(pId)) {
+        prodCostMap.set(pId, { totalCost: 0, totalQty: 0 });
+      }
+      const entry = prodCostMap.get(pId)!;
+      if (price > 0 || amt > 0) {
+        entry.totalCost += amt;
+        entry.totalQty += (qty > 0 ? qty : 1);
+        entry.lastPrice = price > 0 ? price : (amt / (qty > 0 ? qty : 1));
+      }
+    }
+  });
+
+  const getUnitCost = (pId: string): number => {
+    const entry = prodCostMap.get(pId);
+    if (entry && entry.totalQty > 0 && entry.totalCost > 0) return entry.totalCost / entry.totalQty;
+    return entry?.lastPrice || 0;
+  };
+
+  let totalSalesCost = 0;
+  let totalReturnsCost = 0;
+
+  snap.forEach((d) => {
+    const tx = d.data();
+    if (tx.isReversed || tx.reversed || tx.isReversal || tx.reversalOf) return;
     if (options?.startDate && tx.date < options.startDate) return;
     if (options?.endDate && tx.date > options.endDate) return;
     if (options?.locationId && tx.locationId !== options.locationId && tx.toLocationId !== options.locationId) return;
@@ -521,27 +555,36 @@ export async function getTransactionStats(options?: {
     const qty = Number(tx.quantity || 0);
     const price = Number(tx.price || 0);
     const amount = Number(tx.totalAmount ?? (price * qty));
+    const pId = String(tx.productId || '');
+    const unitCost = pId ? getUnitCost(pId) : 0;
+    const lineCost = unitCost * qty;
 
     if (tx.type === 'sale') {
       stats.salesCount += 1;
       stats.salesUnits += qty;
       stats.salesRevenue += amount;
-      if (tx.productId) {
-        if (!stats.productSalesStats![tx.productId]) {
-          stats.productSalesStats![tx.productId] = { unitsSold: 0, totalRevenue: 0, salesCount: 0 };
+      totalSalesCost += lineCost;
+      if (pId) {
+        if (!stats.productSalesStats![pId]) {
+          stats.productSalesStats![pId] = { unitsSold: 0, totalRevenue: 0, salesCount: 0, profit: 0, cost: 0 };
         }
-        stats.productSalesStats![tx.productId].unitsSold += qty;
-        stats.productSalesStats![tx.productId].totalRevenue += amount;
-        stats.productSalesStats![tx.productId].salesCount += 1;
+        stats.productSalesStats![pId].unitsSold += qty;
+        stats.productSalesStats![pId].totalRevenue += amount;
+        stats.productSalesStats![pId].salesCount += 1;
+        stats.productSalesStats![pId].cost = (stats.productSalesStats![pId].cost || 0) + lineCost;
+        stats.productSalesStats![pId].profit = stats.productSalesStats![pId].totalRevenue - stats.productSalesStats![pId].cost;
       }
     } else if (tx.type === 'return') {
       stats.returnsCount += 1;
       stats.returnsUnits += qty;
       stats.returnsAmount += amount;
+      totalReturnsCost += lineCost;
     }
   });
 
   stats.netRevenue = stats.salesRevenue - stats.returnsAmount;
+  stats.costOfGoodsSold = Math.max(0, totalSalesCost - totalReturnsCost);
+  stats.profit = stats.netRevenue - stats.costOfGoodsSold;
   return stats;
 }
 

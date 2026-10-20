@@ -118,7 +118,9 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
     portfolio: { view: false, add: false, edit: false, delete: false },
     reports: { view: false, export: false },
     archive: { zeroBalance: false, uploadArchive: false },
-    users: { view: false, add: false, edit: false, delete: false }
+    users: { view: false, add: false, edit: false, delete: false },
+    customers: { view: false, add: false, edit: false, editPan: false, viewPan: false, export: false, delete: false },
+    visits: { view: false, add: false, edit: false, delete: false }
   }
 
   const snap = await getDocs(collection(db, 'admins'))
