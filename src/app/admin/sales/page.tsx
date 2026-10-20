@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
   ShoppingCart,
   Plus,
@@ -14,7 +15,9 @@ import {
   Lock,
   Calendar,
   Trash2,
-  Pencil
+  Pencil,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react'
 
 export interface SaleLineItem {
@@ -24,6 +27,33 @@ export interface SaleLineItem {
   price: string
   pieceWeight?: string
 }
+
+export interface SaleBill {
+  billKey: string
+  invoiceNo: string
+  date: string
+  customerName: string
+  locationName: string
+  locationId: string
+  items: Transaction[]
+  totalQuantity: number
+  totalAmount: number
+  hasReversed: boolean
+  hasActive: boolean
+}
+
+function formatDateDisplay(rawDate?: string) {
+  if (!rawDate) return '—'
+  const parts = rawDate.split('-')
+  if (parts.length === 3) {
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    }
+  }
+  return rawDate
+}
+
 import { Product, Location, Transaction, ProductCategory, MetalType, TransactionStats } from '@/lib/types'
 import {
   getProducts,
@@ -44,16 +74,54 @@ import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatWeight } from '@/lib/utils/weight'
 import { getTodayIST, getDaysAgoIST } from '@/lib/utils/date'
+import { Button } from '@/components/ui/button'
+import { SkeletonTable } from '@/components/ui/skeleton'
+import { FormError } from '@/components/ui/form-error'
 
 const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
 
 type SalesTab = 'sales' | 'returns'
 
 export default function AdminSales() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
   const { hasPermission, adminUser, isSuperAdmin } = usePermissions()
   const userAssignedLocationId = adminUser?.assignedLocationId
   const isLocationLocked = Boolean(!isSuperAdmin && userAssignedLocationId)
-  const [activeTab, setActiveTab] = useState<SalesTab>('sales')
+
+  // URL-synchronized tabs (?tab=sales | ?tab=returns)
+  const tabParam = searchParams.get('tab')
+  const activeTab: SalesTab = tabParam === 'returns' ? 'returns' : 'sales'
+
+  const handleTabChange = (tab: SalesTab) => {
+    setIsSaleFormOpen(false)
+    setIsReturnFormOpen(false)
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'sales') {
+      params.delete('tab')
+    } else {
+      params.set('tab', tab)
+    }
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
+
+  const [expandedBillKeys, setExpandedBillKeys] = useState<Set<string>>(new Set())
+
+  const toggleBillExpand = (key: string) => {
+    setExpandedBillKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }
+
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All')
   const [selectedMetal, setSelectedMetal] = useState<MetalType | 'All'>('All')
 
@@ -255,6 +323,46 @@ export default function AdminSales() {
         (selectedMetal === 'All' || tx.metal === selectedMetal)
     )
   }, [salesList, selectedCategory, selectedMetal])
+
+  // Group sales transactions into bills/invoices
+  const saleBills: SaleBill[] = useMemo(() => {
+    const billMap = new Map<string, SaleBill>()
+
+    for (const tx of filteredSales) {
+      const invoiceKey = (tx.notes && tx.notes.trim())
+        ? `${tx.notes.trim()}_${tx.date}_${tx.locationId}`
+        : tx.id
+
+      let bill = billMap.get(invoiceKey)
+      if (!bill) {
+        bill = {
+          billKey: invoiceKey,
+          invoiceNo: tx.notes?.trim() || `TX-${tx.id.slice(0, 8).toUpperCase()}`,
+          date: tx.date,
+          customerName: tx.customerName || '',
+          locationName: tx.locationName || '',
+          locationId: tx.locationId,
+          items: [],
+          totalQuantity: 0,
+          totalAmount: 0,
+          hasReversed: false,
+          hasActive: false
+        }
+        billMap.set(invoiceKey, bill)
+      }
+
+      bill.items.push(tx)
+      bill.totalQuantity += tx.quantity || 1
+      bill.totalAmount += (tx.price || 0) * (tx.quantity || 1)
+      if (tx.isReversed) {
+        bill.hasReversed = true
+      } else {
+        bill.hasActive = true
+      }
+    }
+
+    return Array.from(billMap.values())
+  }, [filteredSales])
 
   // Filtered returns
   const filteredReturns = useMemo(() => {
@@ -1068,11 +1176,7 @@ export default function AdminSales() {
       <div className="flex items-center border-b border-gray-200 mb-6">
         {(isSuperAdmin || hasPermission('sales', 'view')) && (
           <button
-            onClick={() => {
-              setActiveTab('sales')
-              setIsSaleFormOpen(false)
-              setIsReturnFormOpen(false)
-            }}
+            onClick={() => handleTabChange('sales')}
             className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'sales'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
@@ -1089,11 +1193,7 @@ export default function AdminSales() {
         )}
         {(isSuperAdmin || hasPermission('returns', 'view')) && (
           <button
-            onClick={() => {
-              setActiveTab('returns')
-              setIsSaleFormOpen(false)
-              setIsReturnFormOpen(false)
-            }}
+            onClick={() => handleTabChange('returns')}
             className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'returns'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
@@ -1739,11 +1839,9 @@ export default function AdminSales() {
 
       {/* Main Tables */}
       {loading ? (
-        <div className="flex justify-center items-center py-24">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
-        </div>
+        <SkeletonTable rows={6} columns={7} />
       ) : activeTab === 'sales' ? (
-        filteredSales.length === 0 ? (
+        saleBills.length === 0 ? (
           <EmptyState
             title="No sales recorded"
             description="When you record a customer sale, stock is automatically decremented from the chosen physical location."
@@ -1762,98 +1860,168 @@ export default function AdminSales() {
           />
         ) : (
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200 text-xs uppercase font-semibold text-gray-500 tracking-wider">
+            <div className="overflow-x-auto max-h-[720px] overflow-y-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead className="sticky top-0 bg-gray-50/95 backdrop-blur z-10 border-b border-gray-200 text-xs uppercase font-semibold text-gray-500 tracking-wider">
                   <tr>
-                    <th className="px-6 py-3.5">Date</th>
-                    <th className="px-6 py-3.5">Customer</th>
-                    <th className="px-6 py-3.5">Product</th>
-                    <th className="px-6 py-3.5">Metal</th>
-                    <th className="px-6 py-3.5">Category</th>
-                    <th className="px-6 py-3.5">Location</th>
-                    <th className="px-6 py-3.5 text-right">Quantity</th>
-                    <th className="px-6 py-3.5 text-right">Unit Price</th>
-                    <th className="px-6 py-3.5 text-right">Total (₹)</th>
-                    <th className="px-6 py-3.5">Notes</th>
-                    <th className="px-6 py-3.5 text-right">Actions</th>
+                    <th className="px-5 py-3.5">Bill / Invoice</th>
+                    <th className="px-5 py-3.5">Date</th>
+                    <th className="px-5 py-3.5">Customer</th>
+                    <th className="px-5 py-3.5">Location</th>
+                    <th className="px-5 py-3.5 text-right">Items</th>
+                    <th className="px-5 py-3.5 text-right">Total (₹)</th>
+                    <th className="px-5 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredSales.map((tx) => {
-                    const totalVal = tx.price ? tx.price * tx.quantity : 0
+                  {saleBills.map((bill) => {
+                    const isExpanded = expandedBillKeys.has(bill.billKey)
                     return (
-                      <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
-                        <td className="px-6 py-4 text-xs font-mono text-gray-500">
-                          {tx.date}
-                        </td>
-                        <td className="px-6 py-4 font-semibold text-black">
-                          {tx.customerName || <span className="text-gray-300 italic">—</span>}
-                        </td>
-                        <td className="px-6 py-4 font-semibold text-black">
-                          {tx.productName}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
-                            {tx.metal || 'Silver'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-xs text-gray-600">
-                          {tx.category}
-                        </td>
-                        <td className="px-6 py-4 text-gray-700">
-                          {tx.locationName}
-                        </td>
-                        <td className="px-6 py-4 text-right tabular-nums font-semibold text-black">
-                          {tx.quantity}
-                          {tx.pieceWeight && (
-                            <div className="text-[11px] font-mono text-gray-500">
-                              ({formatWeight(tx.pieceWeight)})
+                      <React.Fragment key={bill.billKey}>
+                        <tr
+                          onClick={() => toggleBillExpand(bill.billKey)}
+                          className="hover:bg-gray-50/80 cursor-pointer transition-[background-color] duration-150 group"
+                        >
+                          <td className="px-5 py-4 font-mono font-medium text-xs text-black">
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 flex items-center justify-center rounded text-gray-400 group-hover:text-black group-hover:bg-gray-200/60 transition-[background-color,color] duration-150">
+                                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                              </span>
+                              <span className="font-semibold">{bill.invoiceNo}</span>
+                              {bill.hasReversed && !bill.hasActive && (
+                                <span className="ml-1.5 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                  Reversed
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-right tabular-nums text-gray-600">
-                          {tx.price ? `₹${tx.price.toLocaleString('en-IN')}` : '—'}
-                        </td>
-                        <td className="px-6 py-4 text-right tabular-nums font-bold text-black">
-                          {totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')}` : '—'}
-                        </td>
-                        <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate">
-                          {tx.notes || '—'}
-                          {tx.isReversed && (
-                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                              Reversed
+                          </td>
+                          <td className="px-5 py-4 text-xs text-gray-600">
+                            {formatDateDisplay(bill.date)}
+                          </td>
+                          <td className="px-5 py-4 font-semibold text-black">
+                            {bill.customerName || <span className="text-gray-400 font-normal italic">Walk-in Customer</span>}
+                          </td>
+                          <td className="px-5 py-4 text-xs text-gray-700">
+                            {bill.locationName}
+                          </td>
+                          <td className="px-5 py-4 text-right tabular-nums text-xs font-medium text-gray-700">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-800">
+                              {bill.items.length} {bill.items.length === 1 ? 'item' : 'items'} • {bill.totalQuantity} {bill.totalQuantity === 1 ? 'unit' : 'units'}
                             </span>
-                          )}
-                          {tx.reversalOf && (
-                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
-                              Reversal
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {isSuperAdmin && !tx.isReversed && !tx.reversalOf && (
-                              <button
-                                onClick={() => handleOpenEditSale(tx)}
-                                title="Edit sale (Super Admin)"
-                                className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                              >
-                                <Pencil size={14} />
-                              </button>
-                            )}
-                            {hasPermission('sales', 'delete') && !tx.isReversed && !tx.reversalOf && (
-                              <button
-                                onClick={() => setDeleteTxTarget(tx)}
-                                title="Post reversing entry (restores stock)"
-                                className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                              >
-                                <RotateCcw size={14} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="px-5 py-4 text-right tabular-nums font-bold text-black">
+                            ₹{bill.totalAmount.toLocaleString('en-IN')}
+                          </td>
+                          <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1">
+                              {bill.items.length === 1 && isSuperAdmin && !bill.items[0].isReversed && !bill.items[0].reversalOf && (
+                                <button
+                                  onClick={() => handleOpenEditSale(bill.items[0])}
+                                  title="Edit sale (Super Admin)"
+                                  className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                              )}
+                              {hasPermission('sales', 'delete') && bill.hasActive && (
+                                <button
+                                  onClick={() => {
+                                    const activeItem = bill.items.find((i) => !i.isReversed && !i.reversalOf)
+                                    if (activeItem) setDeleteTxTarget(activeItem)
+                                  }}
+                                  title="Post reversing entry (restores stock)"
+                                  className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                >
+                                  <RotateCcw size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Expanded Line Items Table */}
+                        {isExpanded && (
+                          <tr className="bg-gray-50/50">
+                            <td colSpan={7} className="px-6 py-3 border-t border-b border-gray-200/80">
+                              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-2xs">
+                                <div className="px-4 py-2 bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center justify-between">
+                                  <span>Bill Line Items ({bill.items.length})</span>
+                                  <span className="font-mono text-gray-400">Invoice: {bill.invoiceNo}</span>
+                                </div>
+                                <table className="w-full text-left text-xs">
+                                  <thead>
+                                    <tr className="border-b border-gray-100 text-gray-400 font-medium">
+                                      <th className="py-2.5 px-4 font-normal">Product</th>
+                                      <th className="py-2.5 px-4 font-normal">Metal</th>
+                                      <th className="py-2.5 px-4 font-normal">Category</th>
+                                      <th className="py-2.5 px-4 text-right font-normal">Qty / Weight</th>
+                                      <th className="py-2.5 px-4 text-right font-normal">Unit Price</th>
+                                      <th className="py-2.5 px-4 text-right font-normal">Total</th>
+                                      <th className="py-2.5 px-4 text-right font-normal">Item Action</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {bill.items.map((item) => {
+                                      const lineTotal = (item.price || 0) * (item.quantity || 1)
+                                      return (
+                                        <tr key={item.id} className="hover:bg-gray-50/40">
+                                          <td className="py-2.5 px-4 font-semibold text-black">
+                                            {item.productName}
+                                          </td>
+                                          <td className="py-2.5 px-4">
+                                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
+                                              {item.metal || 'Silver'}
+                                            </span>
+                                          </td>
+                                          <td className="py-2.5 px-4 text-gray-600">
+                                            {item.category}
+                                          </td>
+                                          <td className="py-2.5 px-4 text-right tabular-nums font-semibold text-black">
+                                            {item.quantity}
+                                            {item.pieceWeight && (
+                                              <span className="text-[11px] font-mono text-gray-500 block">
+                                                ({formatWeight(item.pieceWeight)})
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td className="py-2.5 px-4 text-right tabular-nums text-gray-600">
+                                            {item.price ? `₹${item.price.toLocaleString('en-IN')}` : '—'}
+                                          </td>
+                                          <td className="py-2.5 px-4 text-right tabular-nums font-bold text-black">
+                                            ₹{lineTotal.toLocaleString('en-IN')}
+                                          </td>
+                                          <td className="py-2.5 px-4 text-right">
+                                            <div className="flex items-center justify-end gap-1">
+                                              {isSuperAdmin && !item.isReversed && !item.reversalOf && (
+                                                <button
+                                                  onClick={() => handleOpenEditSale(item)}
+                                                  title="Edit item (Super Admin)"
+                                                  className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded transition-[color,background-color] duration-150"
+                                                >
+                                                  <Pencil size={13} />
+                                                </button>
+                                              )}
+                                              {hasPermission('sales', 'delete') && !item.isReversed && !item.reversalOf && (
+                                                <button
+                                                  onClick={() => setDeleteTxTarget(item)}
+                                                  title="Reverse this item"
+                                                  className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded transition-[color,background-color] duration-150"
+                                                >
+                                                  <RotateCcw size={13} />
+                                                </button>
+                                              )}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     )
                   })}
                 </tbody>
@@ -1910,21 +2078,17 @@ export default function AdminSales() {
           />
         ) : (
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200 text-xs uppercase font-semibold text-gray-500 tracking-wider">
+            <div className="overflow-x-auto max-h-[720px] overflow-y-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead className="sticky top-0 bg-gray-50/95 backdrop-blur z-10 border-b border-gray-200 text-xs uppercase font-semibold text-gray-500 tracking-wider">
                   <tr>
-                    <th className="px-6 py-3.5">Date</th>
-                    <th className="px-6 py-3.5">Customer</th>
-                    <th className="px-6 py-3.5">Product</th>
-                    <th className="px-6 py-3.5">Metal</th>
-                    <th className="px-6 py-3.5">Category</th>
-                    <th className="px-6 py-3.5">Restocked At</th>
-                    <th className="px-6 py-3.5 text-right">Quantity</th>
-                    <th className="px-6 py-3.5 text-right">Refund Unit Price</th>
-                    <th className="px-6 py-3.5 text-right">Total Refund (₹)</th>
-                    <th className="px-6 py-3.5">Notes</th>
-                    <th className="px-6 py-3.5 text-right">Actions</th>
+                    <th className="px-5 py-3.5">Date</th>
+                    <th className="px-5 py-3.5">Customer</th>
+                    <th className="px-5 py-3.5">Product</th>
+                    <th className="px-5 py-3.5">Restocked At</th>
+                    <th className="px-5 py-3.5 text-right">Quantity</th>
+                    <th className="px-5 py-3.5 text-right">Total Refund (₹)</th>
+                    <th className="px-5 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1932,27 +2096,25 @@ export default function AdminSales() {
                     const totalVal = tx.price ? tx.price * tx.quantity : 0
                     return (
                       <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
-                        <td className="px-6 py-4 text-xs font-mono text-gray-500">
-                          {tx.date}
+                        <td className="px-5 py-4 text-xs text-gray-600">
+                          {formatDateDisplay(tx.date)}
                         </td>
-                        <td className="px-6 py-4 font-semibold text-black">
-                          {tx.customerName || <span className="text-gray-300 italic">—</span>}
+                        <td className="px-5 py-4 font-semibold text-black">
+                          {tx.customerName || <span className="text-gray-400 font-normal italic">Walk-in Customer</span>}
                         </td>
-                        <td className="px-6 py-4 font-semibold text-black">
-                          {tx.productName}
+                        <td className="px-5 py-4">
+                          <div className="font-semibold text-black">{tx.productName}</div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
+                              {tx.metal || 'Silver'}
+                            </span>
+                            <span className="text-[11px] text-gray-500">{tx.category}</span>
+                          </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
-                            {tx.metal || 'Silver'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-xs text-gray-600">
-                          {tx.category}
-                        </td>
-                        <td className="px-6 py-4 text-gray-700">
+                        <td className="px-5 py-4 text-xs text-gray-700">
                           {tx.locationName}
                         </td>
-                        <td className="px-6 py-4 text-right tabular-nums font-semibold text-black">
+                        <td className="px-5 py-4 text-right tabular-nums font-semibold text-black">
                           +{tx.quantity}
                           {tx.pieceWeight && (
                             <div className="text-[11px] font-mono text-gray-500">
@@ -1960,26 +2122,15 @@ export default function AdminSales() {
                             </div>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-right tabular-nums text-gray-600">
-                          {tx.price ? `₹${tx.price.toLocaleString('en-IN')}` : '—'}
-                        </td>
-                        <td className="px-6 py-4 text-right tabular-nums font-bold text-black">
+                        <td className="px-5 py-4 text-right tabular-nums font-bold text-black">
                           {totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')}` : '—'}
-                        </td>
-                        <td className="px-6 py-4 text-xs text-gray-500 max-w-xs truncate">
-                          {tx.notes || '—'}
-                          {tx.isReversed && (
-                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                              Reversed
-                            </span>
-                          )}
-                          {tx.reversalOf && (
-                            <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
-                              Reversal
-                            </span>
+                          {tx.notes && (
+                            <div className="text-[11px] text-gray-400 font-normal truncate max-w-xs ml-auto">
+                              {tx.notes}
+                            </div>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-5 py-4 text-right">
                           {hasPermission('returns', 'delete') && !tx.isReversed && !tx.reversalOf && (
                             <button
                               onClick={() => setDeleteTxTarget(tx)}

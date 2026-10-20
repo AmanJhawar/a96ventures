@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/empty-state'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
+import { SkeletonTable } from '@/components/ui/skeleton'
 
 export default function AdminLocations() {
   const { hasPermission, isSuperAdmin } = usePermissions()
@@ -249,9 +250,7 @@ export default function AdminLocations() {
 
       {/* Locations Table */}
       {loading ? (
-        <div className="flex justify-center items-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
-        </div>
+        <SkeletonTable rows={4} columns={4} />
       ) : locations.length === 0 ? (
         <EmptyState
           title="No locations found"

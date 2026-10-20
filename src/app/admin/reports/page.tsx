@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
   TrendingUp,
   Warehouse,
@@ -16,6 +17,8 @@ import { formatWeight } from '@/lib/utils/weight'
 import { getTodayIST, getDaysAgoIST } from '@/lib/utils/date'
 import { downloadCSV } from '@/lib/utils/csv'
 import { toast } from 'sonner'
+import { SkeletonTable } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
 
 const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
 const METALS: MetalType[] = ['Gold', 'Silver']
@@ -40,8 +43,27 @@ interface ProductSalesStat {
 }
 
 export default function AdminReportsPage() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
   const { hasPermission, isSuperAdmin } = usePermissions()
-  const [activeTab, setActiveTab] = useState<ReportTab>('top_selling')
+
+  // URL-synchronized tabs (?tab=top_selling | ?tab=stock_summary)
+  const tabParam = searchParams.get('tab')
+  const activeTab: ReportTab = tabParam === 'stock_summary' ? 'stock_summary' : 'top_selling'
+
+  const handleTabChange = (tab: ReportTab) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'top_selling') {
+      params.delete('tab')
+    } else {
+      params.set('tab', tab)
+    }
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
+
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All')
   const [selectedMetal, setSelectedMetal] = useState<MetalType | 'All'>('All')
   const [dateRange, setDateRange] = useState<DateRange>('all')
@@ -472,7 +494,7 @@ export default function AdminReportsPage() {
       {/* Primary Section Tabs */}
       <div className="flex items-center border-b border-gray-200 mb-6">
         <button
-          onClick={() => setActiveTab('top_selling')}
+          onClick={() => handleTabChange('top_selling')}
           className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${
             activeTab === 'top_selling'
               ? 'border-black text-black'
@@ -483,7 +505,7 @@ export default function AdminReportsPage() {
           Top Selling
         </button>
         <button
-          onClick={() => setActiveTab('stock_summary')}
+          onClick={() => handleTabChange('stock_summary')}
           className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${
             activeTab === 'stock_summary'
               ? 'border-black text-black'
@@ -496,9 +518,7 @@ export default function AdminReportsPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center items-center py-24">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
-        </div>
+        <SkeletonTable rows={6} columns={6} />
       ) : activeTab === 'top_selling' ? (
         /* ============================================================ */
         /* TAB 1: HIGHEST SELLING PRODUCTS                             */

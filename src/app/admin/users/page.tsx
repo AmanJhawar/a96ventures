@@ -1,6 +1,9 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+import { SkeletonTable } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
 import {
   Plus,
   Trash2,
@@ -53,6 +56,10 @@ import { EASE_OUT } from '@/components/motion-transitions'
 type UsersTab = 'directory' | 'audit'
 
 export default function AdminUsersPage() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
   const { adminUser: currentLoggedUser, isSuperAdmin, hasPermission } = usePermissions()
 
   // Primary Data State
@@ -60,7 +67,22 @@ export default function AdminUsersPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<UsersTab>('directory')
+
+  // URL-synchronized tabs (?tab=directory | ?tab=audit)
+  const tabParam = searchParams.get('tab')
+  const activeTab: UsersTab = tabParam === 'audit' ? 'audit' : 'directory'
+
+  const handleTabChange = (tab: UsersTab) => {
+    setIsFormOpen(false)
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'directory') {
+      params.delete('tab')
+    } else {
+      params.set('tab', tab)
+    }
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
 
   // Filter States - Directory
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<'All' | UserRole>('All')
@@ -151,7 +173,7 @@ export default function AdminUsersPage() {
     if (!file) return
     try {
       await loadArchiveFromFile(file)
-      setActiveTab('audit')
+      handleTabChange('audit')
     } finally {
       if (e.target) e.target.value = ''
     }
@@ -467,10 +489,7 @@ export default function AdminUsersPage() {
       {/* Tabs */}
       <div className="flex items-center border-b border-gray-200 mb-6 overflow-x-auto">
         <button
-          onClick={() => {
-            setActiveTab('directory')
-            setIsFormOpen(false)
-          }}
+          onClick={() => handleTabChange('directory')}
           className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'directory'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
@@ -480,10 +499,7 @@ export default function AdminUsersPage() {
           Staff ({users.length})
         </button>
         <button
-          onClick={() => {
-            setActiveTab('audit')
-            setIsFormOpen(false)
-          }}
+          onClick={() => handleTabChange('audit')}
           className={`pb-3 px-4 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'audit'
               ? 'border-black text-black'
               : 'border-transparent text-gray-500 hover:text-black'
@@ -887,9 +903,7 @@ export default function AdminUsersPage() {
 
           {/* Users Table */}
           {loading ? (
-            <div className="flex justify-center items-center py-20">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
-            </div>
+            <SkeletonTable rows={5} columns={5} />
           ) : filteredUsers.length === 0 ? (
             <EmptyState
               title="No users found"
@@ -1185,9 +1199,7 @@ export default function AdminUsersPage() {
 
           {/* Audit Logs List */}
           {loading ? (
-            <div className="flex justify-center items-center py-20">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
-            </div>
+            <SkeletonTable rows={5} columns={4} />
           ) : filteredAuditLogs.length === 0 ? (
             <EmptyState
               title="No audit entries found"

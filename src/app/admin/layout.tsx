@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase/auth'
@@ -22,16 +22,37 @@ interface NavItemConfig {
   action?: string
 }
 
-const navItems: NavItemConfig[] = [
-  { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { name: 'Inventory', href: '/admin/inventory', icon: Warehouse, module: 'products', action: 'view' },
-  { name: 'Sales', href: '/admin/sales', icon: ShoppingCart, module: 'sales', action: 'view' },
-  { name: 'Locations', href: '/admin/locations', icon: MapPin, module: 'locations', action: 'view' },
-  { name: 'Reports', href: '/admin/reports', icon: BarChart3, module: 'reports', action: 'view' },
-  { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare, module: 'inquiries', action: 'view' },
-  { name: 'Users', href: '/admin/users', icon: ShieldCheck, module: 'users', action: 'view' },
-  { name: 'Team', href: '/admin/team', icon: Users, module: 'team', action: 'view' },
-  { name: 'Brands', href: '/admin/brands', icon: Bookmark, module: 'brands', action: 'view' },
+interface NavGroupConfig {
+  title: string
+  items: NavItemConfig[]
+}
+
+const navGroups: NavGroupConfig[] = [
+  {
+    title: 'Operations',
+    items: [
+      { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+      { name: 'Reports', href: '/admin/reports', icon: BarChart3, module: 'reports', action: 'view' },
+      { name: 'Inquiries', href: '/admin/inquiries', icon: MessageSquare, module: 'inquiries', action: 'view' },
+      { name: 'Users', href: '/admin/users', icon: ShieldCheck, module: 'users', action: 'view' },
+    ]
+  },
+  {
+    title: 'Store',
+    items: [
+      { name: 'Inventory', href: '/admin/inventory', icon: Warehouse, module: 'products', action: 'view' },
+      { name: 'Sales', href: '/admin/sales', icon: ShoppingCart, module: 'sales', action: 'view' },
+      { name: 'Locations', href: '/admin/locations', icon: MapPin, module: 'locations', action: 'view' },
+    ]
+  },
+  {
+    title: 'Website',
+    items: [
+      { name: 'Brands', href: '/admin/brands', icon: Bookmark, module: 'brands', action: 'view' },
+      { name: 'Team', href: '/admin/team', icon: Users, module: 'team', action: 'view' },
+      { name: 'Portfolio', href: '/admin/portfolio', icon: Briefcase, module: 'portfolio', action: 'view' },
+    ]
+  }
 ]
 
 // 30 minutes of inactivity for staff handling cash/stock
@@ -121,19 +142,26 @@ function SidebarContent({
   const { hasPermission, isSuperAdmin } = usePermissions()
 
   // Gate menu items strictly on their view permissions
-  const accessibleNavItems = navItems.filter((item) => {
-    if (isSuperAdmin) return true
-    if (item.href === '/admin/users') return false
-    if (item.href === '/admin/inventory') {
-      return (
-        hasPermission('products', 'view') ||
-        hasPermission('purchases', 'view') ||
-        hasPermission('movements', 'view')
-      )
-    }
-    if (!item.module) return true
-    return hasPermission(item.module, item.action || 'view')
-  })
+  const accessibleGroups = useMemo(() => {
+    return navGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => {
+          if (isSuperAdmin) return true
+          if (item.href === '/admin/users') return false
+          if (item.href === '/admin/inventory') {
+            return (
+              hasPermission('products', 'view') ||
+              hasPermission('purchases', 'view') ||
+              hasPermission('movements', 'view')
+            )
+          }
+          if (!item.module) return true
+          return hasPermission(item.module, item.action || 'view')
+        })
+      }))
+      .filter((group) => group.items.length > 0)
+  }, [isSuperAdmin, hasPermission])
 
   return (
     <>
@@ -146,25 +174,33 @@ function SidebarContent({
         </button>
       </div>
 
-      <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
-        {accessibleNavItems.map((item) => {
-          const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/admin')
-          const Icon = item.icon
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.98] ${
-                isActive
-                  ? 'bg-black text-white shadow-xs'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-black'
-              }`}
-            >
-              <Icon size={18} strokeWidth={isActive ? 2 : 1.75} className="shrink-0" />
-              {item.name}
-            </Link>
-          )
-        })}
+      <nav className="flex-1 px-3 space-y-4 overflow-y-auto">
+        {accessibleGroups.map((group) => (
+          <div key={group.title} className="space-y-1">
+            <div className="px-3 py-1 text-[10px] font-semibold tracking-wider text-gray-400 uppercase">
+              {group.title}
+            </div>
+            {group.items.map((item) => {
+              const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/admin')
+              const Icon = item.icon
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.97] ${
+                    isActive
+                      ? 'bg-black text-white shadow-xs'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-black'
+                  }`}
+                >
+                  <Icon size={16} strokeWidth={isActive ? 2 : 1.75} className="shrink-0" />
+                  {item.name}
+                </Link>
+              )
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className="p-4 mt-auto border-t border-gray-100 space-y-2">
