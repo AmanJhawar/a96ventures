@@ -25,11 +25,46 @@ export interface RecordAuditParams {
   metadata?: Record<string, unknown>
 }
 
+const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/i
+
+/**
+ * Redacts any audit diff where the field name is 'pan' or the value matches the PAN pattern.
+ * Ensures plaintext PANs never leak into immutable audit trails.
+ */
+export function redactAuditDiffs(diffs?: AuditLogEntry['diffs']): AuditLogEntry['diffs'] {
+  if (!Array.isArray(diffs)) return []
+  return diffs.map((diff) => {
+    const isPanField =
+      diff.field?.toLowerCase() === 'pan' ||
+      diff.label?.toLowerCase() === 'pan' ||
+      diff.field?.toLowerCase().includes('pan')
+
+    const isOldPan =
+      typeof diff.oldValue === 'string' && PAN_REGEX.test(diff.oldValue.replace(/\s+/g, ''))
+    const isNewPan =
+      typeof diff.newValue === 'string' && PAN_REGEX.test(diff.newValue.replace(/\s+/g, ''))
+
+    if (isPanField || isOldPan || isNewPan) {
+      return {
+        ...diff,
+        oldValue: diff.oldValue !== undefined && diff.oldValue !== null && diff.oldValue !== '' ? '[redacted]' : diff.oldValue,
+        newValue: diff.newValue !== undefined && diff.newValue !== null && diff.newValue !== '' ? '[redacted]' : diff.newValue
+      }
+    }
+    return diff
+  })
+}
+
 /**
  * Record an immutable audit log entry via server code (or client fallback).
  * Server route uses Firebase Admin SDK with elevated privileges.
  */
 export async function recordAuditLog(params: RecordAuditParams): Promise<string> {
+  const sanitizedParams = {
+    ...params,
+    diffs: redactAuditDiffs(params.diffs)
+  }
+
   try {
     const currentUser = auth.currentUser
     if (currentUser) {
@@ -40,7 +75,7 @@ export async function recordAuditLog(params: RecordAuditParams): Promise<string>
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(params)
+        body: JSON.stringify(sanitizedParams)
       })
       if (res.ok) {
         const data = await res.json()
@@ -58,18 +93,18 @@ export async function recordAuditLog(params: RecordAuditParams): Promise<string>
     const docRef = await addDoc(collection(db, 'audit_logs'), cleanUndefined({
       timestamp: now,
       createdAt: now,
-      userId: params.userId || currentUser?.uid || '',
-      userEmail: params.userEmail || currentUser?.email || '',
-      userName: params.userName || currentUser?.displayName || 'Admin',
-      action: params.action,
-      entityType: params.entityType,
-      entityId: params.entityId,
-      entityName: params.entityName || '',
-      locationId: params.locationId || '',
-      locationName: params.locationName || '',
-      description: params.description,
-      diffs: params.diffs || [],
-      metadata: params.metadata || {}
+      userId: sanitizedParams.userId || currentUser?.uid || '',
+      userEmail: sanitizedParams.userEmail || currentUser?.email || '',
+      userName: sanitizedParams.userName || currentUser?.displayName || 'Admin',
+      action: sanitizedParams.action,
+      entityType: sanitizedParams.entityType,
+      entityId: sanitizedParams.entityId,
+      entityName: sanitizedParams.entityName || '',
+      locationId: sanitizedParams.locationId || '',
+      locationName: sanitizedParams.locationName || '',
+      description: sanitizedParams.description,
+      diffs: sanitizedParams.diffs || [],
+      metadata: sanitizedParams.metadata || {}
     }))
     return docRef.id
   } catch (clientErr) {
@@ -138,8 +173,8 @@ function cleanUndefined<T>(value: T): T {
       .map((item) => cleanUndefined(item)) as unknown as T
   }
   if (typeof value === 'object' && !(value instanceof Date)) {
-    const res: Record<string, any> = {}
-    for (const [k, v] of Object.entries(value as Record<string, any>)) {
+    const res: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       if (v !== undefined) {
         res[k] = cleanUndefined(v)
       }

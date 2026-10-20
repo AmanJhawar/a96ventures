@@ -128,7 +128,7 @@ export function decryptPan(
     decipher.setAuthTag(authTagBuffer)
     const decryptedBuffer = Buffer.concat([decipher.update(ciphertextBuffer), decipher.final()])
     return decryptedBuffer.toString('utf8')
-  } catch (err: unknown) {
+  } catch {
     throw new Error('Failed to decrypt PAN: invalid ciphertext or authentication tag mismatch')
   }
 }
