@@ -2,9 +2,12 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Plus, Trash2, AlertCircle, CheckCircle2, IndianRupee } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { EASE_OUT } from '@/components/motion-transitions'
 import { PaymentMode, OrderPayment } from '@/lib/types'
 import { rupeesToPaise, formatINR } from '@/lib/utils/money'
 import { gramsToMg } from '@/lib/utils/weight'
+import { Button } from '@/components/ui/button'
 
 export interface PaymentRowState {
   id: string
@@ -28,8 +31,8 @@ const PAYMENT_MODES: { value: PaymentMode; label: string }[] = [
   { value: 'cash', label: 'Cash' },
   { value: 'upi', label: 'UPI' },
   { value: 'card', label: 'Card' },
-  { value: 'bank', label: 'Bank transfer' },
-  { value: 'old_metal', label: 'Old metal' }
+  { value: 'bank', label: 'Bank Transfer' },
+  { value: 'old_metal', label: 'Old Metal Exchange' }
 ]
 
 export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, disabled = false }: PaymentSplitProps) {
@@ -38,7 +41,7 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
     {
       id: 'pay_init_1',
       mode: 'cash',
-      amountRupees: (billPaise / 100).toFixed(2),
+      amountRupees: billPaise > 0 ? (billPaise / 100).toFixed(2) : '',
       reference: '',
       metal: 'Gold',
       weightGrams: '',
@@ -51,7 +54,7 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
     const timer = setTimeout(() => {
       setRows((prev) => {
         if (prev.length === 1 && prev[0].mode === 'cash' && !prev[0].reference) {
-          const expected = (billPaise / 100).toFixed(2)
+          const expected = billPaise > 0 ? (billPaise / 100).toFixed(2) : ''
           if (prev[0].amountRupees !== expected) {
             return [
               {
@@ -127,7 +130,7 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
       {
         id: newId,
         mode: 'upi',
-        amountRupees: unallocated > 0 ? (unallocated / 100).toFixed(2) : '0.00',
+        amountRupees: unallocated > 0 ? (unallocated / 100).toFixed(2) : '',
         reference: '',
         metal: 'Gold',
         weightGrams: '',
@@ -156,28 +159,32 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
   }
 
   return (
-    <div className="space-y-3 pt-3 border-t border-border">
+    <div className="space-y-3 pt-3 border-t border-gray-200">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-          <IndianRupee className="w-3.5 h-3.5 text-primary" />
+        <label className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
+          <IndianRupee className="w-3.5 h-3.5 text-black" />
           <span>Payment Split</span>
         </label>
 
         {/* Live balance badge */}
         <div className="flex items-center gap-2 text-xs font-mono">
-          <span className="text-muted-foreground text-[11px]">Paid: {formatINR(totalPaidPaise)}</span>
+          <span className="text-gray-500 text-[11px]">Paid: {formatINR(totalPaidPaise)}</span>
           {isBalanced ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-medium">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-medium">
               <CheckCircle2 className="w-3 h-3" />
-              Paid in full: ₹0.00
+              Paid in full
+            </span>
+          ) : billPaise === 0 && totalPaidPaise === 0 ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gray-100 border border-gray-200 text-gray-500 font-medium">
+              Awaiting items
             </span>
           ) : remainingPaise > 0 ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 font-medium">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 font-medium">
               <AlertCircle className="w-3 h-3" />
               Remaining: {formatINR(remainingPaise)}
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 font-medium">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 font-medium">
               <AlertCircle className="w-3 h-3" />
               Overpaid: {formatINR(Math.abs(remainingPaise))}
             </span>
@@ -187,149 +194,156 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
 
       {/* Payment Rows */}
       <div className="space-y-2.5">
-        {rows.map((row) => (
-          <div
-            key={row.id}
-            className="p-3 bg-secondary/30 border border-border/80 rounded-lg space-y-2 transition-[border-color] duration-150"
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-              {/* Payment Mode Selector */}
-              <div className="sm:col-span-3">
-                <select
-                  value={row.mode}
-                  disabled={disabled}
-                  onChange={(e) => handleUpdateRow(row.id, { mode: e.target.value as PaymentMode })}
-                  className="w-full px-2.5 py-1.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {PAYMENT_MODES.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Amount Input */}
-              <div className="sm:col-span-4 relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">
-                  ₹
-                </span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  disabled={disabled}
-                  value={row.amountRupees}
-                  onChange={(e) => handleUpdateRow(row.id, { amountRupees: e.target.value })}
-                  placeholder="0.00"
-                  className="w-full pl-6 pr-12 py-1.5 bg-background border border-border rounded-lg text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                {remainingPaise > 0 && !disabled && (
-                  <button
-                    type="button"
-                    onClick={() => handleFillRemaining(row.id)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-primary hover:underline font-mono"
-                    title="Fill remaining balance into this mode"
-                  >
-                    Fill
-                  </button>
-                )}
-              </div>
-
-              {/* Reference / Details */}
-              <div className="sm:col-span-4">
-                <input
-                  type="text"
-                  disabled={disabled}
-                  value={row.reference}
-                  onChange={(e) => handleUpdateRow(row.id, { reference: e.target.value })}
-                  placeholder={
-                    row.mode === 'cash'
-                      ? 'Notes (optional)'
-                      : row.mode === 'upi'
-                        ? 'UPI Ref / UTR #'
-                        : row.mode === 'card'
-                          ? 'Card last 4 / Auth #'
-                          : row.mode === 'bank'
-                            ? 'IMPS/NEFT Ref #'
-                            : 'Exchange reference'
-                  }
-                  className="w-full px-2.5 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-
-              {/* Actions: Fill / Delete */}
-              <div className="sm:col-span-1 flex items-center justify-end gap-1">
-                {rows.length > 1 && !disabled && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveRow(row.id)}
-                    className="p-1.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded transition-[color,background-color] duration-150"
-                    title="Remove payment mode"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Old Metal Additional Fields */}
-            {row.mode === 'old_metal' && (
-              <div className="pt-2 border-t border-border/40 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-[10px] text-muted-foreground mb-0.5">Metal *</label>
+        <AnimatePresence initial={false}>
+          {rows.map((row) => (
+            <motion.div
+              key={row.id}
+              initial={{ opacity: 0, transform: 'scale(0.98) translateY(4px)' }}
+              animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
+              exit={{ opacity: 0, transform: 'scale(0.98) translateY(-4px)' }}
+              transition={{ duration: 0.15, ease: EASE_OUT }}
+              className="p-3.5 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2.5 transition-[border-color] duration-150"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                {/* Payment Mode Selector */}
+                <div className="sm:col-span-3">
                   <select
-                    value={row.metal}
+                    value={row.mode}
                     disabled={disabled}
-                    onChange={(e) => handleUpdateRow(row.id, { metal: e.target.value as 'Gold' | 'Silver' })}
-                    className="w-full px-2 py-1 bg-background border border-border rounded text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    onChange={(e) => handleUpdateRow(row.id, { mode: e.target.value as PaymentMode })}
+                    className="w-full h-10 px-3 bg-white border border-gray-200 rounded-lg text-sm font-medium text-black focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition-[border-color,box-shadow] duration-150"
                   >
-                    <option value="Gold">Gold</option>
-                    <option value="Silver">Silver</option>
+                    {PAYMENT_MODES.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] text-muted-foreground mb-0.5">Weight (g, 3 decimals) *</label>
+                {/* Amount Input */}
+                <div className="sm:col-span-4 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-mono pointer-events-none">
+                    ₹
+                  </span>
                   <input
                     type="number"
-                    step="0.001"
+                    step="0.01"
                     min="0"
                     disabled={disabled}
-                    value={row.weightGrams}
-                    onChange={(e) => handleUpdateRow(row.id, { weightGrams: e.target.value })}
-                    placeholder="e.g. 5.250"
-                    className="w-full px-2 py-1 bg-background border border-border rounded text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={row.amountRupees}
+                    onChange={(e) => handleUpdateRow(row.id, { amountRupees: e.target.value })}
+                    placeholder="0.00"
+                    className="w-full h-10 pl-7 pr-12 bg-white border border-gray-200 rounded-lg text-sm font-mono text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
+                  {remainingPaise > 0 && !disabled && (
+                    <button
+                      type="button"
+                      onClick={() => handleFillRemaining(row.id)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded text-[11px] font-semibold text-black bg-gray-100 hover:bg-gray-200 transition-colors font-mono"
+                      title="Fill remaining balance into this mode"
+                    >
+                      Fill
+                    </button>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-[10px] text-muted-foreground mb-0.5">Purity *</label>
+                {/* Reference / Details */}
+                <div className="sm:col-span-4">
                   <input
                     type="text"
                     disabled={disabled}
-                    value={row.purity}
-                    onChange={(e) => handleUpdateRow(row.id, { purity: e.target.value })}
-                    placeholder="e.g. 916 / 22K"
-                    className="w-full px-2 py-1 bg-background border border-border rounded text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={row.reference}
+                    onChange={(e) => handleUpdateRow(row.id, { reference: e.target.value })}
+                    placeholder={
+                      row.mode === 'cash'
+                        ? 'Notes (optional)'
+                        : row.mode === 'upi'
+                          ? 'UPI Ref / UTR #'
+                          : row.mode === 'card'
+                            ? 'Card last 4 / Auth #'
+                            : row.mode === 'bank'
+                              ? 'IMPS/NEFT Ref #'
+                              : 'Exchange reference'
+                    }
+                    className="w-full h-10 px-3.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition-[border-color,box-shadow] duration-150"
                   />
                 </div>
+
+                {/* Actions: Fill / Delete */}
+                <div className="sm:col-span-1 flex items-center justify-end">
+                  {rows.length > 1 && !disabled && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRow(row.id)}
+                      className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                      title="Remove payment mode"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        ))}
+
+              {/* Old Metal Additional Fields */}
+              {row.mode === 'old_metal' && (
+                <div className="pt-2.5 border-t border-gray-200/60 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Metal *</label>
+                    <select
+                      value={row.metal}
+                      disabled={disabled}
+                      onChange={(e) => handleUpdateRow(row.id, { metal: e.target.value as 'Gold' | 'Silver' })}
+                      className="w-full h-9 px-2.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-black focus:outline-none focus:border-black focus:ring-1 focus:ring-black/10 transition-[border-color,box-shadow] duration-150"
+                    >
+                      <option value="Gold">Gold</option>
+                      <option value="Silver">Silver</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Weight (g, 3 decimals) *</label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      disabled={disabled}
+                      value={row.weightGrams}
+                      onChange={(e) => handleUpdateRow(row.id, { weightGrams: e.target.value })}
+                      placeholder="e.g. 5.250"
+                      className="w-full h-9 px-2.5 bg-white border border-gray-200 rounded-lg text-xs font-mono text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-1 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Purity *</label>
+                    <input
+                      type="text"
+                      disabled={disabled}
+                      value={row.purity}
+                      onChange={(e) => handleUpdateRow(row.id, { purity: e.target.value })}
+                      placeholder="e.g. 916 / 22K"
+                      className="w-full h-9 px-2.5 bg-white border border-gray-200 rounded-lg text-xs font-mono text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-1 focus:ring-black/10 transition-[border-color,box-shadow] duration-150"
+                    />
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
 
-      {/* Add Row Button */}
+      {/* Add Row Button - styled identically to Add Another Item */}
       {!disabled && (
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
+          icon={<Plus size={13} />}
           onClick={handleAddRow}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border hover:bg-secondary/60 text-xs font-medium text-foreground transition-[background-color,transform] duration-150 active:scale-[0.97]"
         >
-          <Plus className="w-3.5 h-3.5 text-primary" />
-          <span>Add payment method</span>
-        </button>
+          Add payment method
+        </Button>
       )}
     </div>
   )

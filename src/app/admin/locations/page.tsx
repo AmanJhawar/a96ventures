@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { MapPin, Plus, Trash2, Edit2, AlertCircle, X, Check, Lock } from 'lucide-react'
-import { Location } from '@/lib/types'
+import { Location, Product } from '@/lib/types'
 import { getLocations, addLocation, updateLocation, deleteLocation, getProducts } from '@/lib/services/inventory.service'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
+import { LocationStockModal } from '@/components/location-stock-modal'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
@@ -15,6 +16,8 @@ export default function AdminLocations() {
   const { hasPermission, isSuperAdmin } = usePermissions()
   const shouldReduceMotion = useReducedMotion()
   const [locations, setLocations] = useState<Location[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [selectedStockLocation, setSelectedStockLocation] = useState<Location | null>(null)
   const [stockCounts, setStockCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -33,6 +36,7 @@ export default function AdminLocations() {
       .then(([locs, prods]) => {
         if (!ignore) {
           setLocations(locs)
+          setProducts(prods)
           const counts: Record<string, number> = {}
           locs.forEach(l => { counts[l.id] = 0 })
           prods.forEach(p => {
@@ -282,25 +286,48 @@ export default function AdminLocations() {
               {locations.map((loc) => {
                 const stockCount = stockCounts[loc.id] || 0
                 return (
-                  <tr key={loc.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
-                    <td className="px-6 py-4 font-medium text-black flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700 shrink-0">
-                        <MapPin size={15} />
+                  <tr
+                    key={loc.id}
+                    onClick={() => setSelectedStockLocation(loc)}
+                    className="hover:bg-gray-50/80 transition-[background-color] duration-100 cursor-pointer group"
+                  >
+                    <td className="px-6 py-4 font-medium text-black">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-gray-200/80 flex items-center justify-center text-gray-700 shrink-0 transition-[background-color]">
+                          <MapPin size={15} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="group-hover:text-black font-semibold">{loc.name}</span>
+                            <span className="text-[11px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                              View stock &rarr;
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <span>{loc.name}</span>
                     </td>
                     <td className="px-6 py-4 text-gray-500">
                       {loc.description || <span className="text-gray-300 italic">—</span>}
                     </td>
                     <td className="px-6 py-4 text-right tabular-nums">
-                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                        stockCount > 0 ? 'bg-black text-white' : 'bg-gray-100 text-gray-500'
-                      }`}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedStockLocation(loc)
+                        }}
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold transition-[transform,background-color] active:scale-[0.97] ${
+                          stockCount > 0
+                            ? 'bg-black text-white hover:bg-black/85'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                        title="Click to view stock breakdown"
+                      >
                         {stockCount} units
-                      </span>
+                      </button>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="inline-flex items-center gap-1">
+                      <div className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         {hasPermission('locations', 'edit') && (
                           <button
                             onClick={() => handleEdit(loc)}
@@ -328,6 +355,14 @@ export default function AdminLocations() {
           </table>
         </div>
       )}
+
+      {/* Location Stock Breakdown Modal */}
+      <LocationStockModal
+        isOpen={!!selectedStockLocation}
+        onClose={() => setSelectedStockLocation(null)}
+        location={selectedStockLocation}
+        products={products}
+      />
 
       {/* Delete Confirmation Modal */}
       <ConfirmModal

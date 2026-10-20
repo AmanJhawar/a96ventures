@@ -998,14 +998,6 @@ export async function PATCH(req: NextRequest) {
     }
     const { caller } = authResult
 
-    // Only Super Admins can directly modify existing transaction ledger entries
-    if (!caller.isSuperAdmin) {
-      return NextResponse.json(
-        { error: 'Forbidden: Only Super Admins are authorized to edit recorded transactions' },
-        { status: 403 }
-      )
-    }
-
     const body = await req.json().catch(() => ({}))
     const { id, quantity, price, locationId, locationName, date, customerName, vendorName, notes } = body
 
@@ -1020,6 +1012,20 @@ export async function PATCH(req: NextRequest) {
     }
 
     const currentTx = txSnap.data() as Transaction
+
+    // Authorize caller: Super Admin or granular edit permission for the transaction type (purchase or sale)
+    const txType = currentTx.type
+    const hasEditPermission =
+      caller.isSuperAdmin ||
+      (txType === 'purchase' && hasModulePermission(caller, 'purchases', 'edit')) ||
+      (txType === 'sale' && hasModulePermission(caller, 'sales', 'edit'))
+
+    if (!hasEditPermission) {
+      return NextResponse.json(
+        { error: `Forbidden: Insufficient permissions to edit ${txType || 'ledger'} transactions` },
+        { status: 403 }
+      )
+    }
 
     if (currentTx.isReversed || currentTx.reversalOf || currentTx.type === 'reversal') {
       return NextResponse.json(

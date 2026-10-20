@@ -5,6 +5,7 @@ import { ArrowUp, ArrowDown, ArrowUpDown, Edit2, Archive, Plus } from 'lucide-re
 import { Product } from '@/lib/types'
 import { ProductSortOption } from './types'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/empty-state'
 
 interface ProductsTableProps {
   products: Product[]
@@ -17,6 +18,7 @@ interface ProductsTableProps {
   handleOpenAddProduct: () => void
   handleEditProduct: (p: Product) => void
   setDeleteProductTarget: (p: Product) => void
+  onSelectLocationId?: (locId: string) => void
 }
 
 export function ProductsTable({
@@ -29,24 +31,27 @@ export function ProductsTable({
   archivedSession,
   handleOpenAddProduct,
   handleEditProduct,
-  setDeleteProductTarget
+  setDeleteProductTarget,
+  onSelectLocationId
 }: ProductsTableProps) {
   if (products.length === 0) {
     return (
-      <div className="text-center py-16 bg-white border border-gray-200 rounded-xl">
-        <h3 className="text-base font-semibold text-black mb-1">No products in this filter</h3>
-        <p className="text-sm text-gray-500 max-w-sm mx-auto mb-4">
-          Add your first product to start tracking inventory across Gold & Silver.
-        </p>
-        <Button
-          type="button"
-          variant="primary"
-          onClick={handleOpenAddProduct}
-          className="inline-flex items-center gap-1.5"
-        >
-          <Plus size={16} />
-          Add product
-        </Button>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+        <EmptyState
+          title="No products in this filter"
+          description="Add your first product to start tracking inventory across Gold & Silver."
+          action={
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleOpenAddProduct}
+              className="inline-flex items-center gap-1.5"
+            >
+              <Plus size={16} />
+              Add product
+            </Button>
+          }
+        />
       </div>
     )
   }
@@ -184,15 +189,32 @@ export function ProductsTable({
                       <span className="text-xs text-gray-400 italic">No location stock</span>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
-                        {locEntries.map(([locId, qty]) => (
-                          <span
-                            key={locId}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-50 border border-gray-200 text-xs text-gray-700"
-                          >
-                            <span className="text-gray-400">{locationMap.get(locId) || 'Loc'}:</span>
-                            <strong className="font-semibold text-black">{qty}</strong>
-                          </span>
-                        ))}
+                        {locEntries.map(([locId, qty]) => {
+                          const locName = locationMap.get(locId) || 'Loc'
+                          if (onSelectLocationId) {
+                            return (
+                              <button
+                                key={locId}
+                                type="button"
+                                onClick={() => onSelectLocationId(locId)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-50 hover:bg-gray-100 hover:border-gray-300 border border-gray-200 text-xs text-gray-700 transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] cursor-pointer"
+                                title={`Click to view ${locName} stock breakdown`}
+                              >
+                                <span className="text-gray-400">{locName}:</span>
+                                <strong className="font-semibold text-black">{qty}</strong>
+                              </button>
+                            )
+                          }
+                          return (
+                            <span
+                              key={locId}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-50 border border-gray-200 text-xs text-gray-700"
+                            >
+                              <span className="text-gray-400">{locName}:</span>
+                              <strong className="font-semibold text-black">{qty}</strong>
+                            </span>
+                          )
+                        })}
                       </div>
                     )}
                   </td>

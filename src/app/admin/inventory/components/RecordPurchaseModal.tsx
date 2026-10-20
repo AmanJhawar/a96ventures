@@ -71,17 +71,16 @@ export function RecordPurchaseModal({
   isValid,
   error
 }: RecordPurchaseModalProps) {
-  if (!isOpen) return null
-
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, transform: 'scale(0.97) translateY(8px)' }}
-        animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
-        exit={{ opacity: 0, transform: 'scale(0.97) translateY(8px)' }}
-        transition={{ duration: 0.2, ease: EASE_OUT }}
-        className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
-      >
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0, transform: 'scale(0.97) translateY(8px)' }}
+          animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
+          exit={{ opacity: 0, transform: 'scale(0.97) translateY(8px)' }}
+          transition={{ duration: 0.18, ease: EASE_OUT }}
+          className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
+        >
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-black">Record Purchase</h2>
@@ -178,18 +177,23 @@ export function RecordPurchaseModal({
             </div>
 
             <div className="space-y-3">
-              {purchaseItems.map((item, idx) => {
-                const prod = products.find((p) => p.id === item.productId)
-                const isIdol = prod?.category === 'Idols'
-                const lineTotal =
-                  (Number(item.price) || 0) *
-                  (isIdol ? item.pieceWeights.length : Number(item.quantity) || 0)
+              <AnimatePresence initial={false}>
+                {purchaseItems.map((item, idx) => {
+                  const prod = products.find((p) => p.id === item.productId)
+                  const isIdol = prod?.category === 'Idols'
+                  const lineTotal =
+                    (Number(item.price) || 0) *
+                    (isIdol ? item.pieceWeights.length : Number(item.quantity) || 0)
 
-                return (
-                  <div
-                    key={item.id}
-                    className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3 relative"
-                  >
+                  return (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, transform: 'scale(0.98) translateY(6px)' }}
+                      animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
+                      exit={{ opacity: 0, transform: 'scale(0.98) translateY(-6px)' }}
+                      transition={{ duration: 0.16, ease: EASE_OUT }}
+                      className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3 relative"
+                    >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="w-5 h-5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center">
@@ -369,9 +373,10 @@ export function RecordPurchaseModal({
                         )}
                       </div>
                     )}
-                  </div>
-                )
-              })}
+                    </motion.div>
+                  )
+                })}
+              </AnimatePresence>
             </div>
           </div>
 
@@ -416,7 +421,8 @@ export function RecordPurchaseModal({
             </div>
           </div>
         </form>
-      </motion.div>
+        </motion.div>
+      )}
     </AnimatePresence>
   )
 }

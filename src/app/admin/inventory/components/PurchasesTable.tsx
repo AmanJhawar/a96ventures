@@ -152,11 +152,11 @@ export function PurchasesTable({
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {!archivedSession && isSuperAdmin && !tx.isReversed && !tx.reversalOf && !tx.isOpeningBalance && !tx.isOpeningEntry && (
+                      {!archivedSession && (isSuperAdmin || hasPermission('purchases', 'edit')) && !tx.isReversed && !tx.reversalOf && !tx.isOpeningBalance && !tx.isOpeningEntry && (
                         <button
                           type="button"
                           onClick={() => handleOpenEditPurchase(tx)}
-                          title="Edit purchase (Super Admin)"
+                          title="Edit purchase"
                           className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                         >
                           <Pencil size={14} />

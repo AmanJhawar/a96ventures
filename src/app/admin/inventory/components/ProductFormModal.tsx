@@ -343,24 +343,30 @@ export function ProductFormModal({
                 {prodPieceWeights.length > 0 ? (
                   <div className="space-y-2 pt-1">
                     <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-white rounded-lg border border-gray-200">
-                      {prodPieceWeights.map((w, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 border border-gray-200 text-xs font-medium text-gray-800"
-                        >
-                          <span>#{idx + 1}: <strong>{formatWeight(w)}</strong></span>
-                          {!editingProductId && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveProdPieceWeight(idx)}
-                              className="text-gray-400 hover:text-rose-600 transition-colors duration-100 ml-0.5"
-                              title="Remove piece"
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </span>
-                      ))}
+                      <AnimatePresence initial={false}>
+                        {prodPieceWeights.map((w, idx) => (
+                          <motion.span
+                            key={`${idx}-${w}`}
+                            initial={{ opacity: 0, scale: 0.92 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.92 }}
+                            transition={{ duration: 0.14, ease: EASE_OUT }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 border border-gray-200 text-xs font-medium text-gray-800"
+                          >
+                            <span>#{idx + 1}: <strong>{formatWeight(w)}</strong></span>
+                            {!editingProductId && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveProdPieceWeight(idx)}
+                                className="text-gray-400 hover:text-rose-600 transition-colors duration-100 ml-0.5 active:scale-[0.97]"
+                                title="Remove piece"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </motion.span>
+                        ))}
+                      </AnimatePresence>
                     </div>
 
                     <div className="flex items-center justify-between text-xs text-gray-600 px-1 pt-1 border-t border-gray-200">

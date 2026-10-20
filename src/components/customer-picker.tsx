@@ -69,40 +69,37 @@ export default function CustomerPicker({
     const trimmed = query.trim()
     if (trimmed.length < 2) return
 
-    let cancelled = false
-    const timeout = setTimeout(async () => {
+    setIsLoading(true)
+    const timer = setTimeout(async () => {
       try {
-        setIsLoading(true)
-        const res = await getCustomers({ q: trimmed, limit: 10 })
-        if (!cancelled) {
-          setResults(res.customers || [])
-        }
+        const { customers } = await getCustomers({
+          q: trimmed,
+          limit: 6
+        })
+        setResults(customers)
       } catch (err) {
-        console.error('Failed to search customers:', err)
-        if (!cancelled) {
-          setResults([])
-        }
+        console.error('Customer search error:', err)
+        setResults([])
       } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
+        setIsLoading(false)
       }
     }, 150)
 
-    return () => {
-      cancelled = true
-      clearTimeout(timeout)
-    }
+    return () => clearTimeout(timer)
   }, [query, isOpen, showInlineForm])
 
   const handleOpenDropdown = () => {
     if (disabled) return
-    setIsOpen(true)
-    setTimeout(() => inputRef.current?.focus(), 50)
+    setIsOpen((prev) => !prev)
+    if (!isOpen) {
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 50)
+    }
   }
 
-  const handleSelectCustomer = (cust: Customer) => {
-    onSelectCustomer(cust, false)
+  const handleSelectCustomer = (customer: Customer) => {
+    onSelectCustomer(customer, false)
     setIsOpen(false)
     setShowInlineForm(false)
     setQuery('')
@@ -131,28 +128,28 @@ export default function CustomerPicker({
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
-      {/* Selected Customer / Trigger Bar */}
-      <div
+      {/* Selected Customer / Trigger Bar - styled identically to CustomSelect and CustomDatePicker */}
+      <button
+        type="button"
+        disabled={disabled}
         onClick={handleOpenDropdown}
-        className={`w-full px-3 py-2.5 rounded-lg border text-sm transition-[background-color,border-color,transform] duration-150 flex items-center justify-between cursor-pointer ${
-          disabled
-            ? 'opacity-60 cursor-not-allowed bg-secondary/30 border-border'
-            : 'bg-secondary/40 hover:bg-secondary/60 border-border active:scale-[0.99]'
-        } ${selectedCustomer || isWalkIn ? 'border-primary/40' : ''}`}
+        className={`w-full h-10 px-3.5 rounded-lg border bg-white text-left text-sm flex items-center justify-between gap-2 transition-[border-color,box-shadow,transform] duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 active:scale-[0.98] ${
+          isOpen ? 'border-black ring-2 ring-black/10' : 'border-gray-200'
+        } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
-        <div className="flex items-center gap-2.5 truncate">
+        <div className="flex items-center gap-2 truncate min-w-0 flex-1">
           {selectedCustomer ? (
             <>
-              <div className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center shrink-0">
-                <UserCheck className="w-3.5 h-3.5" />
+              <div className="w-5 h-5 rounded-full bg-black text-white flex items-center justify-center shrink-0">
+                <UserCheck className="w-3 h-3" />
               </div>
-              <div className="truncate text-left">
-                <span className="font-semibold text-foreground">{selectedCustomer.displayName}</span>
-                <span className="text-xs text-muted-foreground ml-2">
+              <div className="truncate text-left flex items-center gap-1.5 min-w-0">
+                <span className="font-semibold text-black truncate">{selectedCustomer.displayName}</span>
+                <span className="text-xs text-gray-500 shrink-0">
                   ({selectedCustomer.mobile?.countryCode} {selectedCustomer.mobile?.number})
                 </span>
                 {selectedCustomer.pan && (
-                  <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded text-muted-foreground ml-2 font-mono">
+                  <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 shrink-0 font-mono">
                     PAN: {selectedCustomer.pan.masked}
                   </span>
                 )}
@@ -160,49 +157,55 @@ export default function CustomerPicker({
             </>
           ) : isWalkIn ? (
             <>
-              <div className="w-6 h-6 rounded-full bg-secondary text-muted-foreground flex items-center justify-center shrink-0">
-                <UserX className="w-3.5 h-3.5" />
+              <div className="w-5 h-5 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center shrink-0">
+                <UserX className="w-3 h-3" />
               </div>
-              <span className="text-sm font-medium text-foreground">Walk-in Customer (No details recorded)</span>
+              <span className="text-sm font-medium text-black truncate">Walk-in Customer (No details recorded)</span>
             </>
           ) : (
             <>
-              <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground text-sm">Search customer by mobile or name...</span>
+              <Search className="w-4 h-4 text-gray-400 shrink-0" />
+              <span className="text-gray-400 text-sm truncate">Search customer by mobile or name...</span>
             </>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           {(selectedCustomer || isWalkIn) && !disabled ? (
-            <button
-              type="button"
+            <span
               onClick={handleClearSelection}
-              className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-[color,background-color] duration-150"
+              className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-black transition-[color,background-color] duration-150"
               title="Clear customer selection"
             >
-              <X className="w-4 h-4" />
-            </button>
+              <X className="w-3.5 h-3.5" />
+            </span>
           ) : (
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            <ChevronDown
+              className={`w-4 h-4 text-gray-500 transition-transform duration-200 ease-[var(--ease-out)] ${
+                isOpen ? 'rotate-180 text-black' : ''
+              }`}
+            />
           )}
         </div>
-      </div>
+      </button>
 
-      {/* Origin-Aware Dropdown Popover */}
+      {/* Origin-Aware Dropdown Popover matching CustomSelect */}
       {isOpen && (
-        <div className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-background border border-border/80 rounded-xl shadow-2xl overflow-hidden origin-top animate-in fade-in-0 zoom-in-95 duration-150">
+        <div
+          className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.08)] overflow-hidden origin-top"
+          style={{ animation: 'popoverIn 160ms var(--ease-out) forwards' }}
+        >
           {showInlineForm ? (
             <div className="p-4 max-h-[80vh] overflow-y-auto">
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-border">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-100">
                 <div className="flex items-center gap-2">
-                  <UserPlus className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-semibold text-foreground">New Customer Registration</span>
+                  <UserPlus className="w-4 h-4 text-black" />
+                  <span className="text-xs font-semibold text-black">New Customer Registration</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowInlineForm(false)}
-                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-[color,background-color] duration-150"
+                  className="p-1 rounded text-gray-400 hover:text-black hover:bg-gray-100 transition-[color,background-color] duration-150 active:scale-[0.97]"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -220,8 +223,8 @@ export default function CustomerPicker({
           ) : (
             <div>
               {/* Search Header */}
-              <div className="p-2 border-b border-border flex items-center gap-2 bg-secondary/20">
-                <Search className="w-4 h-4 text-muted-foreground shrink-0 ml-1.5" />
+              <div className="p-2 border-b border-gray-100 bg-gray-50/70 flex items-center gap-2">
+                <Search className="w-3.5 h-3.5 text-gray-400 shrink-0 ml-1.5" />
                 <input
                   ref={inputRef}
                   type="text"
@@ -235,14 +238,14 @@ export default function CustomerPicker({
                     }
                   }}
                   placeholder="Type 2+ characters of mobile or name..."
-                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none py-1"
+                  className="w-full bg-transparent text-xs text-black placeholder:text-gray-400 focus:outline-none py-1"
                 />
-                {isLoading && <Loader2 className="w-4 h-4 text-muted-foreground animate-spin mr-1.5 shrink-0" />}
+                {isLoading && <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin mr-1.5 shrink-0" />}
               </div>
 
               {/* Options List */}
-              <div className="max-h-60 overflow-y-auto divide-y divide-border/40">
-                {/* Search Results (No layout-shift animation per Emil Kowalski rule) */}
+              <div className="max-h-60 overflow-y-auto divide-y divide-gray-100">
+                {/* Search Results */}
                 {results.length > 0 && (
                   <div className="py-1">
                     {results.map((cust) => (
@@ -250,16 +253,16 @@ export default function CustomerPicker({
                         key={cust.id}
                         type="button"
                         onClick={() => handleSelectCustomer(cust)}
-                        className="w-full px-3 py-2 text-left hover:bg-secondary/70 flex items-center justify-between transition-[background-color] duration-100 active:scale-[0.99]"
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-gray-50 flex items-center justify-between transition-[background-color] duration-100 active:scale-[0.99]"
                       >
                         <div>
-                          <p className="text-sm font-semibold text-foreground">{cust.displayName}</p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-sm font-semibold text-black">{cust.displayName}</p>
+                          <p className="text-xs text-gray-500">
                             {cust.mobile?.countryCode} {cust.mobile?.number}
                             {cust.address?.city && ` • ${cust.address.city}`}
                           </p>
                         </div>
-                        <div className="text-right text-[11px] text-muted-foreground">
+                        <div className="text-right text-[11px] text-gray-400">
                           <span className="flex items-center gap-1 justify-end">
                             <Calendar className="w-3 h-3" />
                             {formatDateDisplay(cust.stats?.lastVisitAt)}
@@ -271,7 +274,7 @@ export default function CustomerPicker({
                 )}
 
                 {query.trim().length >= 2 && results.length === 0 && !isLoading && (
-                  <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                  <div className="px-3 py-4 text-center text-xs text-gray-500">
                     No customers found matching &quot;{query}&quot;
                   </div>
                 )}
@@ -280,12 +283,12 @@ export default function CustomerPicker({
                 <button
                   type="button"
                   onClick={handleSelectWalkIn}
-                  className="w-full px-3 py-2.5 text-left hover:bg-secondary/50 flex items-center gap-2.5 text-xs text-muted-foreground hover:text-foreground transition-[background-color,color] duration-100 active:scale-[0.99]"
+                  className="w-full px-3.5 py-2.5 text-left hover:bg-gray-50 flex items-center gap-2.5 text-xs text-gray-600 hover:text-black transition-[background-color,color] duration-100 active:scale-[0.99]"
                 >
-                  <UserX className="w-4 h-4 shrink-0 text-muted-foreground" />
+                  <UserX className="w-4 h-4 shrink-0 text-gray-400" />
                   <div>
-                    <p className="font-semibold text-foreground">Walk-in, no details</p>
-                    <p className="text-[11px] text-muted-foreground">Proceed without linking a customer profile</p>
+                    <p className="font-semibold text-black">Walk-in, no details</p>
+                    <p className="text-[11px] text-gray-400">Proceed without linking a customer profile</p>
                   </div>
                 </button>
 
@@ -294,12 +297,12 @@ export default function CustomerPicker({
                   <button
                     type="button"
                     onClick={() => setShowInlineForm(true)}
-                    className="w-full px-3 py-2.5 text-left hover:bg-primary/10 flex items-center gap-2.5 text-xs text-primary transition-[background-color] duration-100 active:scale-[0.99]"
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-gray-50 flex items-center gap-2.5 text-xs text-black border-t border-gray-100 transition-[background-color] duration-100 active:scale-[0.99]"
                   >
-                    <UserPlus className="w-4 h-4 shrink-0 text-primary" />
+                    <UserPlus className="w-4 h-4 shrink-0 text-black" />
                     <div>
-                      <p className="font-semibold text-primary">New customer</p>
-                      <p className="text-[11px] text-primary/80">Register a new profile inline</p>
+                      <p className="font-semibold text-black">New customer</p>
+                      <p className="text-[11px] text-gray-500">Register a new profile inline</p>
                     </div>
                   </button>
                 )}

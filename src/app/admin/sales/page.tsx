@@ -83,6 +83,8 @@ import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatWeight } from '@/lib/utils/weight'
 import { getTodayIST, getDaysAgoIST } from '@/lib/utils/date'
 import { SkeletonTable } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+import { FormError } from '@/components/ui/form-error'
 
 const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
 
@@ -166,7 +168,7 @@ export default function AdminSales() {
   const [ordersList, setOrdersList] = useState<Order[]>([])
   const [reverseOrderTarget, setReverseOrderTarget] = useState<SaleBill | null>(null)
   const [reversingOrder, setReversingOrder] = useState(false)
-  const [saleDate, setSaleDate] = useState(() => getTodayIST())
+  const [saleDate, setSaleDate] = useState('')
   const [saleNotes, setSaleNotes] = useState('')
   const [saleItems, setSaleItems] = useState<SaleLineItem[]>([
     { id: '1', productId: '', quantity: '1', price: '', pieceWeight: '' }
@@ -636,7 +638,7 @@ export default function AdminSales() {
     setIsWalkInCustomer(false)
     setSalePayments([])
     setIsPaymentBalanced(false)
-    setSaleDate(getTodayIST())
+    setSaleDate('')
     setSaleNotes('')
     setSaleError(null)
 
@@ -828,6 +830,7 @@ export default function AdminSales() {
       const createdOrder: Order = data.order
 
       setIsSaleFormOpen(false)
+      setSaleDate('')
       toast.success(`Bill ${createdOrder.orderNo} recorded successfully`)
 
       setOrdersList((prev) => [createdOrder, ...prev])
@@ -1569,7 +1572,7 @@ export default function AdminSales() {
             initial={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
             animate={{ opacity: 1, transform: "scale(1) translateY(0px)" }}
             exit={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
-            transition={{ duration: 0.2, ease: EASE_OUT }}
+            transition={{ duration: 0.18, ease: EASE_OUT }}
             className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
           >
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
@@ -1589,19 +1592,18 @@ export default function AdminSales() {
             </div>
 
             {saleError && (
-              <div className="mb-4 p-3 bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg flex items-center gap-2">
-                <AlertCircle size={14} className="text-gray-600 shrink-0" />
-                <span>{saleError}</span>
+              <div className="mb-4">
+                <FormError message={saleError} />
               </div>
             )}
 
             <form onSubmit={handleSaveSale} className="space-y-5">
               {/* Common Sale Metadata Header */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50/70 border border-gray-200 rounded-xl">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50/70 border border-gray-200 rounded-xl items-start">
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700">
-                      Location <span className="text-red-500">*</span>
+                    <label className="block text-xs font-medium text-gray-700">
+                      Selling Location <span className="text-rose-500">*</span>
                     </label>
                     {isLocationLocked && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
@@ -1611,7 +1613,7 @@ export default function AdminSales() {
                     )}
                   </div>
                   {isLocationLocked ? (
-                    <div className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-xs font-semibold text-black">
+                    <div className="h-10 px-3.5 bg-gray-100 border border-gray-200 rounded-lg text-sm font-medium text-black flex items-center">
                       {locationMap.get(saleLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
                     </div>
                   ) : (
@@ -1625,17 +1627,20 @@ export default function AdminSales() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Sale Date <span className="text-red-500">*</span>
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                    Sale Date <span className="text-rose-500">*</span>
                   </label>
                   <CustomDatePicker
                     value={saleDate}
                     onChange={setSaleDate}
-                    placeholder="Select sale date"
+                    placeholder="Select sale date..."
                   />
                 </div>
 
                 <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                    Customer <span className="text-rose-500">*</span>
+                  </label>
                   <CustomerPicker
                     selectedCustomer={selectedCustomer}
                     isWalkIn={isWalkInCustomer}
@@ -1658,7 +1663,7 @@ export default function AdminSales() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Invoice / Notes
                   </label>
                   <input
@@ -1666,7 +1671,7 @@ export default function AdminSales() {
                     placeholder="e.g. Tax Invoice #INV-001"
                     value={saleNotes}
                     onChange={(e) => setSaleNotes(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    className="h-10 w-full px-3.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition-[border-color,box-shadow] duration-150"
                   />
                 </div>
               </div>
@@ -1674,43 +1679,49 @@ export default function AdminSales() {
               {/* Line Items List */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-700">
+                  <span className="text-xs font-medium text-gray-700">
                     Items to Sell ({saleItems.length})
                   </span>
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={<Plus size={13} />}
                     onClick={handleAddSaleItem}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-black bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-[background-color,transform] duration-150 active:scale-[0.97]"
                   >
-                    <Plus size={13} />
                     Add Another Item
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="space-y-3">
-                  {saleItems.map((item, idx) => {
-                    const prod = products.find((p) => p.id === item.productId)
-                    const isIdol = prod?.category === 'Idols'
-                    const availableInStore = prod?.stockByLocation?.[saleLocationId] || 0
-                    const usedInOtherLines = saleItems
-                      .filter((other) => other.id !== item.id && other.productId === item.productId)
-                      .reduce((sum, other) => sum + (Number(other.quantity) || 0), 0)
-                    const availableForThisLine = Math.max(0, availableInStore - usedInOtherLines)
+                  <AnimatePresence initial={false}>
+                    {saleItems.map((item, idx) => {
+                      const prod = products.find((p) => p.id === item.productId)
+                      const isIdol = prod?.category === 'Idols'
+                      const availableInStore = prod?.stockByLocation?.[saleLocationId] || 0
+                      const usedInOtherLines = saleItems
+                        .filter((other) => other.id !== item.id && other.productId === item.productId)
+                        .reduce((sum, other) => sum + (Number(other.quantity) || 0), 0)
+                      const availableForThisLine = Math.max(0, availableInStore - usedInOtherLines)
 
-                    const locPieces = prod?.pieceWeightsByLocation?.[saleLocationId] || []
-                    const chosenInOtherLines = new Set(
-                      saleItems
-                        .filter((other) => other.id !== item.id && other.productId === item.productId && other.pieceWeight)
-                        .map((other) => Number(other.pieceWeight))
-                    )
-                    const availableLinePieces = locPieces.filter((pw) => !chosenInOtherLines.has(pw))
-                    const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0)
+                      const locPieces = prod?.pieceWeightsByLocation?.[saleLocationId] || []
+                      const chosenInOtherLines = new Set(
+                        saleItems
+                          .filter((other) => other.id !== item.id && other.productId === item.productId && other.pieceWeight)
+                          .map((other) => Number(other.pieceWeight))
+                      )
+                      const availableLinePieces = locPieces.filter((pw) => !chosenInOtherLines.has(pw))
+                      const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0)
 
-                    return (
-                      <div
-                        key={item.id}
-                        className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3 relative"
-                      >
+                      return (
+                        <motion.div
+                          key={item.id}
+                          initial={{ opacity: 0, transform: 'scale(0.98) translateY(6px)' }}
+                          animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
+                          exit={{ opacity: 0, transform: 'scale(0.98) translateY(-6px)' }}
+                          transition={{ duration: 0.16, ease: EASE_OUT }}
+                          className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3 relative"
+                        >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="w-5 h-5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center">
@@ -1740,20 +1751,19 @@ export default function AdminSales() {
 
                         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
                           <div className="sm:col-span-6">
-                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
-                              Product <span className="text-red-500">*</span>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                              Product <span className="text-rose-500">*</span>
                             </label>
                             <CustomSelect
-                              size="sm"
                               value={item.productId}
                               onValueChange={(val) => handleUpdateSaleItem(item.id, { productId: val })}
                               options={saleProductOptions}
                               placeholder="Select product..."
                             />
-                            <div className="flex items-center justify-between text-[11px] text-gray-500 mt-1">
+                            <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
                               <span>Available in store:</span>
                               {prod ? (
-                                <strong className={availableForThisLine > 0 ? 'text-black' : 'text-red-600'}>
+                                <strong className={availableForThisLine > 0 ? 'text-black' : 'text-rose-600'}>
                                   {availableForThisLine} units
                                 </strong>
                               ) : (
@@ -1763,8 +1773,8 @@ export default function AdminSales() {
                           </div>
 
                           <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
-                              Qty <span className="text-red-500">*</span>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                              Qty <span className="text-rose-500">*</span>
                             </label>
                             <input
                               type="number"
@@ -1774,14 +1784,14 @@ export default function AdminSales() {
                               placeholder={isIdol ? '1' : 'Qty'}
                               value={isIdol ? '1' : item.quantity}
                               onChange={(e) => handleUpdateSaleItem(item.id, { quantity: e.target.value })}
-                              className={`h-9 w-full px-3 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150 ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
+                              className={`h-10 w-full px-3.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
                               required
                             />
                           </div>
 
                           <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
-                              Unit Price (₹) <span className="text-red-500">*</span>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                              Unit Price (₹) <span className="text-rose-500">*</span>
                             </label>
                             <input
                               type="number"
@@ -1790,17 +1800,21 @@ export default function AdminSales() {
                               placeholder="e.g. 78500"
                               value={item.price}
                               onChange={(e) => handleUpdateSaleItem(item.id, { price: e.target.value })}
-                              className="h-9 w-full px-3 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                              className="h-10 w-full px-3.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               required
                             />
                           </div>
 
                           <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-600 mb-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
                               Total
                             </label>
-                            <div className="h-9 px-3 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-end font-bold text-xs text-black tabular-nums">
-                              {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN')}` : '—'}
+                            <div className="h-10 px-3.5 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-end font-bold text-sm tabular-nums">
+                              {lineTotal > 0 ? (
+                                <span className="text-black font-semibold">₹{lineTotal.toLocaleString('en-IN')}</span>
+                              ) : (
+                                <span className="text-gray-400 font-medium">₹0</span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1809,10 +1823,10 @@ export default function AdminSales() {
                         {isIdol && (
                           <div className="pt-2 border-t border-gray-200/60">
                             <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-700">
-                                Select Piece Weight <span className="text-red-500">*</span>
+                              <span className="text-xs font-medium text-gray-700">
+                                Select Piece Weight <span className="text-rose-500">*</span>
                               </span>
-                              <span className="text-[11px] text-gray-500">
+                              <span className="text-xs text-gray-500">
                                 {availableLinePieces.length} available
                               </span>
                             </div>
@@ -1834,15 +1848,16 @@ export default function AdminSales() {
                                 ))}
                               </div>
                             ) : (
-                              <p className="text-xs text-red-600 font-semibold">
+                              <p className="text-xs text-rose-600 font-semibold">
                                 No available idol pieces in stock at this location.
                               </p>
                             )}
                           </div>
                         )}
-                      </div>
-                    )
-                  })}
+                        </motion.div>
+                      )
+                    })}
+                  </AnimatePresence>
                 </div>
               </div>
 
@@ -1885,27 +1900,23 @@ export default function AdminSales() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="md"
                     onClick={() => setIsSaleFormOpen(false)}
-                    className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
+                    variant="primary"
+                    size="md"
                     disabled={saleSubmitting || !isSaleFormValid}
-                    className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-black/85 rounded-lg shadow-xs transition-[background-color,opacity,transform] duration-150 active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none inline-flex items-center gap-2"
+                    loading={saleSubmitting}
                   >
-                    {saleSubmitting ? (
-                      <>
-                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      `Record Sale (${saleItems.length} ${saleItems.length === 1 ? 'item' : 'items'})`
-                    )}
-                  </button>
+                    Record Sale ({saleItems.length} {saleItems.length === 1 ? 'item' : 'items'})
+                  </Button>
                 </div>
               </div>
             </form>
@@ -1934,17 +1945,16 @@ export default function AdminSales() {
             </div>
 
             {returnError && (
-              <div className="mb-4 p-3 bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg flex items-center gap-2">
-                <AlertCircle size={14} className="text-gray-600" />
-                {returnError}
+              <div className="mb-4">
+                <FormError message={returnError} />
               </div>
             )}
 
             <form onSubmit={handleSaveReturn} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Select Product <span className="text-red-500">*</span>
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                    Select Product <span className="text-rose-500">*</span>
                   </label>
                   <CustomSelect
                     value={returnProductId}
@@ -1956,8 +1966,8 @@ export default function AdminSales() {
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
-                      Restock into Location <span className="text-red-500">*</span>
+                    <label className="block text-xs font-medium text-gray-700">
+                      Restock into Location <span className="text-rose-500">*</span>
                     </label>
                     {isLocationLocked && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
@@ -1989,8 +1999,8 @@ export default function AdminSales() {
               {/* Idol Piece Weight for Return */}
               {isReturnProductAnIdol && (
                 <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700">
-                    Returned Piece Weight (Grams) <span className="text-red-500">*</span>
+                  <label className="block text-xs font-medium text-gray-700">
+                    Returned Piece Weight (Grams) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -2010,8 +2020,8 @@ export default function AdminSales() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Quantity Returned <span className="text-red-500">*</span>
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                    Quantity Returned <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -2026,7 +2036,7 @@ export default function AdminSales() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Refund Price per Unit (₹)
                   </label>
                   <input
@@ -2041,7 +2051,7 @@ export default function AdminSales() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Return Date
                   </label>
                   <CustomDatePicker
@@ -2054,7 +2064,7 @@ export default function AdminSales() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Customer Name
                   </label>
                   <input
@@ -2067,7 +2077,7 @@ export default function AdminSales() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Return Reason / Notes
                   </label>
                   <input
@@ -2081,20 +2091,23 @@ export default function AdminSales() {
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-2">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="md"
                   onClick={() => setIsReturnFormOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="md"
                   disabled={returnSubmitting || !isReturnFormValid}
-                  className="inline-flex items-center gap-2 px-5 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none transition-[background-color,opacity,transform] duration-150 active:scale-[0.97]"
+                  loading={returnSubmitting}
                 >
-                  {returnSubmitting ? 'Recording...' : 'Accept Return & Add Stock'}
-                </button>
+                  Accept Return & Add Stock
+                </Button>
               </div>
             </form>
           </motion.div>
@@ -2201,10 +2214,10 @@ export default function AdminSales() {
                           </td>
                           <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1">
-                              {bill.items.length === 1 && isSuperAdmin && !bill.items[0].isReversed && !bill.items[0].reversalOf && (
+                              {bill.items.length === 1 && (isSuperAdmin || hasPermission('sales', 'edit')) && !bill.items[0].isReversed && !bill.items[0].reversalOf && (
                                 <button
                                   onClick={() => handleOpenEditSale(bill.items[0])}
-                                  title="Edit sale (Super Admin)"
+                                  title="Edit sale"
                                   className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                                 >
                                   <Pencil size={14} />
@@ -2283,10 +2296,10 @@ export default function AdminSales() {
                                           </td>
                                           <td className="py-2.5 px-4 text-right">
                                             <div className="flex items-center justify-end gap-1">
-                                              {isSuperAdmin && !item.isReversed && !item.reversalOf && (
+                                              {(isSuperAdmin || hasPermission('sales', 'edit')) && !item.isReversed && !item.reversalOf && (
                                                 <button
                                                   onClick={() => handleOpenEditSale(item)}
-                                                  title="Edit item (Super Admin)"
+                                                  title="Edit item"
                                                   className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded transition-[color,background-color] duration-150"
                                                 >
                                                   <Pencil size={13} />
@@ -2507,8 +2520,8 @@ export default function AdminSales() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-bold text-black">Edit Sale Entry</h3>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-black text-white">
-                      Super Admin
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+                      Ledger Entry
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">

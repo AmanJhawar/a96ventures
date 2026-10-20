@@ -148,7 +148,7 @@ export type PermissionAction = 'view' | 'add' | 'edit' | 'delete';
 
 export interface UserPermissions {
   products: { view: boolean; add: boolean; edit: boolean; delete: boolean };
-  purchases: { view: boolean; add: boolean; delete: boolean };
+  purchases: { view: boolean; add: boolean; edit: boolean; delete: boolean };
   movements: {
     view: boolean;
     transfer: boolean;
@@ -157,7 +157,7 @@ export interface UserPermissions {
     melt: boolean;
     delete: boolean;
   };
-  sales: { view: boolean; add: boolean; delete: boolean };
+  sales: { view: boolean; add: boolean; edit: boolean; delete: boolean };
   returns: { view: boolean; add: boolean; delete: boolean };
   inquiries: { view: boolean; edit: boolean; delete: boolean };
   locations: { view: boolean; add: boolean; edit: boolean; delete: boolean };

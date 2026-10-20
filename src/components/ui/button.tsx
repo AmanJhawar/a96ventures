@@ -29,7 +29,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const isDisabled = disabled || loading
 
     const baseStyles =
-      'inline-flex items-center justify-center font-medium select-none focus:outline-none transition-[background-color,border-color,color,opacity,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none disabled:active:scale-100'
+      'inline-flex items-center justify-center font-medium select-none focus:outline-none transition-[background-color,border-color,color,opacity,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] disabled:cursor-not-allowed disabled:pointer-events-none disabled:active:scale-100'
 
     const sizeStyles = {
       sm: 'h-8 px-3 text-xs gap-1.5 rounded-lg',
@@ -39,15 +39,15 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variantStyles = {
       primary:
-        'bg-black text-white hover:bg-black/85 shadow-xs border border-transparent',
+        'bg-black text-white hover:bg-black/85 shadow-xs border border-transparent disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:shadow-none',
       secondary:
-        'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:text-black hover:border-gray-300 shadow-xs',
+        'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:text-black hover:border-gray-300 shadow-xs disabled:bg-gray-50 disabled:text-gray-400 disabled:border-gray-200',
       outline:
-        'bg-transparent text-gray-700 border border-gray-300 hover:border-black hover:text-black hover:bg-gray-50/50',
+        'bg-transparent text-gray-700 border border-gray-300 hover:border-black hover:text-black hover:bg-gray-50/50 disabled:opacity-40',
       ghost:
-        'bg-transparent text-gray-600 hover:text-black hover:bg-gray-100/80 border border-transparent',
+        'bg-transparent text-gray-600 hover:text-black hover:bg-gray-100/80 border border-transparent disabled:opacity-40',
       danger:
-        'bg-rose-600 text-white hover:bg-rose-700 shadow-xs border border-transparent'
+        'bg-rose-600 text-white hover:bg-rose-700 shadow-xs border border-transparent disabled:opacity-40'
     }[variant]
 
     return (

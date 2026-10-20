@@ -13,7 +13,7 @@ export function EmptyState({
   action?: ReactNode
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 px-6 text-center animate-[fadeInUp_400ms_var(--ease-out)_forwards]">
+    <div className="flex flex-col items-center justify-center py-20 px-6 text-center animate-[fadeInUp_220ms_var(--ease-out)_forwards]">
       <div className="w-16 h-16 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center text-gray-400 mb-6 shadow-sm">
         {icon}
       </div>

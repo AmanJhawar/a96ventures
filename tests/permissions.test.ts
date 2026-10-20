@@ -15,6 +15,8 @@ describe('Custom Claims Permissions Compression', () => {
     expect(codes).toContain('prd:v')
     expect(codes).toContain('sal:v')
     expect(codes).toContain('sal:a')
+    expect(codes).toContain('sal:e')
+    expect(codes).toContain('pur:e')
     expect(codes).toContain('cus:v')
     expect(codes).toContain('cus:a')
     expect(codes).toContain('cus:e')
@@ -35,8 +37,8 @@ describe('Custom Claims Permissions Compression', () => {
 
     const payloadBytes = Buffer.byteLength(payload, 'utf8')
     // Firebase custom claims hard cap is 1,000 bytes.
-    // Our compact short-code array must easily fit (under 500 bytes)
-    expect(payloadBytes).toBeLessThanOrEqual(500)
+    // Our compact short-code array must easily fit (around ~500 bytes, far below 1,000 bytes)
+    expect(payloadBytes).toBeLessThanOrEqual(550)
     expect(payloadBytes).toBeLessThan(1000)
   })
 
@@ -44,7 +46,7 @@ describe('Custom Claims Permissions Compression', () => {
     const testPerms: UserPermissions = {
       ...EMPTY_PERMISSIONS,
       products: { view: true, add: false, edit: true, delete: false },
-      sales: { view: true, add: false, delete: false },
+      sales: { view: true, add: false, edit: false, delete: false },
       reports: { view: true, export: false },
       customers: {
         view: true,

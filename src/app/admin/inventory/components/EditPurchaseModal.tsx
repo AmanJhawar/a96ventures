@@ -53,26 +53,33 @@ export function EditPurchaseModal({
   isValid,
   error
 }: EditPurchaseModalProps) {
-  if (!editingPurchase) return null
-
   const totalValue = (Number(quantity) || 0) * (Number(price) || 0)
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 8 }}
-          transition={{ duration: 0.16, ease: EASE_OUT }}
-          className="w-full max-w-lg bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden"
-        >
+      {editingPurchase && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16, ease: EASE_OUT }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ opacity: 0, transform: 'scale(0.95) translateY(8px)' }}
+            animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
+            exit={{ opacity: 0, transform: 'scale(0.95) translateY(8px)' }}
+            transition={{ duration: 0.16, ease: EASE_OUT }}
+            className="relative z-10 w-full max-w-lg bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden"
+          >
           <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-black">Edit Purchase Entry</h3>
-                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-black text-white">
-                  Super Admin
+                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+                  Ledger Entry
                 </span>
               </div>
               <p className="text-xs text-gray-500 mt-0.5">
@@ -208,7 +215,8 @@ export function EditPurchaseModal({
             </div>
           </form>
         </motion.div>
-      </div>
+        </div>
+      )}
     </AnimatePresence>
   )
 }

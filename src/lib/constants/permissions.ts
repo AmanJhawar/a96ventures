@@ -2,7 +2,7 @@ import { UserPermissions, UserRole } from '@/lib/types'
 
 export const EMPTY_PERMISSIONS: UserPermissions = {
   products: { view: false, add: false, edit: false, delete: false },
-  purchases: { view: false, add: false, delete: false },
+  purchases: { view: false, add: false, edit: false, delete: false },
   movements: {
     view: false,
     transfer: false,
@@ -11,7 +11,7 @@ export const EMPTY_PERMISSIONS: UserPermissions = {
     melt: false,
     delete: false
   },
-  sales: { view: false, add: false, delete: false },
+  sales: { view: false, add: false, edit: false, delete: false },
   returns: { view: false, add: false, delete: false },
   inquiries: { view: false, edit: false, delete: false },
   locations: { view: false, add: false, edit: false, delete: false },
@@ -35,7 +35,7 @@ export const EMPTY_PERMISSIONS: UserPermissions = {
 
 export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
   products: { view: true, add: true, edit: true, delete: true },
-  purchases: { view: true, add: true, delete: true },
+  purchases: { view: true, add: true, edit: true, delete: true },
   movements: {
     view: true,
     transfer: true,
@@ -44,7 +44,7 @@ export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
     melt: true,
     delete: true
   },
-  sales: { view: true, add: true, delete: true },
+  sales: { view: true, add: true, edit: true, delete: true },
   returns: { view: true, add: true, delete: true },
   inquiries: { view: true, edit: true, delete: true },
   locations: { view: true, add: true, edit: true, delete: true },
@@ -68,7 +68,7 @@ export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
 
 export const STORE_MANAGER_PERMISSIONS: UserPermissions = {
   products: { view: true, add: true, edit: true, delete: false },
-  purchases: { view: true, add: true, delete: false },
+  purchases: { view: true, add: true, edit: true, delete: false },
   movements: {
     view: true,
     transfer: true,
@@ -77,7 +77,7 @@ export const STORE_MANAGER_PERMISSIONS: UserPermissions = {
     melt: true,
     delete: false
   },
-  sales: { view: true, add: true, delete: false },
+  sales: { view: true, add: true, edit: true, delete: false },
   returns: { view: true, add: true, delete: false },
   inquiries: { view: true, edit: true, delete: false },
   locations: { view: true, add: false, edit: false, delete: false },
@@ -101,7 +101,7 @@ export const STORE_MANAGER_PERMISSIONS: UserPermissions = {
 
 export const SALES_CASHIER_PERMISSIONS: UserPermissions = {
   products: { view: true, add: false, edit: false, delete: false },
-  purchases: { view: false, add: false, delete: false },
+  purchases: { view: false, add: false, edit: false, delete: false },
   movements: {
     view: false,
     transfer: false,
@@ -110,7 +110,7 @@ export const SALES_CASHIER_PERMISSIONS: UserPermissions = {
     melt: false,
     delete: false
   },
-  sales: { view: true, add: true, delete: false },
+  sales: { view: true, add: true, edit: false, delete: false },
   returns: { view: true, add: true, delete: false },
   inquiries: { view: true, edit: false, delete: false },
   locations: { view: true, add: false, edit: false, delete: false },
@@ -134,7 +134,7 @@ export const SALES_CASHIER_PERMISSIONS: UserPermissions = {
 
 export const VAULT_CUSTODIAN_PERMISSIONS: UserPermissions = {
   products: { view: true, add: true, edit: true, delete: false },
-  purchases: { view: true, add: true, delete: false },
+  purchases: { view: true, add: true, edit: true, delete: false },
   movements: {
     view: true,
     transfer: true,
@@ -143,7 +143,7 @@ export const VAULT_CUSTODIAN_PERMISSIONS: UserPermissions = {
     melt: true,
     delete: false
   },
-  sales: { view: false, add: false, delete: false },
+  sales: { view: false, add: false, edit: false, delete: false },
   returns: { view: false, add: false, delete: false },
   inquiries: { view: false, edit: false, delete: false },
   locations: { view: true, add: false, edit: false, delete: false },

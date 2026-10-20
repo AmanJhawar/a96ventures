@@ -75,6 +75,7 @@ import { MovementsTable } from './components/MovementsTable'
 import { ArchivedAuditTab } from './components/ArchivedAuditTab'
 import { ZeroBalanceModal } from './components/ZeroBalanceModal'
 import { EditPurchaseModal } from './components/EditPurchaseModal'
+import { LocationStockModal } from '@/components/location-stock-modal'
 
 const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
 const BULLION_BRANDS: ProductBrand[] = ['MMTC PAMP', 'Local']
@@ -182,6 +183,7 @@ export default function AdminInventory() {
   // Data state
   const [products, setProducts] = useState<Product[]>([])
   const [locations, setLocations] = useState<Location[]>([])
+  const [selectedStockLocation, setSelectedStockLocation] = useState<Location | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -2351,6 +2353,10 @@ export default function AdminInventory() {
           handleOpenAddProduct={handleOpenAddProduct}
           handleEditProduct={handleEditProduct}
           setDeleteProductTarget={setDeleteProductTarget}
+          onSelectLocationId={(locId) => {
+            const found = locations.find((l) => l.id === locId)
+            if (found) setSelectedStockLocation(found)
+          }}
         />
       ) : activeTab === 'purchases' && allowedTabs.includes('purchases') ? (
         <PurchasesTable
@@ -2465,6 +2471,14 @@ export default function AdminInventory() {
         submitting={editPurchaseSubmitting}
         isValid={isEditPurchaseValid}
         error={editPurchaseError}
+      />
+
+      {/* Location Stock Summary Modal */}
+      <LocationStockModal
+        isOpen={!!selectedStockLocation}
+        onClose={() => setSelectedStockLocation(null)}
+        location={selectedStockLocation}
+        products={products}
       />
     </div>
   )

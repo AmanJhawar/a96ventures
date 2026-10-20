@@ -740,8 +740,8 @@ export default function AdminUsersPage() {
                           <span className="font-semibold text-xs text-black">Purchases</span>
                           <span className="text-[10px] text-gray-400 uppercase tracking-wider">Inflow</span>
                         </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {(['view', 'add', 'delete'] as const).map((act) => (
+                        <div className="grid grid-cols-4 gap-2">
+                          {(['view', 'add', 'edit', 'delete'] as const).map((act) => (
                             <button
                               key={act}
                               type="button"
@@ -786,8 +786,8 @@ export default function AdminUsersPage() {
                           <span className="font-semibold text-xs text-black">Sales & Invoices</span>
                           <span className="text-[10px] text-gray-400 uppercase tracking-wider">Revenue</span>
                         </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {(['view', 'add', 'delete'] as const).map((act) => (
+                        <div className="grid grid-cols-4 gap-2">
+                          {(['view', 'add', 'edit', 'delete'] as const).map((act) => (
                             <button
                               key={act}
                               type="button"

@@ -107,9 +107,9 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
   const now = new Date().toISOString()
   const defaultPermissions: UserPermissions = {
     products: { view: true, add: false, edit: false, delete: false },
-    purchases: { view: false, add: false, delete: false },
+    purchases: { view: false, add: false, edit: false, delete: false },
     movements: { view: false, transfer: false, adjustment: false, repair: false, melt: false, delete: false },
-    sales: { view: false, add: false, delete: false },
+    sales: { view: false, add: false, edit: false, delete: false },
     returns: { view: false, add: false, delete: false },
     inquiries: { view: false, edit: false, delete: false },
     locations: { view: false, add: false, edit: false, delete: false },
