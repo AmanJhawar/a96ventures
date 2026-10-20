@@ -105,7 +105,7 @@ export function RecordPurchaseModal({
 
         <form onSubmit={onSubmit} className="space-y-5">
           {/* Common Purchase Header */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50/70 border border-gray-200 rounded-xl">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50/70 border border-gray-200 rounded-xl relative z-30">
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-medium text-gray-700">
@@ -160,7 +160,7 @@ export function RecordPurchaseModal({
           </div>
 
           {/* Purchase Line Items List */}
-          <div className="space-y-3">
+          <div className="space-y-3 relative z-20">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-gray-700">
                 Purchase Line Items ({purchaseItems.length})
@@ -188,6 +188,7 @@ export function RecordPurchaseModal({
                   return (
                     <motion.div
                       key={item.id}
+                      style={{ zIndex: 50 - idx }}
                       initial={{ opacity: 0, transform: 'scale(0.98) translateY(6px)' }}
                       animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
                       exit={{ opacity: 0, transform: 'scale(0.98) translateY(-6px)' }}
@@ -381,7 +382,7 @@ export function RecordPurchaseModal({
           </div>
 
           {/* Purchase Summary Footer */}
-          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
             <div className="flex items-center gap-6 divide-x divide-gray-200 text-xs">
               <div>
                 <span className="text-gray-500 block">Total Items</span>

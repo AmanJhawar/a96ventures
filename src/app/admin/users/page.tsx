@@ -100,10 +100,10 @@ export default function AdminUsersPage() {
   const [formEmail, setFormEmail] = useState('')
   const [formPhone, setFormPhone] = useState('')
   const [formPassword, setFormPassword] = useState('')
-  const [formRole, setFormRole] = useState<UserRole>('store_manager')
+  const [formRole, setFormRole] = useState<UserRole | ''>('')
   const [formStatus, setFormStatus] = useState<UserStatus>('active')
   const [formLocationId, setFormLocationId] = useState('')
-  const [formPermissions, setFormPermissions] = useState<UserPermissions>(ROLE_PRESETS.store_manager)
+  const [formPermissions, setFormPermissions] = useState<UserPermissions>(EMPTY_PERMISSIONS)
   const [formSubmitting, setFormSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -240,10 +240,10 @@ export default function AdminUsersPage() {
     setFormEmail('')
     setFormPhone('')
     setFormPassword('')
-    setFormRole('store_manager')
+    setFormRole('')
     setFormStatus('active')
     setFormLocationId('')
-    setFormPermissions(ROLE_PRESETS.store_manager)
+    setFormPermissions(EMPTY_PERMISSIONS)
     setFormError(null)
     setIsFormOpen(true)
   }
@@ -320,6 +320,11 @@ export default function AdminUsersPage() {
     e.preventDefault()
     if (!formEmail.trim() || !formDisplayName.trim()) {
       setFormError('Name and email are mandatory')
+      return
+    }
+
+    if (!formRole) {
+      setFormError('Please select a role preset')
       return
     }
 
@@ -706,7 +711,7 @@ export default function AdminUsersPage() {
                         Granular Action Permissions
                       </h3>
                       <span className="text-[11px] text-gray-400">
-                        {formRole === 'custom' ? 'Customized individually' : `Preset: ${ROLE_LABELS[formRole]?.label}`}
+                        {formRole === 'custom' ? 'Customized individually' : formRole ? `Preset: ${ROLE_LABELS[formRole]?.label}` : 'No preset selected'}
                       </span>
                     </div>
 

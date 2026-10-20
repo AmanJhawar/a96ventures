@@ -11,6 +11,13 @@ export interface PurchaseLineItem {
   pieceInput: string
 }
 
+export interface TransferLineItem {
+  id: string
+  productId: string
+  quantity: string
+  pieceWeights?: number[]
+}
+
 export type MovementType = 'transfer' | 'adjustment' | 'repair' | 'melt'
 export type MovementSubtype = 'transfer' | 'adjustment' | 'repair' | 'melt'
 

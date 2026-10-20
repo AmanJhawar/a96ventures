@@ -25,7 +25,8 @@ import {
   Check,
   RotateCcw,
   Sparkles,
-  Loader2
+  Loader2,
+  X
 } from 'lucide-react'
 import { Customer, Order, Visit, PaymentMode } from '@/lib/types'
 import { getCustomerById, archiveCustomer, revealCustomerPan } from '@/lib/services/customers.service'
@@ -909,9 +910,18 @@ export default function CustomerDetailPage() {
 
       {/* Edit Customer Modal */}
       {isEditModalOpen && customer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-xl p-6 max-w-2xl w-full shadow-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-base font-bold text-foreground mb-4">Edit Customer Profile</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-black">Edit Customer Profile</h2>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-1 text-gray-400 hover:text-black rounded-md transition-[color,transform] active:scale-[0.97]"
+              >
+                <X size={18} />
+              </button>
+            </div>
             <CustomerForm
               initialCustomer={customer}
               onSuccess={(updated) => {

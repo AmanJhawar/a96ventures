@@ -48,7 +48,7 @@ export default function NewCustomerPage() {
 
       {/* Form Card */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-xs overflow-hidden p-6 sm:p-8">
-        <CustomerForm onSuccess={handleSaved} onCancel={handleCancel} />
+        <CustomerForm onSuccess={handleSaved} onCancel={handleCancel} submitLabel="Create Customer Profile" />
       </div>
     </div>
   )

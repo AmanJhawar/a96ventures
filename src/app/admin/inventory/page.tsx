@@ -35,6 +35,13 @@ export interface PurchaseLineItem {
   pieceWeights: number[]
   pieceInput: string
 }
+
+export interface TransferLineItem {
+  id: string
+  productId: string
+  quantity: string
+  pieceWeights?: number[]
+}
 import { auth } from '@/lib/firebase/auth'
 import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
 import { useArchive } from '@/lib/context/ArchiveContext'
@@ -215,12 +222,12 @@ export default function AdminInventory() {
   const [isProductFormOpen, setIsProductFormOpen] = useState(false)
   const [editingProductId, setEditingProductId] = useState<string | null>(null)
   const [prodName, setProdName] = useState('')
-  const [prodCategory, setProdCategory] = useState<ProductCategory>('Bullions')
-  const [prodBrand, setProdBrand] = useState<ProductBrand>('MMTC PAMP')
-  const [prodMetal, setProdMetal] = useState<MetalType>('Gold')
+  const [prodCategory, setProdCategory] = useState<ProductCategory | ''>('')
+  const [prodBrand, setProdBrand] = useState<ProductBrand | ''>('')
+  const [prodMetal, setProdMetal] = useState<MetalType | ''>('')
   const [prodSku, setProdSku] = useState('')
   const [prodWeight, setProdWeight] = useState('')
-  const [prodPurity, setProdPurity] = useState('999.9')
+  const [prodPurity, setProdPurity] = useState('')
   const [prodInitialStock, setProdInitialStock] = useState('')
   const [prodInitialLocationId, setProdInitialLocationId] = useState('')
   const [prodPieceWeights, setProdPieceWeights] = useState<number[]>([])
@@ -232,10 +239,10 @@ export default function AdminInventory() {
   // Purchase modal / form state (multi-item)
   const [isPurchaseFormOpen, setIsPurchaseFormOpen] = useState(false)
   const [purchaseLocationId, setPurchaseLocationId] = useState('')
-  const [purchaseDate, setPurchaseDate] = useState(() => getTodayIST())
+  const [purchaseDate, setPurchaseDate] = useState('')
   const [purchaseNotes, setPurchaseNotes] = useState('')
   const [purchaseItems, setPurchaseItems] = useState<PurchaseLineItem[]>([
-    { id: '1', productId: '', quantity: '1', price: '', pieceWeights: [], pieceInput: '' }
+    { id: '1', productId: '', quantity: '', price: '', pieceWeights: [], pieceInput: '' }
   ])
   const [purchaseSubmitting, setPurchaseSubmitting] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
@@ -244,7 +251,7 @@ export default function AdminInventory() {
   const [editingPurchase, setEditingPurchase] = useState<Transaction | null>(null)
   const [editPurchaseDate, setEditPurchaseDate] = useState('')
   const [editPurchaseLocationId, setEditPurchaseLocationId] = useState('')
-  const [editPurchaseQuantity, setEditPurchaseQuantity] = useState('1')
+  const [editPurchaseQuantity, setEditPurchaseQuantity] = useState('')
   const [editPurchasePrice, setEditPurchasePrice] = useState('')
   const [editPurchaseVendorName, setEditPurchaseVendorName] = useState('')
   const [editPurchaseNotes, setEditPurchaseNotes] = useState('')
@@ -253,13 +260,13 @@ export default function AdminInventory() {
 
   // Movement modal / form state
   const [isMovementFormOpen, setIsMovementFormOpen] = useState(false)
-  const [movementType, setMovementType] = useState<MovementSubtype>('transfer')
+  const [movementType, setMovementType] = useState<MovementSubtype | ''>('')
   const [movementTypeFilter, setMovementTypeFilter] = useState<'All' | MovementSubtype>('All')
   const [movementProductId, setMovementProductId] = useState('')
   const [movementLocationId, setMovementLocationId] = useState('')
   const [movementToLocationId, setMovementToLocationId] = useState('')
-  const [movementQty, setMovementQty] = useState('1')
-  const [movementDate, setMovementDate] = useState(() => getTodayIST())
+  const [movementQty, setMovementQty] = useState('')
+  const [movementDate, setMovementDate] = useState('')
   const [movementNotes, setMovementNotes] = useState('')
   // Repair-specific fields
   const [movementNewWeight, setMovementNewWeight] = useState('')
@@ -267,9 +274,12 @@ export default function AdminInventory() {
   // Melt-specific fields
   const [movementRecoveredWeight, setMovementRecoveredWeight] = useState('')
   const [movementPieceWeight, setMovementPieceWeight] = useState('')
-  const [movementAdjustmentMode, setMovementAdjustmentMode] = useState<'surplus' | 'deficit'>('deficit')
+  const [movementAdjustmentMode, setMovementAdjustmentMode] = useState<'surplus' | 'deficit' | ''>('')
   const [movementSubmitting, setMovementSubmitting] = useState(false)
   const [movementError, setMovementError] = useState<string | null>(null)
+  const [transferItems, setTransferItems] = useState<TransferLineItem[]>([
+    { id: '1', productId: '', quantity: '', pieceWeights: [] }
+  ])
 
   // Delete modal state
   const [deleteProductTarget, setDeleteProductTarget] = useState<Product | null>(null)
@@ -482,37 +492,24 @@ export default function AdminInventory() {
 
   // Tie purity strictly to Metal
   const purityOptions: SelectOption[] = useMemo(() => {
+    if (!prodMetal) return []
     const list = PURITY_OPTIONS_BY_METAL[prodMetal] || ['999.9', '999']
     return list.map((p) => ({ value: p, label: p }))
   }, [prodMetal])
 
   const handleCategoryChange = (newCat: ProductCategory) => {
     setProdCategory(newCat)
-    if (newCat === 'Bullions') {
-      if (!prodBrand || (prodBrand !== 'MMTC PAMP' && prodBrand !== 'Local')) {
-        setProdBrand('MMTC PAMP')
-      }
-      // If switching from idols, default to Gold 999.9 if currently silver 925
-      if (prodMetal === 'Silver' && prodPurity === '925') {
-        setProdMetal('Gold')
-        setProdPurity('999.9')
-      }
-    } else if (newCat === 'Idols') {
+    if (newCat === 'Idols') {
       setProdWeight('')
       setProdBrand('Local')
-      // Idols default to Silver and 925 purity
-      setProdMetal('Silver')
-      setProdPurity('925')
     }
   }
 
   const handleMetalChange = (newMetal: MetalType) => {
     setProdMetal(newMetal)
-    const validPurities = PURITY_OPTIONS_BY_METAL[newMetal] || ['999.9']
-    if (prodCategory === 'Idols' && newMetal === 'Silver') {
-      setProdPurity('925')
-    } else if (!validPurities.includes(prodPurity)) {
-      setProdPurity(validPurities[0])
+    const validPurities = PURITY_OPTIONS_BY_METAL[newMetal] || []
+    if (prodPurity && !validPurities.includes(prodPurity)) {
+      setProdPurity('')
     }
   }
 
@@ -700,9 +697,68 @@ export default function AdminInventory() {
   }, [purchaseLocationId, purchaseDate, purchaseItems, products])
 
   const isMovementFormValid = useMemo(() => {
-    if (!movementProductId.trim() || !movementLocationId.trim() || !movementDate.trim()) {
+    const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : movementLocationId
+    if (!effectiveLocId.trim() || !movementDate.trim()) {
       return false
     }
+
+    if (movementType === 'transfer') {
+      if (!movementToLocationId.trim() || movementToLocationId === effectiveLocId) return false
+      if (!transferItems || transferItems.length === 0) return false
+
+      for (const item of transferItems) {
+        if (!item.productId.trim()) return false
+        const prod = products.find((p) => p.id === item.productId)
+        if (!prod) return false
+
+        const isIdol = prod.category === 'Idols'
+        if (isIdol) {
+          if (!item.pieceWeights || item.pieceWeights.length === 0) return false
+          const availablePieces = prod.pieceWeightsByLocation?.[effectiveLocId] || []
+          for (const pw of item.pieceWeights) {
+            if (!availablePieces.includes(pw)) return false
+          }
+        } else {
+          const q = Number(item.quantity)
+          if (isNaN(q) || q <= 0 || !Number.isInteger(q)) return false
+        }
+      }
+
+      // Check no duplicate piece weights selected across items for idols
+      const idolPieceTracker: Record<string, Set<number>> = {}
+      for (const item of transferItems) {
+        const prod = products.find((p) => p.id === item.productId)
+        if (prod?.category === 'Idols' && item.pieceWeights) {
+          if (!idolPieceTracker[item.productId]) {
+            idolPieceTracker[item.productId] = new Set()
+          }
+          for (const pw of item.pieceWeights) {
+            if (idolPieceTracker[item.productId].has(pw)) return false
+            idolPieceTracker[item.productId].add(pw)
+          }
+        }
+      }
+
+      // Check total requested quantities across items for non-idol products do not exceed available stock at effectiveLocId
+      const prodQtyTracker: Record<string, number> = {}
+      for (const item of transferItems) {
+        const prod = products.find((p) => p.id === item.productId)
+        if (prod?.category !== 'Idols') {
+          const q = Number(item.quantity) || 0
+          prodQtyTracker[item.productId] = (prodQtyTracker[item.productId] || 0) + q
+        }
+      }
+      for (const [prodId, reqQty] of Object.entries(prodQtyTracker)) {
+        const prod = products.find((p) => p.id === prodId)
+        const stock = prod?.stockByLocation?.[effectiveLocId] || 0
+        if (reqQty > stock) return false
+      }
+
+      return true
+    }
+
+    // Single-product validations for repair, melt, adjustment
+    if (!movementProductId.trim()) return false
     const q = Number(movementQty)
     if (isNaN(q) || q <= 0) return false
 
@@ -711,9 +767,7 @@ export default function AdminInventory() {
       return false
     }
 
-    if (movementType === 'transfer') {
-      if (!movementToLocationId.trim() || movementToLocationId === movementLocationId) return false
-    } else if (movementType === 'repair') {
+    if (movementType === 'repair') {
       const nw = Number(movementNewWeight)
       if (isNaN(nw) || nw <= 0) return false
     } else if (movementType === 'melt') {
@@ -722,24 +776,31 @@ export default function AdminInventory() {
     }
     return true
   }, [
-    movementProductId,
+    isLocationLocked,
+    userAssignedLocationId,
     movementLocationId,
     movementDate,
-    movementQty,
     movementType,
     movementToLocationId,
+    transferItems,
+    movementProductId,
+    movementQty,
+    movementPieceWeight,
     movementNewWeight,
     movementRecoveredWeight,
-    movementPieceWeight,
     products
   ])
 
   const isProductFormValid = useMemo(() => {
-    if (!prodName.trim() || !prodSku.trim() || !prodPurity.trim()) return false
+    if (!prodName.trim() || !prodCategory || !prodMetal || !prodSku.trim() || !prodPurity.trim()) return false
+    if (prodCategory === 'Bullions' && !prodBrand) return false
+    if (prodCategory === 'Idols') {
+      return prodPieceWeights.length > 0 || Number(prodInitialStock) >= 0
+    }
     const w = Number(prodWeight)
     if (isNaN(w) || w <= 0) return false
     return true
-  }, [prodName, prodSku, prodPurity, prodWeight])
+  }, [prodName, prodCategory, prodBrand, prodMetal, prodSku, prodPurity, prodWeight, prodPieceWeights.length, prodInitialStock])
 
   const isEditPurchaseValid = useMemo(() => {
     if (!editPurchaseDate.trim() || !editPurchaseLocationId.trim()) return false
@@ -915,22 +976,14 @@ export default function AdminInventory() {
     setEditingProductId(null)
     setIsProductCategoryMetalLocked(false)
     setProdName('')
-    const isIdolsDefault = selectedCategory === 'Idols'
-    const initialCategory: ProductCategory = isIdolsDefault ? 'Idols' : 'Bullions'
-    setProdCategory(initialCategory)
-    if (isIdolsDefault) {
-      setProdBrand('Local')
-      setProdMetal('Silver')
-      setProdPurity('925')
-    } else {
-      setProdBrand('MMTC PAMP')
-      setProdMetal('Gold')
-      setProdPurity('999.9')
-    }
+    setProdCategory('')
+    setProdBrand('')
+    setProdMetal('')
+    setProdPurity('')
     setProdSku('')
     setProdWeight('')
     setProdInitialStock('')
-    setProdInitialLocationId(userAssignedLocationId || locations[0]?.id || '')
+    setProdInitialLocationId(isLocationLocked && userAssignedLocationId ? userAssignedLocationId : '')
     setProdPieceWeights([])
     setProdPieceInput('')
     setProductFormError(null)
@@ -973,6 +1026,22 @@ export default function AdminInventory() {
     e.preventDefault()
     if (!prodName.trim()) {
       setProductFormError('Product name is required')
+      return
+    }
+    if (!prodCategory) {
+      setProductFormError('Please select a product category')
+      return
+    }
+    if (prodCategory === 'Bullions' && !prodBrand) {
+      setProductFormError('Please select a brand')
+      return
+    }
+    if (!prodMetal) {
+      setProductFormError('Please select a metal (Gold or Silver)')
+      return
+    }
+    if (!prodPurity.trim()) {
+      setProductFormError('Please select a purity')
       return
     }
     if (!prodSku.trim()) {
@@ -1334,11 +1403,44 @@ export default function AdminInventory() {
     }
   }
 
+  // Handlers for Transfer Items
+  const handleAddTransferItem = () => {
+    setTransferItems((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(36).substring(2, 9),
+        productId: '',
+        quantity: '1',
+        pieceWeights: []
+      }
+    ])
+  }
+
+  const handleRemoveTransferItem = (id: string) => {
+    setTransferItems((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((it) => it.id !== id)
+    })
+  }
+
+  const handleUpdateTransferItem = (id: string, updates: Partial<TransferLineItem>) => {
+    setTransferItems((prev) =>
+      prev.map((it) => {
+        if (it.id !== id) return it
+        const next = { ...it, ...updates }
+        if (updates.productId && updates.productId !== it.productId) {
+          next.pieceWeights = []
+          const newP = products.find((p) => p.id === updates.productId)
+          next.quantity = newP?.category === 'Idols' ? '0' : '1'
+        }
+        return next
+      })
+    )
+  }
+
   // Handlers for Movements
   const handleOpenMovement = (type?: MovementSubtype) => {
-    const targetType = type && allowedMovementTypes.includes(type)
-      ? type
-      : (allowedMovementTypes[0] || 'transfer')
+    const targetType = type && allowedMovementTypes.includes(type) ? type : ''
     setMovementType(targetType)
     setMovementProductId('')
     setMovementLocationId(isLocationLocked && userAssignedLocationId ? userAssignedLocationId : '')
@@ -1349,21 +1451,19 @@ export default function AdminInventory() {
     setMovementRepairCharge('')
     setMovementRecoveredWeight('')
     setMovementPieceWeight('')
-    setMovementAdjustmentMode('deficit')
+    setMovementAdjustmentMode('')
     setMovementNewWeight('')
     setMovementError(null)
+    setTransferItems([
+      { id: Math.random().toString(36).substring(2, 9), productId: '', quantity: '', pieceWeights: [] }
+    ])
     setIsMovementFormOpen(true)
   }
 
   const handleSaveMovement = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!allowedMovementTypes.includes(movementType)) {
-      setMovementError('You do not have permission to record this movement type')
-      return
-    }
-    const prod = products.find((p) => p.id === movementProductId)
-    if (!prod) {
-      setMovementError('Please select a product')
+    if (!movementType || !allowedMovementTypes.includes(movementType)) {
+      setMovementError('Please select a valid movement type')
       return
     }
     const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : movementLocationId
@@ -1382,6 +1482,135 @@ export default function AdminInventory() {
     try {
       const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
       const toLocName = movementToLocationId ? locationMap.get(movementToLocationId) : undefined
+
+      if (movementType === 'transfer') {
+        if (!movementToLocationId) {
+          throw new Error('Please select a destination location')
+        }
+        if (effectiveLocId === movementToLocationId) {
+          throw new Error('Source and destination locations cannot be identical')
+        }
+        if (!transferItems || transferItems.length === 0) {
+          throw new Error('Please add at least one product to transfer')
+        }
+
+        type ValidatedTransfer = {
+          prod: Product
+          isIdol: boolean
+          quantity: number
+          pieceWeight?: number
+        }
+        const validatedTransfers: ValidatedTransfer[] = []
+
+        for (const it of transferItems) {
+          if (!it.productId) {
+            throw new Error('Please select a product for all transfer items')
+          }
+          const prod = products.find((p) => p.id === it.productId)
+          if (!prod) throw new Error('One or more selected products are invalid')
+          const isIdol = prod.category === 'Idols'
+
+          if (isIdol) {
+            if (!it.pieceWeights || it.pieceWeights.length === 0) {
+              throw new Error(`Please select idol piece(s) to transfer for ${prod.name}`)
+            }
+            for (const pw of it.pieceWeights) {
+              validatedTransfers.push({
+                prod,
+                isIdol: true,
+                quantity: 1,
+                pieceWeight: pw
+              })
+            }
+          } else {
+            const q = Number(it.quantity)
+            if (isNaN(q) || q <= 0 || !Number.isInteger(q)) {
+              throw new Error(`Please enter a valid transfer quantity for ${prod.name}`)
+            }
+            validatedTransfers.push({
+              prod,
+              isIdol: false,
+              quantity: q
+            })
+          }
+        }
+
+        if (validatedTransfers.length === 0) {
+          throw new Error('No items to transfer')
+        }
+
+        const createdTransactions: Transaction[] = []
+        for (const vt of validatedTransfers) {
+          const res = await recordTransaction({
+            type: 'transfer',
+            productId: vt.prod.id,
+            productName: vt.prod.name,
+            category: vt.prod.category,
+            metal: vt.prod.metal,
+            quantity: vt.quantity,
+            pieceWeight: vt.pieceWeight,
+            locationId: effectiveLocId,
+            locationName: locName,
+            toLocationId: movementToLocationId,
+            toLocationName: toLocName,
+            date: movementDate,
+            notes: movementNotes
+          })
+          if (res?.transaction) {
+            createdTransactions.push(res.transaction)
+          }
+        }
+
+        setTransactions((prev) => [...createdTransactions, ...prev])
+
+        setProducts((prev) => {
+          let updated = [...prev]
+          for (const vt of validatedTransfers) {
+            updated = updated.map((p) => {
+              if (p.id !== vt.prod.id) return p
+              const newStockByLoc = {
+                ...(p.stockByLocation || {}),
+                [effectiveLocId]: Math.max(0, (p.stockByLocation?.[effectiveLocId] || 0) - vt.quantity),
+                [movementToLocationId]: (p.stockByLocation?.[movementToLocationId] || 0) + vt.quantity
+              }
+              const newPiecesByLoc = p.pieceWeightsByLocation ? { ...p.pieceWeightsByLocation } : {}
+              if (vt.isIdol && vt.pieceWeight !== undefined) {
+                const numPW = vt.pieceWeight
+                const srcPieces = newPiecesByLoc[effectiveLocId] ? [...newPiecesByLoc[effectiveLocId]] : []
+                const sIdx = srcPieces.indexOf(numPW)
+                if (sIdx !== -1) srcPieces.splice(sIdx, 1)
+                newPiecesByLoc[effectiveLocId] = srcPieces
+                const destPieces = newPiecesByLoc[movementToLocationId] ? [...newPiecesByLoc[movementToLocationId]] : []
+                newPiecesByLoc[movementToLocationId] = [...destPieces, numPW]
+              }
+              return {
+                ...p,
+                stockByLocation: newStockByLoc,
+                ...(vt.isIdol ? { pieceWeightsByLocation: newPiecesByLoc } : {})
+              }
+            })
+          }
+          return updated
+        })
+
+        setIsMovementFormOpen(false)
+        const totalUnits = validatedTransfers.reduce((sum, vt) => sum + vt.quantity, 0)
+        toast.success(
+          transferItems.length === 1
+            ? `Transferred ${totalUnits} unit${totalUnits === 1 ? '' : 's'} of ${validatedTransfers[0].prod.name} successfully`
+            : `Transferred ${totalUnits} units across ${transferItems.length} products successfully`
+        )
+        broadcastTxUpdate()
+        return
+      }
+
+      // Single-product movements: repair, melt, adjustment
+      const prod = products.find((p) => p.id === movementProductId)
+      if (!prod) {
+        setMovementError('Please select a product')
+        return
+      }
+
       let res: { id: string; transaction: Transaction } | undefined
 
       if (movementType === 'repair') {
@@ -1456,56 +1685,6 @@ export default function AdminInventory() {
                 pieceWeightsByLocation: newPiecesByLoc,
                 weight: newPieces.length > 0 ? Number((newPieces.reduce((a, b) => a + b, 0) / newPieces.length).toFixed(3)) : 0
               } : {})
-            }
-          })
-        )
-      } else if (movementType === 'transfer') {
-        const isIdol = prod.category === 'Idols'
-        if (isIdol && !movementPieceWeight) {
-          throw new Error('Please select which specific piece weight to transfer')
-        }
-        const qty = isIdol ? 1 : Number(movementQty)
-        if (isNaN(qty) || qty <= 0) throw new Error('Transfer quantity must be > 0')
-        if (effectiveLocId === movementToLocationId) {
-          throw new Error('Source and destination locations cannot be identical')
-        }
-        res = await recordTransaction({
-          type: 'transfer',
-          productId: prod.id,
-          productName: prod.name,
-          category: prod.category,
-          metal: prod.metal,
-          quantity: qty,
-          pieceWeight: isIdol ? Number(movementPieceWeight) : undefined,
-          locationId: effectiveLocId,
-          locationName: locName,
-          toLocationId: movementToLocationId,
-          toLocationName: toLocName,
-          date: movementDate,
-          notes: movementNotes
-        })
-        setProducts((prev) =>
-          prev.map((p) => {
-            if (p.id !== prod.id) return p
-            const newStockByLoc = {
-              ...(p.stockByLocation || {}),
-              [effectiveLocId]: Math.max(0, (p.stockByLocation?.[effectiveLocId] || 0) - qty),
-              [movementToLocationId]: (p.stockByLocation?.[movementToLocationId] || 0) + qty
-            }
-            const newPiecesByLoc = p.pieceWeightsByLocation ? { ...p.pieceWeightsByLocation } : {}
-            if (isIdol && movementPieceWeight) {
-              const numPW = Number(movementPieceWeight)
-              const srcPieces = newPiecesByLoc[effectiveLocId] ? [...newPiecesByLoc[effectiveLocId]] : []
-              const sIdx = srcPieces.indexOf(numPW)
-              if (sIdx !== -1) srcPieces.splice(sIdx, 1)
-              newPiecesByLoc[effectiveLocId] = srcPieces
-              const destPieces = newPiecesByLoc[movementToLocationId] ? [...newPiecesByLoc[movementToLocationId]] : []
-              newPiecesByLoc[movementToLocationId] = [...destPieces, numPW]
-            }
-            return {
-              ...p,
-              stockByLocation: newStockByLoc,
-              ...(isIdol ? { pieceWeightsByLocation: newPiecesByLoc } : {})
             }
           })
         )
@@ -1820,7 +1999,7 @@ export default function AdminInventory() {
             activeTab === 'movements' &&
             allowedMovementTypes.length > 0 && (
               <button
-                onClick={() => handleOpenMovement(allowedMovementTypes[0])}
+                onClick={() => handleOpenMovement()}
                 disabled={products.length === 0 || locations.length === 0}
                 className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 disabled:opacity-40 rounded-lg text-xs font-semibold transition-[background-color,transform] duration-150 active:scale-[0.97]"
               >
@@ -2289,6 +2468,11 @@ export default function AdminInventory() {
         movementError={movementError}
         setMovementError={setMovementError}
         handleSaveMovement={handleSaveMovement}
+        products={products}
+        transferItems={transferItems}
+        onAddTransferItem={handleAddTransferItem}
+        onRemoveTransferItem={handleRemoveTransferItem}
+        onUpdateTransferItem={handleUpdateTransferItem}
         movementProductId={movementProductId}
         setMovementProductId={setMovementProductId}
         productOptions={productOptions}

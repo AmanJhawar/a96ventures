@@ -8,13 +8,14 @@ import { PaymentMode, OrderPayment } from '@/lib/types'
 import { rupeesToPaise, formatINR } from '@/lib/utils/money'
 import { gramsToMg } from '@/lib/utils/weight'
 import { Button } from '@/components/ui/button'
+import CustomSelect, { SelectOption } from '@/components/custom-select'
 
 export interface PaymentRowState {
   id: string
-  mode: PaymentMode
+  mode: PaymentMode | ''
   amountRupees: string
   reference: string
-  metal: 'Gold' | 'Silver'
+  metal: 'Gold' | 'Silver' | ''
   weightGrams: string
   purity: string
 }
@@ -27,7 +28,7 @@ export interface PaymentSplitProps {
   disabled?: boolean
 }
 
-const PAYMENT_MODES: { value: PaymentMode; label: string }[] = [
+const PAYMENT_MODE_OPTIONS: SelectOption[] = [
   { value: 'cash', label: 'Cash' },
   { value: 'upi', label: 'UPI' },
   { value: 'card', label: 'Card' },
@@ -40,20 +41,20 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
   const [rows, setRows] = useState<PaymentRowState[]>(() => [
     {
       id: 'pay_init_1',
-      mode: 'cash',
+      mode: '',
       amountRupees: billPaise > 0 ? (billPaise / 100).toFixed(2) : '',
       reference: '',
-      metal: 'Gold',
+      metal: '',
       weightGrams: '',
-      purity: '916'
+      purity: ''
     }
   ])
 
-  // If totalBillPaise changes and there's only 1 untouched cash row, synchronize it
+  // If totalBillPaise changes and there's only 1 untouched row, synchronize it
   useEffect(() => {
     const timer = setTimeout(() => {
       setRows((prev) => {
-        if (prev.length === 1 && prev[0].mode === 'cash' && !prev[0].reference) {
+        if (prev.length === 1 && !prev[0].reference) {
           const expected = billPaise > 0 ? (billPaise / 100).toFixed(2) : ''
           if (prev[0].amountRupees !== expected) {
             return [
@@ -74,6 +75,7 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
   const { payments, totalPaidPaise, isBalanced, remainingPaise } = useMemo(() => {
     let sumPaise = 0
     const list: OrderPayment[] = []
+    let allValidModes = true
 
     for (const r of rows) {
       const amtStr = r.amountRupees.trim()
@@ -84,26 +86,31 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
         pAmount = 0
       }
 
-      sumPaise += pAmount
+      if (pAmount > 0) {
+        sumPaise += pAmount
+        if (!r.mode) {
+          allValidModes = false
+        } else {
+          const item: OrderPayment = {
+            mode: r.mode as PaymentMode,
+            amountPaise: pAmount,
+            reference: r.reference.trim() || undefined
+          }
 
-      const item: OrderPayment = {
-        mode: r.mode,
-        amountPaise: pAmount,
-        reference: r.reference.trim() || undefined
+          if (r.mode === 'old_metal') {
+            item.metal = (r.metal as 'Gold' | 'Silver') || undefined
+            const wNum = parseFloat(r.weightGrams)
+            item.weightMg = !isNaN(wNum) && wNum > 0 ? gramsToMg(wNum) : 0
+            item.purity = r.purity.trim() || undefined
+          }
+
+          list.push(item)
+        }
       }
-
-      if (r.mode === 'old_metal') {
-        item.metal = r.metal
-        const wNum = parseFloat(r.weightGrams)
-        item.weightMg = !isNaN(wNum) && wNum > 0 ? gramsToMg(wNum) : 0
-        item.purity = r.purity.trim() || '916'
-      }
-
-      list.push(item)
     }
 
     const diff = billPaise - sumPaise
-    const balanced = sumPaise === billPaise && billPaise > 0
+    const balanced = sumPaise === billPaise && billPaise > 0 && allValidModes && list.length > 0
 
     return {
       payments: list,
@@ -129,12 +136,12 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
       ...prev,
       {
         id: newId,
-        mode: 'upi',
+        mode: '',
         amountRupees: unallocated > 0 ? (unallocated / 100).toFixed(2) : '',
         reference: '',
-        metal: 'Gold',
+        metal: '',
         weightGrams: '',
-        purity: '916'
+        purity: ''
       }
     ])
   }
@@ -195,30 +202,26 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
       {/* Payment Rows */}
       <div className="space-y-2.5">
         <AnimatePresence initial={false}>
-          {rows.map((row) => (
+          {rows.map((row, idx) => (
             <motion.div
               key={row.id}
+              style={{ zIndex: rows.length - idx }}
               initial={{ opacity: 0, transform: 'scale(0.98) translateY(4px)' }}
               animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
               exit={{ opacity: 0, transform: 'scale(0.98) translateY(-4px)' }}
               transition={{ duration: 0.15, ease: EASE_OUT }}
-              className="p-3.5 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2.5 transition-[border-color] duration-150"
+              className="p-3.5 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2.5 transition-[border-color] duration-150 relative"
             >
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
                 {/* Payment Mode Selector */}
                 <div className="sm:col-span-3">
-                  <select
+                  <CustomSelect
                     value={row.mode}
                     disabled={disabled}
-                    onChange={(e) => handleUpdateRow(row.id, { mode: e.target.value as PaymentMode })}
-                    className="w-full h-10 px-3 bg-white border border-gray-200 rounded-lg text-sm font-medium text-black focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition-[border-color,box-shadow] duration-150"
-                  >
-                    {PAYMENT_MODES.map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={(val) => handleUpdateRow(row.id, { mode: val as PaymentMode })}
+                    options={PAYMENT_MODE_OPTIONS}
+                    placeholder="Select method..."
+                  />
                 </div>
 
                 {/* Amount Input */}
@@ -290,15 +293,17 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
                 <div className="pt-2.5 border-t border-gray-200/60 grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Metal *</label>
-                    <select
+                    <CustomSelect
+                      size="sm"
                       value={row.metal}
                       disabled={disabled}
-                      onChange={(e) => handleUpdateRow(row.id, { metal: e.target.value as 'Gold' | 'Silver' })}
-                      className="w-full h-9 px-2.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-black focus:outline-none focus:border-black focus:ring-1 focus:ring-black/10 transition-[border-color,box-shadow] duration-150"
-                    >
-                      <option value="Gold">Gold</option>
-                      <option value="Silver">Silver</option>
-                    </select>
+                      onValueChange={(val) => handleUpdateRow(row.id, { metal: val as 'Gold' | 'Silver' })}
+                      options={[
+                        { value: 'Gold', label: 'Gold' },
+                        { value: 'Silver', label: 'Silver' }
+                      ]}
+                      placeholder="Select metal..."
+                    />
                   </div>
 
                   <div>

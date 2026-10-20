@@ -215,7 +215,7 @@ export default function CustomSelect({
   }
 
   return (
-    <div className={`relative ${className}`} ref={selectRef} onKeyDown={handleKeyDown}>
+    <div className={`relative ${className} ${isOpen ? 'z-50' : ''}`} ref={selectRef} onKeyDown={handleKeyDown}>
       {id && <input type="hidden" id={id} name={name} value={value} />}
 
       <button
@@ -243,7 +243,7 @@ export default function CustomSelect({
 
       {isOpen && (
         <div
-          className="absolute z-30 w-full min-w-[200px] mt-1.5 bg-white border border-gray-200 rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.08)] overflow-hidden origin-top"
+          className="absolute z-50 w-full min-w-[200px] mt-1.5 bg-white border border-gray-200 rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.08)] overflow-hidden origin-top"
           style={{
             opacity: isClosing ? 0 : 1,
             transform: isClosing ? 'scale(0.97) translateY(-4px)' : 'scale(1) translateY(0)',

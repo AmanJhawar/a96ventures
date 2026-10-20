@@ -20,14 +20,14 @@ interface ProductFormModalProps {
   handleSaveProduct: (e: React.FormEvent) => void
   prodName: string
   setProdName: (val: string) => void
-  prodCategory: ProductCategory
+  prodCategory: ProductCategory | ''
   handleCategoryChange: (val: ProductCategory) => void
   categoryOptions: { value: string; label: string }[]
   isProductCategoryMetalLocked: boolean
-  prodBrand: ProductBrand
+  prodBrand: ProductBrand | ''
   setProdBrand: (val: ProductBrand) => void
   brandOptions: { value: string; label: string }[]
-  prodMetal: 'Gold' | 'Silver'
+  prodMetal: 'Gold' | 'Silver' | ''
   handleMetalChange: (metal: 'Gold' | 'Silver') => void
   prodSku: string
   setProdSku: (val: string) => void
@@ -162,6 +162,7 @@ export function ProductFormModal({
                     value={prodCategory}
                     onValueChange={(val) => handleCategoryChange(val as ProductCategory)}
                     options={categoryOptions}
+                    placeholder="Select category..."
                   />
                 )}
               </div>
@@ -175,11 +176,16 @@ export function ProductFormModal({
                     value={prodBrand}
                     onValueChange={(val) => setProdBrand(val as ProductBrand)}
                     options={brandOptions}
+                    placeholder="Select brand..."
                   />
-                ) : (
+                ) : prodCategory === 'Idols' ? (
                   <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 flex items-center justify-between">
                     <span>Local</span>
                     <span className="text-xs font-normal text-gray-400">Default</span>
+                  </div>
+                ) : (
+                  <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-400 flex items-center justify-between">
+                    <span>Select category first</span>
                   </div>
                 )}
               </div>
@@ -281,13 +287,14 @@ export function ProductFormModal({
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                  Purity ({prodMetal}) <span className="text-rose-500">*</span>
+                  Purity {prodMetal ? `(${prodMetal})` : ''} <span className="text-rose-500">*</span>
                 </label>
                 <CustomSelect
                   value={prodPurity}
                   onValueChange={setProdPurity}
                   options={purityOptions}
-                  placeholder="Select purity..."
+                  placeholder={prodMetal ? 'Select purity...' : 'Select metal first'}
+                  disabled={!prodMetal}
                 />
               </div>
             </div>

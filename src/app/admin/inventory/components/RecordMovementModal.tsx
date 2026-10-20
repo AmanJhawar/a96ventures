@@ -2,13 +2,13 @@
 
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Lock } from 'lucide-react'
+import { X, Lock, Plus, Trash2 } from 'lucide-react'
 import CustomSelect from '@/components/custom-select'
 import { CustomDatePicker } from '@/components/custom-date-picker'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/ui/form-error'
 import { AdminUser, Product } from '@/lib/types'
-import { MovementSubtype } from './types'
+import { MovementSubtype, TransferLineItem } from './types'
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const
 
@@ -16,11 +16,16 @@ interface RecordMovementModalProps {
   isOpen: boolean
   onClose: () => void
   allowedMovementTypes: MovementSubtype[]
-  movementType: MovementSubtype
+  movementType: MovementSubtype | ''
   setMovementType: (type: MovementSubtype) => void
   movementError: string | null
   setMovementError: (err: string | null) => void
   handleSaveMovement: (e: React.FormEvent) => void
+  products: Product[]
+  transferItems: TransferLineItem[]
+  onAddTransferItem: () => void
+  onRemoveTransferItem: (id: string) => void
+  onUpdateTransferItem: (id: string, updates: Partial<TransferLineItem>) => void
   movementProductId: string
   setMovementProductId: (id: string) => void
   productOptions: { value: string; label: string }[]
@@ -42,7 +47,7 @@ interface RecordMovementModalProps {
   setMovementQty: (qty: string) => void
   currentSourceStock: number
   currentDestStock: number
-  movementAdjustmentMode: 'deficit' | 'surplus'
+  movementAdjustmentMode: 'deficit' | 'surplus' | ''
   setMovementAdjustmentMode: (mode: 'deficit' | 'surplus') => void
   selectedMovementProduct: Product | undefined
   movementNewWeight: string
@@ -69,6 +74,11 @@ export function RecordMovementModal({
   movementError,
   setMovementError,
   handleSaveMovement,
+  products,
+  transferItems,
+  onAddTransferItem,
+  onRemoveTransferItem,
+  onUpdateTransferItem,
   movementProductId,
   setMovementProductId,
   productOptions,
@@ -107,6 +117,20 @@ export function RecordMovementModal({
   isMovementFormValid,
   formatWeight
 }: RecordMovementModalProps) {
+  const isTransfer = movementType === 'transfer'
+
+  const totalTransferUnits = React.useMemo(() => {
+    if (!isTransfer || !transferItems) return 0
+    return transferItems.reduce((sum, it) => {
+      const prod = products.find((p) => p.id === it.productId)
+      if (!prod) return sum
+      if (prod.category === 'Idols') {
+        return sum + (it.pieceWeights?.length || 0)
+      }
+      const q = Number(it.quantity)
+      return sum + (!isNaN(q) && q > 0 ? q : 0)
+    }, 0)
+  }, [isTransfer, transferItems, products])
   return (
     <AnimatePresence>
       {isOpen && (
@@ -169,88 +193,46 @@ export function RecordMovementModal({
           )}
 
           <form onSubmit={handleSaveMovement} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                  Select product <span className="text-rose-500">*</span>
-                </label>
-                <CustomSelect
-                  value={movementProductId}
-                  onValueChange={setMovementProductId}
-                  options={productOptions}
-                  placeholder="Select product..."
-                />
+            {!movementType ? (
+              <div className="p-8 text-center bg-gray-50/70 border border-dashed border-gray-200 rounded-xl space-y-1">
+                <p className="text-sm font-semibold text-black">Please select a movement type</p>
+                <p className="text-xs text-gray-500">
+                  Select Transfer, Audit / Adjust, Repair, or Melt from the options above to begin.
+                </p>
               </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-medium text-gray-700">
-                    {movementType === 'transfer' ? 'Source location *' : 'Location *'}
-                  </label>
-                  {isLocationLocked && (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
-                      <Lock className="w-3 h-3 text-gray-500" />
-                      Assigned store
-                    </span>
-                  )}
-                </div>
-                {isLocationLocked ? (
-                  <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-black flex items-center justify-between">
-                    <span className="font-semibold text-black">
-                      {locationMap.get(movementLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
-                    </span>
-                    <span className="text-xs text-gray-500 font-medium">Default & Locked</span>
-                  </div>
-                ) : (
-                  <CustomSelect
-                    value={movementLocationId}
-                    onValueChange={setMovementLocationId}
-                    options={movementLocationOptions}
-                    placeholder="Select location..."
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Type-Specific Fields */}
-            {movementType === 'transfer' && (
+            ) : movementType === 'transfer' ? (
               <div className="space-y-4">
-                {/* Idol Piece Selection for Transfer */}
-                {isMovementProductAnIdol && (
-                  <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
-                    <div className="flex items-center justify-between">
+                {/* Source & Destination Locations */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50/70 border border-gray-200 rounded-xl relative z-30">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
                       <label className="block text-xs font-medium text-gray-700">
-                        Select idol piece to transfer <span className="text-rose-500">*</span>
+                        Source location <span className="text-rose-500">*</span>
                       </label>
-                      <span className="text-[11px] text-gray-500 font-medium">
-                        {availableMovementPieces.length} available at source
-                      </span>
+                      {isLocationLocked && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                          <Lock className="w-3 h-3 text-gray-500" />
+                          Assigned store
+                        </span>
+                      )}
                     </div>
-                    {availableMovementPieces.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                        {availableMovementPieces.map((pw, i) => (
-                          <button
-                            key={`${pw}-${i}`}
-                            type="button"
-                            onClick={() => setMovementPieceWeight(String(pw))}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${String(movementPieceWeight) === String(pw)
-                              ? 'bg-black text-white shadow-xs'
-                              : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
-                              }`}
-                          >
-                            #{i + 1}: {formatWeight(pw)}
-                          </button>
-                        ))}
+                    {isLocationLocked ? (
+                      <div className="w-full px-3.5 py-2.5 bg-gray-100 border border-gray-200 rounded-lg text-sm text-black flex items-center justify-between font-semibold">
+                        <span>
+                          {locationMap.get(movementLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
+                        </span>
+                        <span className="text-xs text-gray-500 font-medium">Locked</span>
                       </div>
                     ) : (
-                      <p className="text-xs text-black font-semibold">
-                        No idol pieces in stock at {locationMap.get(movementLocationId) || 'selected source'}.
-                      </p>
+                      <CustomSelect
+                        value={movementLocationId}
+                        onValueChange={setMovementLocationId}
+                        options={movementLocationOptions}
+                        placeholder="Select source location..."
+                      />
                     )}
                   </div>
-                )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1.5">
                       Destination location <span className="text-rose-500">*</span>
@@ -262,50 +244,279 @@ export function RecordMovementModal({
                       placeholder={locationsLength < 2 ? 'At least 2 locations required' : 'Select destination location...'}
                     />
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                      Transfer quantity <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max={currentSourceStock > 0 ? currentSourceStock : undefined}
-                      disabled={isMovementProductAnIdol}
-                      value={isMovementProductAnIdol ? '1' : movementQty}
-                      onChange={(e) => setMovementQty(e.target.value)}
-                      className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isMovementProductAnIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''
-                        }`}
-                      required
-                    />
-                    {isMovementProductAnIdol && (
-                      <p className="text-[11px] text-gray-500 mt-1">
-                        Idols are transferred 1 unique piece at a time.
-                      </p>
+                {/* Transfer Line Items List */}
+                <div className="space-y-3 relative z-20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-gray-800">
+                        Products to transfer
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700">
+                        {transferItems.length} {transferItems.length === 1 ? 'product' : 'products'}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      icon={<Plus size={13} />}
+                      onClick={onAddTransferItem}
+                    >
+                      Add Another Product
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <AnimatePresence initial={false}>
+                      {transferItems.map((item, idx) => {
+                        const prod = products.find((p) => p.id === item.productId)
+                        const isIdol = prod?.category === 'Idols'
+                        const availableStock = prod?.stockByLocation?.[movementLocationId] || 0
+                        const availablePieces = prod?.pieceWeightsByLocation?.[movementLocationId] || []
+
+                        const usedInOtherLines = transferItems
+                          .filter((it) => it.id !== item.id && it.productId === item.productId)
+                          .reduce((sum, it) => sum + (Number(it.quantity) || 0), 0)
+                        const remainingAvailable = Math.max(0, availableStock - usedInOtherLines)
+
+                        const piecesUsedInOtherLines = new Set<number>()
+                        transferItems
+                          .filter((it) => it.id !== item.id && it.productId === item.productId)
+                          .forEach((it) => (it.pieceWeights || []).forEach((pw) => piecesUsedInOtherLines.add(pw)))
+
+                        const requestedQty = Number(item.quantity) || 0
+                        const isOverStock = !isIdol && item.productId && requestedQty > remainingAvailable
+
+                        return (
+                          <motion.div
+                            key={item.id}
+                            style={{ zIndex: 50 - idx }}
+                            initial={{ opacity: 0, transform: 'scale(0.98) translateY(6px)' }}
+                            animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
+                            exit={{ opacity: 0, transform: 'scale(0.98) translateY(-6px)' }}
+                            transition={{ duration: 0.16, ease: EASE_OUT }}
+                            className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3 relative"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center">
+                                  {idx + 1}
+                                </span>
+                                <span className="text-xs font-semibold text-gray-800">
+                                  Product #{idx + 1}
+                                </span>
+                                {prod && (
+                                  <span className="text-xs text-gray-500">
+                                    ({prod.category} · {prod.metal})
+                                  </span>
+                                )}
+                              </div>
+
+                              {transferItems.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => onRemoveTransferItem(item.id)}
+                                  className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
+                                  title="Remove product"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+                              <div className={isIdol ? 'sm:col-span-12' : 'sm:col-span-8'}>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  Product <span className="text-rose-500">*</span>
+                                </label>
+                                <CustomSelect
+                                  size="sm"
+                                  value={item.productId}
+                                  onValueChange={(val) => {
+                                    onUpdateTransferItem(item.id, {
+                                      productId: val,
+                                      quantity: '1',
+                                      pieceWeights: []
+                                    })
+                                  }}
+                                  options={productOptions}
+                                  placeholder="Select product to transfer..."
+                                />
+                                {prod ? (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    Available at {locationMap.get(movementLocationId) || 'source'}:{' '}
+                                    <strong className={availableStock === 0 ? 'text-rose-600' : 'text-black'}>
+                                      {availableStock} units
+                                    </strong>
+                                    {usedInOtherLines > 0 && (
+                                      <span className="ml-1 text-gray-400">
+                                        ({remainingAvailable} remaining after other lines)
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-gray-400 mt-1">
+                                    Select a product to view available source stock
+                                  </div>
+                                )}
+                              </div>
+
+                              {!isIdol && (
+                                <div className="sm:col-span-4">
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Transfer Quantity <span className="text-rose-500">*</span>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max={remainingAvailable > 0 ? remainingAvailable : undefined}
+                                    placeholder="Qty"
+                                    value={item.quantity}
+                                    onChange={(e) =>
+                                      onUpdateTransferItem(item.id, { quantity: e.target.value })
+                                    }
+                                    className={`w-full px-3 py-2 bg-white border rounded-lg text-xs text-black focus:outline-none focus:border-black transition-[border-color] duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                      isOverStock ? 'border-rose-400 bg-rose-50/30' : 'border-gray-200'
+                                    }`}
+                                    required
+                                  />
+                                  {isOverStock && (
+                                    <p className="text-[11px] text-rose-600 font-medium mt-1">
+                                      Max available: {remainingAvailable}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Idol Piece Selector */}
+                            {isIdol && (
+                              <div className="p-3 bg-white border border-gray-200 rounded-lg space-y-2 mt-2">
+                                <div className="flex items-center justify-between">
+                                  <label className="block text-xs font-medium text-gray-700">
+                                    Select piece(s) to transfer <span className="text-rose-500">*</span>
+                                  </label>
+                                  <span className="text-[11px] text-gray-500 font-medium">
+                                    {availablePieces.length} total at source · {(item.pieceWeights || []).length} selected
+                                  </span>
+                                </div>
+                                {availablePieces.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                                    {availablePieces.map((pw, i) => {
+                                      const isSelected = (item.pieceWeights || []).includes(pw)
+                                      const isUsedElsewhere = piecesUsedInOtherLines.has(pw)
+
+                                      return (
+                                        <button
+                                          key={`${pw}-${i}`}
+                                          type="button"
+                                          disabled={isUsedElsewhere}
+                                          onClick={() => {
+                                            const current = item.pieceWeights || []
+                                            const updated = isSelected
+                                              ? current.filter((w) => w !== pw)
+                                              : [...current, pw]
+                                            onUpdateTransferItem(item.id, {
+                                              pieceWeights: updated,
+                                              quantity: String(updated.length || 1)
+                                            })
+                                          }}
+                                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${
+                                            isSelected
+                                              ? 'bg-black text-white shadow-xs'
+                                              : isUsedElsewhere
+                                              ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed opacity-60'
+                                              : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                                          }`}
+                                        >
+                                          #{i + 1}: {formatWeight(pw)}
+                                          {isUsedElsewhere ? ' (Selected)' : ''}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-rose-600 font-medium">
+                                    No idol pieces in stock at {locationMap.get(movementLocationId) || 'selected source'}.
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </motion.div>
+                        )
+                      })}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
+                {/* Real-time Transfer Route & Flow Preview */}
+                <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-2 relative z-10">
+                  <div className="flex items-center justify-between text-gray-700 font-medium">
+                    <span>Source: <strong className="text-black">{locationMap.get(movementLocationId) || '—'}</strong></span>
+                    <span className="text-gray-400">→</span>
+                    <span>Destination: <strong className="text-black">{locationMap.get(movementToLocationId) || '—'}</strong></span>
+                  </div>
+                  <div className="pt-2 border-t border-gray-200 flex items-center justify-between text-[11px]">
+                    <span className="text-gray-500">
+                      {totalTransferUnits > 0
+                        ? `Moving ${totalTransferUnits} total unit${totalTransferUnits === 1 ? '' : 's'} across ${transferItems.filter((it) => it.productId).length} product${transferItems.filter((it) => it.productId).length === 1 ? '' : 's'}`
+                        : 'Select products and quantities above'}
+                    </span>
+                    {totalTransferUnits > 0 && (
+                      <span className="font-semibold text-black bg-white px-2 py-0.5 rounded border border-gray-200">
+                        {totalTransferUnits} units ready
+                      </span>
                     )}
                   </div>
                 </div>
-
-                {/* Real-time Transfer Flow Preview */}
-                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1.5">
-                  <div className="flex items-center justify-between text-gray-700">
-                    <span>Source: <strong>{locationMap.get(movementLocationId) || '—'}</strong> ({currentSourceStock} units)</span>
-                    <span className="text-gray-400">→</span>
-                    <span>Destination: <strong>{locationMap.get(movementToLocationId) || '—'}</strong> ({currentDestStock} units)</span>
-                  </div>
-                  {Number(movementQty) > 0 && (
-                    <div className="pt-1.5 border-t border-gray-200/60 flex items-center justify-between text-[11px]">
-                      <span className={Number(movementQty) > currentSourceStock ? 'text-rose-600 font-semibold' : 'text-gray-500'}>
-                        {Number(movementQty) > currentSourceStock
-                          ? `Insufficient stock: only ${currentSourceStock} units available at source`
-                          : `After transfer: ${currentSourceStock - Number(movementQty)} remaining · ${currentDestStock + Number(movementQty)} at destination`}
-                      </span>
-                      <span className="font-semibold text-black">Moving {movementQty} unit{Number(movementQty) === 1 ? '' : 's'}</span>
-                    </div>
-                  )}
-                </div>
               </div>
-            )}
+            ) : (
+              <>
+                {/* Single Product & Location Selector for Audit/Repair/Melt */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                      Select product <span className="text-rose-500">*</span>
+                    </label>
+                    <CustomSelect
+                      value={movementProductId}
+                      onValueChange={setMovementProductId}
+                      options={productOptions}
+                      placeholder="Select product..."
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-medium text-gray-700">
+                        Location <span className="text-rose-500">*</span>
+                      </label>
+                      {isLocationLocked && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
+                          <Lock className="w-3 h-3 text-gray-500" />
+                          Assigned store
+                        </span>
+                      )}
+                    </div>
+                    {isLocationLocked ? (
+                      <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-black flex items-center justify-between">
+                        <span className="font-semibold text-black">
+                          {locationMap.get(movementLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
+                        </span>
+                        <span className="text-xs text-gray-500 font-medium">Default & Locked</span>
+                      </div>
+                    ) : (
+                      <CustomSelect
+                        value={movementLocationId}
+                        onValueChange={setMovementLocationId}
+                        options={movementLocationOptions}
+                        placeholder="Select location..."
+                      />
+                    )}
+                  </div>
+                </div>
 
             {movementType === 'adjustment' && (
               <div className="space-y-4">
@@ -353,7 +564,11 @@ export function RecordMovementModal({
                       </div>
                     </div>
 
-                    {movementAdjustmentMode === 'deficit' ? (
+                    {!movementAdjustmentMode ? (
+                      <div className="p-4 text-center text-xs text-gray-500 bg-white rounded-lg border border-gray-200">
+                        Please select Deficit or Surplus mode above.
+                      </div>
+                    ) : movementAdjustmentMode === 'deficit' ? (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-gray-700 font-medium">
@@ -572,6 +787,8 @@ export function RecordMovementModal({
                 </div>
               </div>
             )}
+              </>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -613,7 +830,11 @@ export function RecordMovementModal({
                 disabled={!isMovementFormValid}
                 loading={movementSubmitting}
               >
-                Confirm {movementType.charAt(0).toUpperCase() + movementType.slice(1)}
+                {movementType === 'transfer'
+                  ? totalTransferUnits > 0
+                    ? `Confirm Transfer (${totalTransferUnits} unit${totalTransferUnits === 1 ? '' : 's'})`
+                    : 'Confirm Transfer'
+                  : `Confirm ${movementType ? movementType.charAt(0).toUpperCase() + movementType.slice(1) : 'Movement'}`}
               </Button>
             </div>
           </form>

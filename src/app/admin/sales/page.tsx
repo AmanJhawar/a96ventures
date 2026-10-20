@@ -171,7 +171,7 @@ export default function AdminSales() {
   const [saleDate, setSaleDate] = useState('')
   const [saleNotes, setSaleNotes] = useState('')
   const [saleItems, setSaleItems] = useState<SaleLineItem[]>([
-    { id: '1', productId: '', quantity: '1', price: '', pieceWeight: '' }
+    { id: '1', productId: '', quantity: '', price: '', pieceWeight: '' }
   ])
   const [saleSubmitting, setSaleSubmitting] = useState(false)
   const [saleError, setSaleError] = useState<string | null>(null)
@@ -180,11 +180,11 @@ export default function AdminSales() {
   const [isReturnFormOpen, setIsReturnFormOpen] = useState(false)
   const [returnProductId, setReturnProductId] = useState('')
   const [returnLocationId, setReturnLocationId] = useState('')
-  const [returnQty, setReturnQty] = useState('1')
+  const [returnQty, setReturnQty] = useState('')
   const [returnPieceWeight, setReturnPieceWeight] = useState('')
   const [returnPrice, setReturnPrice] = useState('')
   const [returnCustomerName, setReturnCustomerName] = useState('')
-  const [returnDate, setReturnDate] = useState(() => getTodayIST())
+  const [returnDate, setReturnDate] = useState('')
   const [returnNotes, setReturnNotes] = useState('')
   const [returnSubmitting, setReturnSubmitting] = useState(false)
   const [returnError, setReturnError] = useState<string | null>(null)
@@ -196,7 +196,7 @@ export default function AdminSales() {
   const [editingSale, setEditingSale] = useState<Transaction | null>(null)
   const [editSaleDate, setEditSaleDate] = useState('')
   const [editSaleLocationId, setEditSaleLocationId] = useState('')
-  const [editSaleQuantity, setEditSaleQuantity] = useState('1')
+  const [editSaleQuantity, setEditSaleQuantity] = useState('')
   const [editSalePrice, setEditSalePrice] = useState('')
   const [editSaleCustomerName, setEditSaleCustomerName] = useState('')
   const [editSaleNotes, setEditSaleNotes] = useState('')
@@ -1599,7 +1599,7 @@ export default function AdminSales() {
 
             <form onSubmit={handleSaveSale} className="space-y-5">
               {/* Common Sale Metadata Header */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50/70 border border-gray-200 rounded-xl items-start">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50/70 border border-gray-200 rounded-xl items-start relative z-30">
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs font-medium text-gray-700">
@@ -1677,7 +1677,7 @@ export default function AdminSales() {
               </div>
 
               {/* Line Items List */}
-              <div className="space-y-3">
+              <div className="space-y-3 relative z-20">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-gray-700">
                     Items to Sell ({saleItems.length})
@@ -1716,6 +1716,7 @@ export default function AdminSales() {
                       return (
                         <motion.div
                           key={item.id}
+                          style={{ zIndex: 50 - idx }}
                           initial={{ opacity: 0, transform: 'scale(0.98) translateY(6px)' }}
                           animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
                           exit={{ opacity: 0, transform: 'scale(0.98) translateY(-6px)' }}
@@ -1862,7 +1863,7 @@ export default function AdminSales() {
               </div>
 
               {/* Payment Split */}
-              <div className="pt-2">
+              <div className="pt-2 relative z-10">
                 <PaymentSplit
                   totalPaise={saleTotalsPaise}
                   payments={salePayments}
@@ -1875,7 +1876,7 @@ export default function AdminSales() {
               </div>
 
               {/* Order Summary Footer */}
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-0">
                 <div className="flex items-center gap-6 divide-x divide-gray-200 text-xs">
                   <div>
                     <span className="text-gray-500 block">Total Items</span>

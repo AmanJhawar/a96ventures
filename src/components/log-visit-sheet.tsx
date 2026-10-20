@@ -33,8 +33,8 @@ export default function LogVisitSheet({
   onClose,
   onSuccess
 }: LogVisitSheetProps) {
-  const [kind, setKind] = useState<VisitKind>('inquiry')
-  const [date, setDate] = useState(() => getTodayIST())
+  const [kind, setKind] = useState<VisitKind | ''>('')
+  const [date, setDate] = useState('')
   const [notes, setNotes] = useState('')
   const [hasFollowUp, setHasFollowUp] = useState(false)
   const [followUpDate, setFollowUpDate] = useState('')
@@ -45,8 +45,8 @@ export default function LogVisitSheet({
   const sheetRef = useRef<HTMLDivElement>(null)
 
   const resetForm = useCallback(() => {
-    setKind('inquiry')
-    setDate(getTodayIST())
+    setKind('')
+    setDate('')
     setNotes('')
     setHasFollowUp(false)
     setFollowUpDate('')
@@ -73,6 +73,14 @@ export default function LogVisitSheet({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!kind) {
+      setError('Please select an interaction type')
+      return
+    }
+    if (!date) {
+      setError('Please select a visit date')
+      return
+    }
     if (!notes.trim()) {
       setError('Please enter a note for this visit or interaction')
       return

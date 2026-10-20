@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search,
   UserPlus,
@@ -14,7 +15,8 @@ import {
   CheckCircle2,
   XCircle,
   Filter,
-  Loader2
+  Loader2,
+  X
 } from 'lucide-react'
 import { Customer } from '@/lib/types'
 import { getCustomers } from '@/lib/services/customers.service'
@@ -22,6 +24,7 @@ import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatINR } from '@/lib/utils/money'
 import { auth } from '@/lib/firebase/auth'
 import { toast } from 'sonner'
+import CustomerForm from '@/components/customer-form'
 
 type LastVisitFilter = 'all' | '30' | '90' | '365' | 'never'
 
@@ -63,6 +66,14 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [isNewCustomerOpen, setIsNewCustomerOpen] = useState(false)
+
+  // Auto-open modal if ?new=true query param present
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('new') === 'true') {
+      setIsNewCustomerOpen(true)
+    }
+  }, [])
 
   // 150ms debounced search per Emil Kowalski responsiveness rule
   useEffect(() => {
@@ -222,16 +233,62 @@ export default function CustomersPage() {
           )}
 
           {canAdd && (
-            <Link
-              href="/admin/customers/new"
-              className="h-9 px-4 inline-flex items-center gap-1.5 bg-black text-white hover:bg-black/85 rounded-lg text-xs font-semibold shadow-xs transition-[background-color,transform] duration-150 active:scale-[0.97]"
+            <button
+              type="button"
+              onClick={() => setIsNewCustomerOpen((prev) => !prev)}
+              className="h-9 px-4 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold shadow-xs transition-[background-color,transform] duration-150 active:scale-[0.97]"
             >
               <UserPlus size={14} />
               <span>New Customer</span>
-            </Link>
+            </button>
           )}
         </div>
       </div>
+
+      {/* New Customer Modal Panel */}
+      <AnimatePresence>
+        {isNewCustomerOpen && (
+          <motion.div
+            initial={{ opacity: 0, transform: 'scale(0.97) translateY(8px)' }}
+            animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
+            exit={{ opacity: 0, transform: 'scale(0.97) translateY(8px)' }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            className="mb-6 p-6 bg-white border border-gray-200 rounded-2xl shadow-sm relative z-30"
+          >
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <UserPlus size={16} />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-black">Create Customer Profile</h2>
+                  <p className="text-xs text-gray-500">
+                    Add a new customer to track visits, purchase history, and statutory identity details.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNewCustomerOpen(false)}
+                className="p-1 text-gray-400 hover:text-black rounded-md transition-[color,transform] active:scale-[0.97]"
+                aria-label="Close modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <CustomerForm
+              onSuccess={(newCust) => {
+                toast.success(`Customer ${newCust.displayName} created successfully`)
+                setCustomers((prev) => [newCust, ...prev.filter((c) => c.id !== newCust.id)])
+                setIsNewCustomerOpen(false)
+              }}
+              onCancel={() => setIsNewCustomerOpen(false)}
+              submitLabel="Create Customer Profile"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Search & Filter Toolbar */}
       <div className="p-3.5 bg-white border border-gray-200 rounded-xl shadow-2xs space-y-3">

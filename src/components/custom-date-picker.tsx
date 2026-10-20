@@ -193,7 +193,7 @@ export function CustomDatePicker({
   }
 
   return (
-    <div className={`relative ${className}`} ref={containerRef}>
+    <div className={`relative ${className} ${isOpen ? 'z-50' : ''}`} ref={containerRef}>
       <button
         type="button"
         disabled={disabled}
@@ -224,7 +224,7 @@ export function CustomDatePicker({
 
       {isOpen && (
         <div
-          className="absolute z-40 mt-1.5 p-3.5 bg-white border border-gray-200 rounded-xl shadow-[0_12px_32px_rgba(0,0,0,0.08)] w-[280px] origin-top select-none"
+          className="absolute z-50 mt-1.5 p-3.5 bg-white border border-gray-200 rounded-xl shadow-[0_12px_32px_rgba(0,0,0,0.08)] w-[280px] origin-top select-none"
           style={{
             opacity: isClosing ? 0 : 1,
             transform: isClosing ? 'scale(0.97) translateY(-4px)' : 'scale(1) translateY(0)',

@@ -478,6 +478,7 @@ export default function AdminInquiries() {
               initialValues={getInitialValuesForInquiry(convertingInquiry)}
               onSuccess={handleCustomerConverted}
               onCancel={() => setConvertingInquiry(null)}
+              submitLabel="Convert to Customer"
             />
           </div>
         </div>
