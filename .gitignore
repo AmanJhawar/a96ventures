@@ -48,7 +48,7 @@ next-env.d.ts
 firebase-functions/node_modules/
 
 # Agents
-.agents/
+.agents/**/*.local.*
 
 __pycache__/
 *.pyc
