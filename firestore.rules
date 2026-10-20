@@ -38,7 +38,9 @@ service cloud.firestore {
               module == 'portfolio' ? 'prt' :
               module == 'reports' ? 'rep' :
               module == 'archive' ? 'arc' :
-              module == 'users' ? 'usr' : module;
+              module == 'users' ? 'usr' :
+              module == 'customers' ? 'cus' :
+              module == 'visits' ? 'vis' : module;
       let a = action == 'view' ? 'v' :
               action == 'add' ? 'a' :
               action == 'edit' ? 'e' :
@@ -49,7 +51,9 @@ service cloud.firestore {
               action == 'melt' ? 'm' :
               action == 'export' ? 'x' :
               action == 'zeroBalance' ? 'z' :
-              action == 'uploadArchive' ? 'u' : action;
+              action == 'uploadArchive' ? 'u' :
+              action == 'viewPan' ? 'p' :
+              action == 'editPan' ? 'k' : action;
       return m + ':' + a;
     }
 
@@ -164,6 +168,46 @@ service cloud.firestore {
       );
       allow create: if isAuthenticated();
       allow update, delete: if false;
+    }
+
+    // Customers: Read requires 'customers.view'. All client writes denied (Admin SDK API routes only).
+    match /customers/{customerId} {
+      allow read: if hasPermission('customers', 'view');
+      allow write: if false;
+
+      // Encrypted PAN subcollection - client read and write strictly denied
+      match /private/{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    // Customer uniqueness index collections (Mobile E.164 and PAN HMAC blind index):
+    // Strictly server-managed via Admin SDK transactions; deny all client access.
+    match /customer_mobiles/{document=**} {
+      allow read, write: if false;
+    }
+    match /customer_pans/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Orders (Bills):
+    // Read requires 'sales.view' or 'returns.view'. All client writes denied.
+    match /orders/{document=**} {
+      allow read: if hasPermission('sales', 'view') || hasPermission('returns', 'view');
+      allow write: if false;
+    }
+
+    // Visits:
+    // Read requires 'visits.view'. All client writes denied.
+    match /visits/{document=**} {
+      allow read: if hasPermission('visits', 'view');
+      allow write: if false;
+    }
+
+    // Counters:
+    // Strictly server-managed for sequential order numbers; deny all client access.
+    match /counters/{document=**} {
+      allow read, write: if false;
     }
 
     // Absolute default deny for any other collections or paths

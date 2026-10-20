@@ -184,4 +184,182 @@ describe.runIf(isEmulatorActive)('Firestore Security Rules (with Emulator)', () 
       await assertSucceeds(getDoc(doc(db, 'locations', 'loc_1')))
     })
   })
+
+  describe('Customer CRM & Private Data Security Rules', () => {
+    it('allows user with cus:v (customers.view) to read customer profiles', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), 'customers', 'cust_1'), {
+          firstName: 'Aman',
+          lastName: 'Jhawar'
+        })
+      })
+
+      const userContext = testEnv.authenticatedContext('cashier_1', {
+        role: 'sales_cashier',
+        status: 'active',
+        perms: ['cus:v', 'cus:a', 'cus:k']
+      })
+      const db = userContext.firestore()
+
+      await assertSucceeds(getDoc(doc(db, 'customers', 'cust_1')))
+    })
+
+    it('denies user without customers.view from reading customer profiles', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), 'customers', 'cust_1'), {
+          firstName: 'Aman',
+          lastName: 'Jhawar'
+        })
+      })
+
+      const userContext = testEnv.authenticatedContext('vault_1', {
+        role: 'vault_custodian',
+        status: 'active',
+        perms: ['prd:v', 'pur:v'] // no cus:v
+      })
+      const db = userContext.firestore()
+
+      await assertFails(getDoc(doc(db, 'customers', 'cust_1')))
+    })
+
+    it('strictly denies client writes to customers collection (Admin SDK only)', async () => {
+      const superAdminContext = testEnv.authenticatedContext('admin_1', {
+        role: 'super_admin',
+        status: 'active'
+      })
+      const db = superAdminContext.firestore()
+
+      await assertFails(
+        setDoc(doc(db, 'customers', 'cust_spoof'), {
+          firstName: 'Hacker',
+          lastName: 'Test'
+        })
+      )
+    })
+
+    it('cashier cannot read customers/{id}/private/pan (strictly denied to all client access)', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), 'customers', 'cust_1', 'private', 'pan'), {
+          ciphertext: 'encrypted_data',
+          iv: 'random_iv',
+          authTag: 'tag'
+        })
+      })
+
+      const cashierContext = testEnv.authenticatedContext('cashier_1', {
+        role: 'sales_cashier',
+        status: 'active',
+        perms: ['cus:v', 'cus:a', 'cus:k']
+      })
+      const db = cashierContext.firestore()
+
+      await assertFails(getDoc(doc(db, 'customers', 'cust_1', 'private', 'pan')))
+    })
+
+    it('even super_admin cannot read customers/{id}/private/pan from client (Admin SDK only)', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), 'customers', 'cust_1', 'private', 'pan'), {
+          ciphertext: 'encrypted_data'
+        })
+      })
+
+      const adminContext = testEnv.authenticatedContext('admin_1', {
+        role: 'super_admin',
+        status: 'active'
+      })
+      const db = adminContext.firestore()
+
+      await assertFails(getDoc(doc(db, 'customers', 'cust_1', 'private', 'pan')))
+    })
+
+    it('nobody can read or write customer_pans from the client', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), 'customer_pans', 'hmac_hash_1'), {
+          customerId: 'cust_1'
+        })
+      })
+
+      const adminContext = testEnv.authenticatedContext('admin_1', {
+        role: 'super_admin',
+        status: 'active'
+      })
+      const db = adminContext.firestore()
+
+      await assertFails(getDoc(doc(db, 'customer_pans', 'hmac_hash_1')))
+      await assertFails(setDoc(doc(db, 'customer_pans', 'hmac_hash_2'), { customerId: 'cust_2' }))
+    })
+
+    it('nobody can read or write customer_mobiles from the client', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), 'customer_mobiles', '+919876543210'), {
+          customerId: 'cust_1'
+        })
+      })
+
+      const cashierContext = testEnv.authenticatedContext('cashier_1', {
+        role: 'sales_cashier',
+        status: 'active',
+        perms: ['cus:v']
+      })
+      const db = cashierContext.firestore()
+
+      await assertFails(getDoc(doc(db, 'customer_mobiles', '+919876543210')))
+      await assertFails(setDoc(doc(db, 'customer_mobiles', '+919876543211'), { customerId: 'cust_2' }))
+    })
+
+    it('allows read of orders with sales.view (sal:v) or returns.view (ret:v), denies writes', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), 'orders', 'order_1'), {
+          orderNo: 'A96-2026-000001',
+          totals: { amountPaise: 500000 }
+        })
+      })
+
+      const salesContext = testEnv.authenticatedContext('cashier_1', {
+        role: 'sales_cashier',
+        status: 'active',
+        perms: ['sal:v']
+      })
+      const db = salesContext.firestore()
+
+      await assertSucceeds(getDoc(doc(db, 'orders', 'order_1')))
+      await assertFails(setDoc(doc(db, 'orders', 'order_spoof'), { totals: { amountPaise: 100 } }))
+    })
+
+    it('allows read of visits with visits.view (vis:v), denies client writes', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), 'visits', 'visit_1'), {
+          kind: 'walk_in',
+          customerId: 'cust_1'
+        })
+      })
+
+      const visitViewerContext = testEnv.authenticatedContext('staff_1', {
+        role: 'store_manager',
+        status: 'active',
+        perms: ['vis:v']
+      })
+      const db = visitViewerContext.firestore()
+
+      await assertSucceeds(getDoc(doc(db, 'visits', 'visit_1')))
+      await assertFails(setDoc(doc(db, 'visits', 'visit_spoof'), { kind: 'walk_in' }))
+    })
+
+    it('strictly denies client access to counters collection', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), 'counters', '2026'), {
+          nextOrderNo: 10
+        })
+      })
+
+      const superAdminContext = testEnv.authenticatedContext('admin_1', {
+        role: 'super_admin',
+        status: 'active'
+      })
+      const db = superAdminContext.firestore()
+
+      await assertFails(getDoc(doc(db, 'counters', '2026')))
+      await assertFails(setDoc(doc(db, 'counters', '2026'), { nextOrderNo: 11 }))
+    })
+  })
 })

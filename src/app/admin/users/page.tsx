@@ -257,8 +257,10 @@ export default function AdminUsersPage() {
     setFormPassword('')
     setFormRole(user.role)
     setFormStatus(user.status)
-    setFormLocationId(user.assignedLocationId || '')
-    setFormPermissions(user.permissions || (user.role === 'super_admin' ? SUPER_ADMIN_PERMISSIONS : EMPTY_PERMISSIONS))
+    setFormPermissions({
+      ...EMPTY_PERMISSIONS,
+      ...(user.permissions || (user.role === 'super_admin' ? SUPER_ADMIN_PERMISSIONS : EMPTY_PERMISSIONS))
+    })
     setFormError(null)
     setIsFormOpen(true)
   }
@@ -857,7 +859,7 @@ export default function AdminUsersPage() {
                           <button
                             type="button"
                             onClick={() => togglePermission('archive', 'zeroBalance')}
-                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.archive.zeroBalance
+                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.archive?.zeroBalance
                                 ? 'bg-black text-white border-black'
                                 : 'bg-white text-gray-500 border-gray-200 hover:text-black'
                               }`}
@@ -867,13 +869,67 @@ export default function AdminUsersPage() {
                           <button
                             type="button"
                             onClick={() => togglePermission('users', 'edit')}
-                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.users.edit
+                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.users?.edit
                                 ? 'bg-black text-white border-black'
                                 : 'bg-white text-gray-500 border-gray-200 hover:text-black'
                               }`}
                           >
                             Manage Users
                           </button>
+                        </div>
+                      </div>
+
+                      {/* Customers CRM */}
+                      <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-xs text-black">Customers</span>
+                          <span className="text-[10px] text-gray-400 uppercase tracking-wider">CRM & PII</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {(['view', 'add', 'edit', 'delete', 'viewPan', 'editPan'] as const).map((act) => {
+                            const label =
+                              act === 'viewPan'
+                                ? 'Reveal PAN'
+                                : act === 'editPan'
+                                  ? 'Add or change PAN'
+                                  : act
+                            return (
+                              <button
+                                key={act}
+                                type="button"
+                                onClick={() => togglePermission('customers', act)}
+                                className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.customers?.[act]
+                                    ? 'bg-black text-white border-black'
+                                    : 'bg-white text-gray-500 border-gray-200 hover:text-black'
+                                  }`}
+                              >
+                                {label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Customer Visits */}
+                      <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-xs text-black">Visits</span>
+                          <span className="text-[10px] text-gray-400 uppercase tracking-wider">Timeline</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {(['view', 'add', 'edit', 'delete'] as const).map((act) => (
+                            <button
+                              key={act}
+                              type="button"
+                              onClick={() => togglePermission('visits', act)}
+                              className={`py-1.5 px-2 rounded-lg text-xs font-semibold capitalize border transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] ${formPermissions.visits?.[act]
+                                  ? 'bg-black text-white border-black'
+                                  : 'bg-white text-gray-500 border-gray-200 hover:text-black'
+                                }`}
+                            >
+                              {act}
+                            </button>
+                          ))}
                         </div>
                       </div>
                     </div>

@@ -20,7 +20,17 @@ export const EMPTY_PERMISSIONS: UserPermissions = {
   portfolio: { view: false, add: false, edit: false, delete: false },
   reports: { view: false, export: false },
   archive: { zeroBalance: false, uploadArchive: false },
-  users: { view: false, add: false, edit: false, delete: false }
+  users: { view: false, add: false, edit: false, delete: false },
+  customers: {
+    view: false,
+    add: false,
+    edit: false,
+    delete: false,
+    export: false,
+    viewPan: false,
+    editPan: false
+  },
+  visits: { view: false, add: false, edit: false, delete: false }
 }
 
 export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
@@ -43,7 +53,17 @@ export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
   portfolio: { view: true, add: true, edit: true, delete: true },
   reports: { view: true, export: true },
   archive: { zeroBalance: true, uploadArchive: true },
-  users: { view: true, add: true, edit: true, delete: true }
+  users: { view: true, add: true, edit: true, delete: true },
+  customers: {
+    view: true,
+    add: true,
+    edit: true,
+    delete: true,
+    export: true,
+    viewPan: true,
+    editPan: true
+  },
+  visits: { view: true, add: true, edit: true, delete: true }
 }
 
 export const STORE_MANAGER_PERMISSIONS: UserPermissions = {
@@ -66,7 +86,17 @@ export const STORE_MANAGER_PERMISSIONS: UserPermissions = {
   portfolio: { view: true, add: false, edit: false, delete: false },
   reports: { view: true, export: true },
   archive: { zeroBalance: false, uploadArchive: false },
-  users: { view: true, add: false, edit: false, delete: false }
+  users: { view: true, add: false, edit: false, delete: false },
+  customers: {
+    view: true,
+    add: true,
+    edit: true,
+    delete: false,
+    export: false,
+    viewPan: true,
+    editPan: true
+  },
+  visits: { view: true, add: true, edit: true, delete: false }
 }
 
 export const SALES_CASHIER_PERMISSIONS: UserPermissions = {
@@ -89,7 +119,17 @@ export const SALES_CASHIER_PERMISSIONS: UserPermissions = {
   portfolio: { view: false, add: false, edit: false, delete: false },
   reports: { view: false, export: false },
   archive: { zeroBalance: false, uploadArchive: false },
-  users: { view: false, add: false, edit: false, delete: false }
+  users: { view: false, add: false, edit: false, delete: false },
+  customers: {
+    view: true,
+    add: true,
+    edit: false,
+    delete: false,
+    export: false,
+    viewPan: false,
+    editPan: true
+  },
+  visits: { view: true, add: true, edit: false, delete: false }
 }
 
 export const VAULT_CUSTODIAN_PERMISSIONS: UserPermissions = {
@@ -112,7 +152,17 @@ export const VAULT_CUSTODIAN_PERMISSIONS: UserPermissions = {
   portfolio: { view: false, add: false, edit: false, delete: false },
   reports: { view: false, export: false },
   archive: { zeroBalance: false, uploadArchive: false },
-  users: { view: false, add: false, edit: false, delete: false }
+  users: { view: false, add: false, edit: false, delete: false },
+  customers: {
+    view: false,
+    add: false,
+    edit: false,
+    delete: false,
+    export: false,
+    viewPan: false,
+    editPan: false
+  },
+  visits: { view: false, add: false, edit: false, delete: false }
 }
 
 export const ROLE_PRESETS: Record<UserRole, UserPermissions> = {
@@ -159,7 +209,9 @@ export const MODULE_SHORT_CODES: Record<keyof UserPermissions, string> = {
   portfolio: 'prt',
   reports: 'rep',
   archive: 'arc',
-  users: 'usr'
+  users: 'usr',
+  customers: 'cus',
+  visits: 'vis'
 }
 
 export const ACTION_SHORT_CODES: Record<string, string> = {
@@ -173,7 +225,9 @@ export const ACTION_SHORT_CODES: Record<string, string> = {
   melt: 'm',
   export: 'x',
   zeroBalance: 'z',
-  uploadArchive: 'u'
+  uploadArchive: 'u',
+  viewPan: 'p',
+  editPan: 'k'
 }
 
 export const SHORT_TO_MODULE: Record<string, keyof UserPermissions> = Object.fromEntries(

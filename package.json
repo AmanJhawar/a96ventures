@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:emulated": "firebase emulators:exec --only firestore 'vitest run'",
+    "test:emulated": "npx -y firebase-tools emulators:exec --only firestore 'vitest run'",
     "seed:admin": "node --env-file=.env.local scripts/seed-admin.mjs"
   },
   "dependencies": {

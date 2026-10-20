@@ -161,6 +161,21 @@ export interface UserPermissions {
   reports: { view: boolean; export: boolean };
   archive: { zeroBalance: boolean; uploadArchive: boolean };
   users: { view: boolean; add: boolean; edit: boolean; delete: boolean };
+  customers: {
+    view: boolean;
+    add: boolean;
+    edit: boolean;
+    delete: boolean;
+    export: boolean;
+    viewPan: boolean;
+    editPan: boolean;
+  };
+  visits: {
+    view: boolean;
+    add: boolean;
+    edit: boolean;
+    delete: boolean;
+  };
 }
 
 export type UserRole = 'super_admin' | 'store_manager' | 'sales_cashier' | 'vault_custodian' | 'custom';
@@ -213,7 +228,7 @@ export interface AuditLogEntry {
   userName: string;
   userEmail: string;
   action: AuditActionType;
-  entityType: 'product' | 'purchase' | 'sale' | 'return' | 'movement' | 'inquiry' | 'location' | 'user' | 'archive' | 'brand' | 'team' | 'portfolio';
+  entityType: 'product' | 'purchase' | 'sale' | 'return' | 'movement' | 'inquiry' | 'location' | 'user' | 'archive' | 'brand' | 'team' | 'portfolio' | 'customer' | 'visit' | 'order';
   entityId: string;
   entityName?: string;
   locationId?: string;
@@ -222,5 +237,138 @@ export interface AuditLogEntry {
   diffs?: AuditFieldDiff[];
   timestamp: string; // ISO 8601
   metadata?: Record<string, unknown>;
+}
+
+// ==========================================
+// Customer CRM, Orders & Visits Types
+// ==========================================
+
+export interface CustomerAddress {
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country: 'India';
+}
+
+export interface CustomerPanSummary {
+  masked: string; // e.g. "•••••1234F"
+  last4: string;
+  holderType: string; // 4th character of PAN (P, C, F, H, etc.)
+}
+
+export interface CustomerStats {
+  firstVisitAt?: string;
+  lastVisitAt?: string;
+  visitCount: number;
+  orderCount: number;
+  lifetimeValuePaise: number;
+  lifetimeWeightMg: {
+    Gold: number;
+    Silver: number;
+  };
+  lastOrderId?: string;
+  openFollowUps: number;
+}
+
+export interface Customer {
+  id: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  displayName: string;
+  mobile: {
+    countryCode: string;
+    number: string;
+    e164: string;
+  };
+  email?: string;
+  address?: CustomerAddress;
+  pan?: CustomerPanSummary;
+  hasPan: boolean;
+  notes?: string;
+  source: 'walk_in' | 'inquiry' | 'referral' | 'import';
+  inquiryIds: string[];
+  stats: CustomerStats;
+  searchTerms: string[];
+  isArchived: boolean;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export type PaymentMode = 'cash' | 'upi' | 'card' | 'bank' | 'old_metal';
+
+export interface OrderPayment {
+  mode: PaymentMode;
+  amountPaise: number;
+  reference?: string;
+  metal?: 'Gold' | 'Silver';
+  weightMg?: number;
+  purity?: string;
+}
+
+export interface OrderLine {
+  transactionId: string;
+  productId: string;
+  productName: string;
+  metal: string;
+  category: string;
+  qty: number;
+  pieceWeightMg?: number;
+  unitPricePaise: number;
+  lineTotalPaise: number;
+}
+
+export interface Order {
+  id: string;
+  orderNo: string; // e.g. "A96-2026-000123"
+  type: 'sale' | 'return';
+  customerId?: string;
+  customerSnapshot?: {
+    displayName: string;
+    mobileE164: string;
+  };
+  locationId: string;
+  locationName: string;
+  date: string; // "YYYY-MM-DD"
+  createdAt: string;
+  createdBy: string;
+  lines: OrderLine[];
+  totals: {
+    amountPaise: number;
+    units: number;
+    weightMg: {
+      Gold: number;
+      Silver: number;
+    };
+  };
+  payments: OrderPayment[];
+  notes?: string;
+  isReversed: boolean;
+  reversedAt?: string;
+  reversedBy?: string;
+  reversalOrderId?: string;
+  reversalOf?: string;
+}
+
+export type VisitKind = 'purchase' | 'return' | 'walk_in' | 'inquiry' | 'follow_up' | 'repair';
+
+export interface Visit {
+  id: string;
+  customerId: string;
+  locationId: string;
+  at: string;
+  staffId: string;
+  staffName: string;
+  kind: VisitKind;
+  orderId?: string;
+  inquiryId?: string;
+  note?: string;
+  followUpOn?: string; // "YYYY-MM-DD"
+  followUpDone: boolean;
+  followUpOf?: string;
 }
 

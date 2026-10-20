@@ -161,7 +161,11 @@ export async function POST(req: NextRequest) {
     const resolvedPermissions: UserPermissions =
       userRole === 'super_admin'
         ? SUPER_ADMIN_PERMISSIONS
-        : (permissions || EMPTY_PERMISSIONS)
+        : JSON.parse(JSON.stringify(permissions || EMPTY_PERMISSIONS))
+
+    if (resolvedPermissions?.customers && userRole !== 'super_admin') {
+      resolvedPermissions.customers.export = false
+    }
 
     // 2. Set Custom User Claims on Firebase Auth token using compact short codes to stay well under 1,000-byte limit
     await adminAuth.setCustomUserClaims(userRecord.uid, {
@@ -301,7 +305,11 @@ export async function PUT(req: NextRequest) {
     const updatedPermissions: UserPermissions =
       updatedRole === 'super_admin'
         ? SUPER_ADMIN_PERMISSIONS
-        : (permissions !== undefined ? permissions : (currentData.permissions || EMPTY_PERMISSIONS))
+        : JSON.parse(JSON.stringify(permissions !== undefined ? permissions : (currentData.permissions || EMPTY_PERMISSIONS)))
+
+    if (updatedPermissions?.customers && updatedRole !== 'super_admin') {
+      updatedPermissions.customers.export = false
+    }
 
     // 1. Update Firebase Auth user and revoke sessions if suspended
     const isSuspended = updatedStatus === 'suspended'
