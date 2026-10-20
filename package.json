@@ -23,6 +23,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-hook-form": "^7.90.0",
+    "server-only": "^0.0.1",
     "sonner": "^2.0.8",
     "unicornstudio-react": "^2.4.0",
     "zod": "^4.6.7"
