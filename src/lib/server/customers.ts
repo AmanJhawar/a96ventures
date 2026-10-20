@@ -42,19 +42,19 @@ export class RateLimitError extends Error {
 
 export const CreateCustomerSchema = z.object({
   firstName: z
-    .string({ required_error: 'First name is required', invalid_type_error: 'First name is required' })
+    .string()
     .trim()
     .min(1, 'First name is required')
     .max(60),
   middleName: z.string().trim().max(60).optional(),
   lastName: z
-    .string({ required_error: 'Last name is required', invalid_type_error: 'Last name is required' })
+    .string()
     .trim()
     .min(1, 'Last name is required')
     .max(60),
   countryCode: z.string().trim().default('+91'),
   mobile: z
-    .string({ required_error: 'Mobile number is required', invalid_type_error: 'Mobile number is required' })
+    .string()
     .trim()
     .min(1, 'Mobile number is required'),
   email: z.string().trim().email('Invalid email address').toLowerCase().optional().or(z.literal('')),
@@ -389,9 +389,7 @@ export async function updateCustomerServer(
   const input = UpdateCustomerSchema.parse(rawInput)
   const now = new Date().toISOString()
 
-  let updatedCustomerData: Customer | null = null
-
-  await adminDb.runTransaction(async (t) => {
+  const updatedCustomerData = await adminDb.runTransaction<Customer>(async (t) => {
     const customerRef = adminDb.collection('customers').doc(customerId)
     const customerSnap = await t.get(customerRef)
     if (!customerSnap.exists) {
@@ -461,7 +459,7 @@ export async function updateCustomerServer(
     if (input.source !== undefined) updates.source = input.source
 
     t.update(customerRef, updates)
-    updatedCustomerData = { ...current, ...updates }
+    return { ...current, ...updates }
   })
 
   // Audit update
@@ -472,13 +470,13 @@ export async function updateCustomerServer(
     action: 'update',
     entityType: 'customer',
     entityId: customerId,
-    entityName: updatedCustomerData?.displayName || '',
-    description: `Updated customer profile for ${updatedCustomerData?.displayName}`,
+    entityName: updatedCustomerData.displayName,
+    description: `Updated customer profile for ${updatedCustomerData.displayName}`,
     timestamp: FieldValue.serverTimestamp(),
     createdAt: FieldValue.serverTimestamp()
   })
 
-  return updatedCustomerData!
+  return updatedCustomerData
 }
 
 export async function archiveCustomerServer(
@@ -543,9 +541,8 @@ export async function updateCustomerPanServer(
   }
 
   const now = new Date().toISOString()
-  let updatedCustomer: Customer | null = null
 
-  await adminDb.runTransaction(async (t) => {
+  const updatedCustomer = await adminDb.runTransaction<Customer>(async (t) => {
     const customerRef = adminDb.collection('customers').doc(customerId)
     const customerSnap = await t.get(customerRef)
     if (!customerSnap.exists) throw new Error('Customer not found')
@@ -590,7 +587,7 @@ export async function updateCustomerPanServer(
       updatedBy: caller.callerUid
     })
 
-    updatedCustomer = { ...customer, hasPan: true, pan: panSummary }
+    return { ...customer, hasPan: true, pan: panSummary }
   })
 
   // Audit PAN modification without storing value
@@ -601,8 +598,8 @@ export async function updateCustomerPanServer(
     action: 'update',
     entityType: 'customer',
     entityId: customerId,
-    entityName: updatedCustomer?.displayName || '',
-    description: `Updated PAN details on file for ${updatedCustomer?.displayName}`,
+    entityName: updatedCustomer.displayName,
+    description: `Updated PAN details on file for ${updatedCustomer.displayName}`,
     diffs: [
       {
         field: 'pan',
@@ -615,7 +612,7 @@ export async function updateCustomerPanServer(
     createdAt: FieldValue.serverTimestamp()
   })
 
-  return updatedCustomer!
+  return updatedCustomer
 }
 
 export async function removeCustomerPanServer(
@@ -736,7 +733,7 @@ export async function revealCustomerPanServer(
 export async function exportCustomersCSVServer(
   caller: AuthenticatedCaller
 ): Promise<{ csv: string; count: number }> {
-  if (caller.role !== 'super_admin' || !hasModulePermission(caller, 'customers', 'export')) {
+  if (!caller.isSuperAdmin || !hasModulePermission(caller, 'customers', 'export')) {
     throw new Error('Forbidden: Only Super Admin can export customer data')
   }
 
