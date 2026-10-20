@@ -36,6 +36,8 @@ export interface Inquiry {
   message: string;
   inquiryType: string;
   status?: 'unread' | 'read' | 'handled';
+  customerId?: string;
+  customerDisplayName?: string;
   createdAt?: unknown;
 }
 

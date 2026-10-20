@@ -62,6 +62,32 @@ export async function updateInquiryStatus(
   });
 }
 
+export async function linkInquiryToCustomer(
+  id: string,
+  customerId: string,
+  customerDisplayName: string,
+  actor?: { id: string; email: string }
+): Promise<void> {
+  await setDoc(
+    doc(db, INQUIRIES_COLLECTION, id),
+    {
+      customerId,
+      customerDisplayName,
+      status: 'handled'
+    },
+    { merge: true }
+  );
+  await recordAuditLog({
+    userId: actor?.id,
+    userEmail: actor?.email,
+    action: 'status_change',
+    entityType: 'inquiry',
+    entityId: id,
+    entityName: customerDisplayName || id,
+    description: `Converted and linked inquiry "${id}" to customer "${customerDisplayName}" (${customerId})`
+  });
+}
+
 export async function submitInquiry(data: {
   firstName: string;
   middleName?: string;

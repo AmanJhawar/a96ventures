@@ -64,6 +64,9 @@ export interface CustomerFormProps {
     mobile?: string
     email?: string
     pan?: string
+    notes?: string
+    source?: 'walk_in' | 'inquiry' | 'referral' | 'import'
+    inquiryId?: string
   }
   initialCustomer?: Customer
 }
@@ -234,7 +237,9 @@ export default function CustomerForm({ onSuccess, onCancel, initialValues, initi
                 }
               : undefined,
           pan: canEditPan && pan.trim() ? pan.trim().toUpperCase() : undefined,
-          source: 'walk_in' as const
+          notes: initialValues?.notes,
+          source: initialValues?.source || 'walk_in',
+          inquiryId: initialValues?.inquiryId
         }
 
         const res = await createCustomer(payload)

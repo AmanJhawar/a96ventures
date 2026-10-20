@@ -1,13 +1,31 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react'
-import { Trash2, ChevronDown, Lock } from 'lucide-react'
+import Link from 'next/link'
+import {
+  Trash2,
+  ChevronDown,
+  Lock,
+  UserPlus,
+  ExternalLink,
+  CheckCircle2,
+  X
+} from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { ConfirmModal } from '@/components/confirm-modal'
-import { getInquiriesPage, deleteInquiry, updateInquiryStatus } from '@/lib/services/inquiry.service'
-import { Inquiry } from '@/lib/types'
+import CustomerForm from '@/components/customer-form'
+import {
+  getInquiriesPage,
+  deleteInquiry,
+  updateInquiryStatus,
+  linkInquiryToCustomer
+} from '@/lib/services/inquiry.service'
+import { Inquiry, Customer } from '@/lib/types'
+import { isValidPan } from '@/lib/utils/pan'
+import { getTodayIST } from '@/lib/utils/date'
 import { EASE_OUT } from '@/components/motion-transitions'
 import { usePermissions } from '@/lib/context/PermissionsContext'
+import { toast } from 'sonner'
 
 function StatusDropdown({
   status,
@@ -92,6 +110,9 @@ const ITEMS_PER_PAGE = 10;
 
 export default function AdminInquiries() {
   const { hasPermission, isSuperAdmin, userIdentity } = usePermissions()
+  const canAddCustomer = hasPermission('customers', 'add')
+  const canEditPan = hasPermission('customers', 'editPan')
+
   const [inquiries, setInquiries] = useState<Inquiry[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -99,21 +120,35 @@ export default function AdminInquiries() {
   const [hasMore, setHasMore] = useState(true)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
-  const fetchInquiries = async () => {
-    try {
-      const { items, nextCursor: newCursor } = await getInquiriesPage(ITEMS_PER_PAGE)
-      setInquiries(items)
-      setNextCursor(newCursor)
-      setHasMore(!!newCursor)
-    } catch (err) {
-      console.error("Error fetching inquiries", err)
-    } finally {
-      setLoading(false)
+  // Customer conversion modal state
+  const [convertingInquiry, setConvertingInquiry] = useState<Inquiry | null>(null)
+
+  useEffect(() => {
+    let ignore = false
+    async function load() {
+      try {
+        const { items, nextCursor: newCursor } = await getInquiriesPage(ITEMS_PER_PAGE)
+        if (!ignore) {
+          setInquiries(items)
+          setNextCursor(newCursor)
+          setHasMore(!!newCursor)
+          setLoading(false)
+        }
+      } catch (err) {
+        if (!ignore) {
+          console.error("Error fetching inquiries", err)
+          setLoading(false)
+        }
+      }
     }
-  }
+    load()
+    return () => {
+      ignore = true
+    }
+  }, [])
 
   const loadMore = async () => {
-    if (!nextCursor) return
+    if (!nextCursor || loadingMore) return
     setLoadingMore(true)
     try {
       const { items, nextCursor: newCursor } = await getInquiriesPage(ITEMS_PER_PAGE, nextCursor)
@@ -127,11 +162,6 @@ export default function AdminInquiries() {
     }
   }
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchInquiries()
-  }, [])
-
   const confirmDelete = (id: string) => setDeleteId(id)
 
   const executeDelete = async () => {
@@ -141,8 +171,10 @@ export default function AdminInquiries() {
     try {
       await deleteInquiry(deleteId, userIdentity ? { id: userIdentity.id, email: userIdentity.email } : undefined, contactName)
       setInquiries(inquiries.filter(i => i.id !== deleteId))
+      toast.success('Inquiry deleted')
     } catch (err) {
       console.error("Error deleting", err)
+      toast.error('Failed to delete inquiry')
     } finally {
       setDeleteId(null)
     }
@@ -156,19 +188,125 @@ export default function AdminInquiries() {
       setInquiries(inquiries.map(i => i.id === id ? { ...i, status: newStatus } : i))
     } catch (err) {
       console.error("Error updating status", err)
+      toast.error('Failed to update inquiry status')
     }
   }
 
   const formatDate = (timestamp: unknown) => {
     if (!timestamp) return 'Unknown'
-    const ts = timestamp as { toDate: () => Date };
-    if (ts.toDate) {
+    const ts = timestamp as { toDate?: () => Date };
+    if (typeof ts.toDate === 'function') {
       return ts.toDate().toLocaleString('en-IN', {
         timeZone: 'Asia/Kolkata',
         year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
       })
     }
     return 'Unknown'
+  }
+
+  // Pre-fill CustomerForm inputs from inquiry details
+  const getInitialValuesForInquiry = (inquiry: Inquiry) => {
+    let firstName = inquiry.firstName || ''
+    let middleName = inquiry.middleName || ''
+    let lastName = inquiry.lastName || ''
+
+    if (!firstName && inquiry.name) {
+      const parts = inquiry.name.trim().split(/\s+/)
+      firstName = parts[0] || ''
+      if (parts.length === 2) {
+        lastName = parts[1] || ''
+      } else if (parts.length > 2) {
+        middleName = parts.slice(1, -1).join(' ')
+        lastName = parts[parts.length - 1]
+      }
+    }
+
+    let pan: string | undefined = undefined
+    let notes: string | undefined = undefined
+
+    if (inquiry.gstinPan) {
+      const val = inquiry.gstinPan.trim().toUpperCase()
+      if (val.length === 10 && isValidPan(val) && canEditPan) {
+        pan = val
+      } else if (val.length === 15) {
+        notes = `GSTIN: ${val}`
+      } else if (val) {
+        notes = `Tax ID: ${val}`
+      }
+    }
+
+    return {
+      firstName,
+      middleName,
+      lastName,
+      countryCode: inquiry.countryCode || '+91',
+      mobile: inquiry.mobile || '',
+      email: inquiry.email || '',
+      pan,
+      notes,
+      source: 'inquiry' as const,
+      inquiryId: inquiry.id
+    }
+  }
+
+  // Handle successful customer save & inquiry linking
+  const handleCustomerConverted = async (customer: Customer) => {
+    if (!convertingInquiry) return
+    const currentInq = convertingInquiry
+
+    try {
+      // 1. Link inquiry in Firestore
+      await linkInquiryToCustomer(
+        currentInq.id,
+        customer.id,
+        customer.displayName,
+        userIdentity ? { id: userIdentity.id, email: userIdentity.email } : undefined
+      )
+
+      // 2. Extract date for visit from inquiry.createdAt
+      let visitDate = getTodayIST()
+      if (currentInq.createdAt) {
+        const ts = currentInq.createdAt as { toDate?: () => Date }
+        if (typeof ts.toDate === 'function') {
+          const d = ts.toDate()
+          visitDate = d.toISOString().split('T')[0]
+        }
+      }
+
+      // 3. Write visit of kind inquiry dated at inquiry's createdAt
+      await fetch('/api/admin/visits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: customer.id,
+          kind: 'inquiry',
+          date: visitDate,
+          notes: currentInq.message || 'Converted from online inquiry',
+          inquiryId: currentInq.id
+        })
+      })
+
+      // 4. Update local state
+      setInquiries((prev) =>
+        prev.map((i) =>
+          i.id === currentInq.id
+            ? {
+                ...i,
+                customerId: customer.id,
+                customerDisplayName: customer.displayName,
+                status: 'handled'
+              }
+            : i
+        )
+      )
+
+      toast.success(`Inquiry linked to ${customer.displayName}`)
+    } catch (err: unknown) {
+      console.error('Error linking inquiry:', err)
+      toast.error(err instanceof Error ? err.message : 'Failed to finalize inquiry conversion')
+    } finally {
+      setConvertingInquiry(null)
+    }
   }
 
   if (!isSuperAdmin && !hasPermission('inquiries', 'view')) {
@@ -187,7 +325,6 @@ export default function AdminInquiries() {
 
   return (
     <div>
-
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Inquiries</h1>
@@ -219,7 +356,7 @@ export default function AdminInquiries() {
                   const isUnread = !inquiry.status || inquiry.status === 'unread';
 
                   return (
-                    <tr key={inquiry.id} className={`border-b border-gray-100 align-top transition-colors ${isHandled ? 'bg-gray-50 opacity-60' : isUnread ? 'bg-gray-50/50' : 'hover:bg-gray-50/50'}`}>
+                    <tr key={inquiry.id} className={`border-b border-gray-100 align-top transition-colors ${isHandled ? 'bg-gray-50 opacity-70' : isUnread ? 'bg-gray-50/50' : 'hover:bg-gray-50/50'}`}>
                       <td className="px-6 py-4">
                         <StatusDropdown 
                           status={inquiry.status || 'unread'} 
@@ -240,6 +377,21 @@ export default function AdminInquiries() {
                         {inquiry.email && <div className="text-sm text-gray-500 mt-1">{inquiry.email}</div>}
                         {inquiry.company && <div className="text-xs text-gray-400 mt-1">{inquiry.company}</div>}
                         {inquiry.gstinPan && <div className="text-xs text-gray-400 mt-1 uppercase">GST/PAN: {inquiry.gstinPan}</div>}
+
+                        {/* Linked Customer Badge */}
+                        {inquiry.customerId && (
+                          <div className="mt-2">
+                            <Link
+                              href={`/admin/customers/${inquiry.customerId}`}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                              title="View linked customer CRM profile"
+                            >
+                              <CheckCircle2 size={12} className="text-emerald-500" />
+                              <span>Linked to {inquiry.customerDisplayName || 'Customer'}</span>
+                              <ExternalLink size={10} className="text-emerald-400" />
+                            </Link>
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg border border-gray-200 font-medium">
@@ -249,16 +401,30 @@ export default function AdminInquiries() {
                       <td className="px-6 py-4 text-gray-500 text-sm max-w-sm whitespace-pre-wrap">
                         {inquiry.message}
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        {hasPermission('inquiries', 'delete') && (
-                          <button 
-                            onClick={() => confirmDelete(inquiry.id)}
-                            className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97] p-2"
-                            title="Delete Inquiry"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        )}
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
+                          {!inquiry.customerId && canAddCustomer && (
+                            <button
+                              type="button"
+                              onClick={() => setConvertingInquiry(inquiry)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-black text-white hover:bg-black/85 transition-[background-color,transform] duration-150 active:scale-[0.97]"
+                              title="Convert lead into customer profile"
+                            >
+                              <UserPlus size={13} />
+                              <span>Convert to customer</span>
+                            </button>
+                          )}
+                          {hasPermission('inquiries', 'delete') && (
+                            <button 
+                              type="button"
+                              onClick={() => confirmDelete(inquiry.id)}
+                              className="text-gray-400 hover:text-black transition-[color,transform] duration-150 active:scale-[0.97] p-2"
+                              title="Delete Inquiry"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -277,6 +443,7 @@ export default function AdminInquiries() {
           {hasMore && inquiries.length > 0 && (
             <div className="p-4 flex justify-center bg-gray-50/50">
               <button 
+                type="button"
                 onClick={loadMore}
                 disabled={loadingMore}
                 className="px-6 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
@@ -288,6 +455,35 @@ export default function AdminInquiries() {
         </div>
       )}
 
+      {/* Convert Inquiry to Customer Modal */}
+      {convertingInquiry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-base font-bold text-black tracking-tight">Convert Inquiry to Customer</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Create or link a Customer profile for this inquiry. An interaction visit will be logged automatically.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConvertingInquiry(null)}
+                className="p-1 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <CustomerForm
+              initialValues={getInitialValuesForInquiry(convertingInquiry)}
+              onSuccess={handleCustomerConverted}
+              onCancel={() => setConvertingInquiry(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
       <ConfirmModal
         isOpen={!!deleteId}
         title="Delete Inquiry"
