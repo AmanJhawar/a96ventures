@@ -291,7 +291,41 @@ export async function getCustomersServer(
   }
 
   query = query.limit(limitCount + 1)
-  const snap = await query.get()
+  let snap: FirebaseFirestore.QuerySnapshot
+  try {
+    snap = await query.get()
+  } catch (err: unknown) {
+    const errorObj = err as { code?: number; message?: string }
+    if (
+      errorObj?.code === 9 ||
+      errorObj?.message?.includes('requires an index') ||
+      errorObj?.message?.includes('FAILED_PRECONDITION')
+    ) {
+      // Graceful fallback while index is building in Firestore
+      let fallbackQuery: FirebaseFirestore.Query = adminDb.collection('customers')
+      if (q) {
+        fallbackQuery = fallbackQuery.where('searchTerms', 'array-contains', q)
+      } else {
+        fallbackQuery = fallbackQuery.where('isArchived', '==', false)
+      }
+      const rawSnap = await fallbackQuery.limit(Math.max(limitCount * 4, 100)).get()
+      const filteredDocs = rawSnap.docs
+        .filter((d) => !d.data().isArchived)
+        .sort((a, b) => {
+          const aTime = a.data().stats?.lastVisitAt || a.data().createdAt || ''
+          const bTime = b.data().stats?.lastVisitAt || b.data().createdAt || ''
+          return bTime.localeCompare(aTime)
+        })
+
+      const hasMore = filteredDocs.length > limitCount
+      const docs = filteredDocs.slice(0, limitCount)
+      const customers = docs.map((d) => d.data() as Customer)
+      const nextCursor = hasMore && docs.length > 0 ? docs[docs.length - 1].id : null
+
+      return { customers, nextCursor, hasMore }
+    }
+    throw err
+  }
 
   const hasMore = snap.docs.length > limitCount
   const docs = snap.docs.slice(0, limitCount)
