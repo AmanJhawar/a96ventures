@@ -5,7 +5,7 @@ import { Check, AlertCircle, Loader2, ArrowRight } from 'lucide-react'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { createCustomer, getCustomerById } from '@/lib/services/customers.service'
 import { normaliseMobile } from '@/lib/utils/phone'
-import { isValidPan } from '@/lib/server/pan'
+import { isValidPan } from '@/lib/utils/pan'
 import { Customer } from '@/lib/types'
 
 export const INDIAN_STATES = [
