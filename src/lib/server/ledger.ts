@@ -793,3 +793,143 @@ export function calculateOpeningBalances(
 
   return results
 }
+
+export interface OrderLineStockInput {
+  productId: string
+  qty: number
+  pieceWeightMg?: number
+  unitPricePaise: number
+}
+
+export interface ExecuteOrderLinesStockParams {
+  lines: OrderLineStockInput[]
+  productsMap: Map<string, Product>
+  locationId: string
+  locationName: string
+  type: 'sale' | 'return'
+}
+
+export interface ExecutedOrderLineStockResult {
+  productId: string
+  productName: string
+  category: string
+  metal: 'Gold' | 'Silver'
+  qty: number
+  pieceWeightMg?: number
+  unitPricePaise: number
+  lineTotalPaise: number
+  weightMg: number
+  txPiecePayload: RecordLedgerResult['txPiecePayload']
+}
+
+export interface ExecuteOrderLinesStockResult {
+  lineResults: ExecutedOrderLineStockResult[]
+  productUpdates: Map<string, Record<string, unknown>>
+  totals: {
+    amountPaise: number
+    units: number
+    weightMg: {
+      Gold: number
+      Silver: number
+    }
+  }
+}
+
+/**
+ * Validates and stages inventory stock updates for an entire order of multiple lines.
+ * Applies changes sequentially to a working product snapshot so repeated products in the
+ * same order validate accurately against diminishing stock.
+ * Throws immediately if any line fails stock or piece validation.
+ */
+export function executeOrderLinesStockUpdate(params: ExecuteOrderLinesStockParams): ExecuteOrderLinesStockResult {
+  const { lines, productsMap, locationId, locationName, type } = params
+
+  if (!lines || lines.length === 0) {
+    throw new Error('Order must contain at least one line item')
+  }
+
+  // Working copy of product states
+  const workingProducts = new Map<string, Product>()
+  for (const [id, prod] of productsMap.entries()) {
+    workingProducts.set(id, JSON.parse(JSON.stringify(prod)) as Product)
+  }
+
+  const lineResults: ExecutedOrderLineStockResult[] = []
+  const productFinalUpdates = new Map<string, Record<string, unknown>>()
+  const totals = {
+    amountPaise: 0,
+    units: 0,
+    weightMg: {
+      Gold: 0,
+      Silver: 0
+    }
+  }
+
+  for (const line of lines) {
+    const workingProd = workingProducts.get(line.productId)
+    if (!workingProd) {
+      throw new Error(`Product not found in database: "${line.productId}"`)
+    }
+
+    if (!line.qty || line.qty <= 0 || !Number.isInteger(line.qty)) {
+      throw new Error(`Invalid quantity (${line.qty}) for product "${workingProd.name}". Quantity must be a positive integer.`)
+    }
+
+    if (line.unitPricePaise === undefined || line.unitPricePaise < 0 || !Number.isInteger(line.unitPricePaise)) {
+      throw new Error(`Invalid unit price (${line.unitPricePaise}) for product "${workingProd.name}". Price must be non-negative integer paise.`)
+    }
+
+    const lineTotalPaise = line.qty * line.unitPricePaise
+
+    // Apply ledger transaction to the evolving working product state
+    const ledgerRes = applyRecordTransaction({
+      productData: workingProd,
+      type,
+      quantity: line.qty,
+      locationId,
+      locationName,
+      pieceWeight: line.pieceWeightMg ? mgToGrams(line.pieceWeightMg) : undefined
+    })
+
+    // Update working product with the resulting updates
+    Object.assign(workingProd, ledgerRes.productUpdates)
+    productFinalUpdates.set(line.productId, ledgerRes.productUpdates)
+
+    // Calculate line weight in milligrams
+    let lineUnitWeightMg = 0
+    if (line.pieceWeightMg !== undefined) {
+      lineUnitWeightMg = line.pieceWeightMg
+    } else if (workingProd.weightMg !== undefined) {
+      lineUnitWeightMg = Number(workingProd.weightMg)
+    } else if (workingProd.weight !== undefined) {
+      lineUnitWeightMg = gramsToMg(Number(workingProd.weight))
+    }
+    const totalLineWeightMg = lineUnitWeightMg * line.qty
+
+    const metal = (workingProd.metal === 'Silver' ? 'Silver' : 'Gold') as 'Gold' | 'Silver'
+
+    totals.amountPaise += lineTotalPaise
+    totals.units += line.qty
+    totals.weightMg[metal] += totalLineWeightMg
+
+    lineResults.push({
+      productId: line.productId,
+      productName: workingProd.name,
+      category: workingProd.category,
+      metal,
+      qty: line.qty,
+      pieceWeightMg: line.pieceWeightMg,
+      unitPricePaise: line.unitPricePaise,
+      lineTotalPaise,
+      weightMg: totalLineWeightMg,
+      txPiecePayload: ledgerRes.txPiecePayload
+    })
+  }
+
+  return {
+    lineResults,
+    productUpdates: productFinalUpdates,
+    totals
+  }
+}
+

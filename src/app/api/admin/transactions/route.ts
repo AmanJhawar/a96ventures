@@ -4,7 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getAuthenticatedCaller, hasModulePermission } from '@/lib/firebase/server-auth'
 import { Product, Transaction, TransactionType } from '@/lib/types'
 import { gramsToMg, mgToGrams } from '@/lib/utils/weight'
-import { getTodayIST, getNextDayIST, getDefaultFiscalCutoffIST, isValidDateStringIST, validateFiscalCutoffDate } from '@/lib/utils/date'
+import { getTodayIST, getNextDayIST, isValidDateStringIST, validateFiscalCutoffDate } from '@/lib/utils/date'
 import {
   isZeroBalanceLocked,
   acquireZeroBalanceLock,
@@ -692,7 +692,8 @@ export async function PUT(req: NextRequest) {
       saveArchiveServerSide,
       getSavedArchiveServer,
       updateArchiveProgress,
-      findIncompleteArchiveForCutoff
+      findIncompleteArchiveForCutoff,
+      purgeCrmDataServer
     } = await import('@/lib/server/archive')
 
     // Check if an incomplete / interrupted archive run already exists for this cutoff date
@@ -919,7 +920,10 @@ export async function PUT(req: NextRequest) {
       })
     }
 
-    // Stage 3: Scrub audit trail by archived IDs in chunks of 400
+    // Stage 3: Purge CRM records (orders, visits, customers, customer_mobiles, customer_pans, counters)
+    const crmStats = await purgeCrmDataServer(cutoffDate)
+
+    // Stage 4: Scrub audit trail by archived IDs in chunks of 400
     if (currentStage !== 'audit_scrubbed' && currentStage !== 'completed') {
       if (auditCount > 0) {
         const chunkSize = 400
@@ -953,6 +957,7 @@ export async function PUT(req: NextRequest) {
         openingDate,
         purgedTransactions: count,
         scrubbedAuditLogs: auditCount,
+        purgedCrm: crmStats,
         resumed: Boolean(incompleteArchive)
       },
       timestamp: FieldValue.serverTimestamp(),

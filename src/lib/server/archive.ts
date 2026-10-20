@@ -31,6 +31,9 @@ export interface MasterArchivePayload {
   productsSnapshot: Array<Record<string, unknown>>
   transactions: Array<Record<string, unknown>>
   auditLogs: Array<Record<string, unknown>>
+  ordersSnapshot?: Array<Record<string, unknown>>
+  visitsSnapshot?: Array<Record<string, unknown>>
+  customersSnapshot?: Array<Record<string, unknown>>
 }
 
 export interface MasterArchiveResult {
@@ -115,14 +118,22 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
   const openingDate = cutoffDate ? getNextDayIST(cutoffDate) : undefined
 
   let txQuery: FirebaseFirestore.Query = adminDb.collection('transactions')
+  let ordersQuery: FirebaseFirestore.Query = adminDb.collection('orders')
+  let visitsQuery: FirebaseFirestore.Query = adminDb.collection('visits')
+
   if (cutoffDate) {
     txQuery = txQuery.where('date', '<=', cutoffDate)
+    ordersQuery = ordersQuery.where('date', '<=', cutoffDate)
+    visitsQuery = visitsQuery.where('at', '<=', cutoffDate)
   }
 
-  const [txSnap, auditSnap, prodsSnap] = await Promise.all([
+  const [txSnap, auditSnap, prodsSnap, ordersSnap, visitsSnap, customersSnap] = await Promise.all([
     txQuery.get(),
     adminDb.collection('audit_logs').get(),
-    adminDb.collection('products').get()
+    adminDb.collection('products').get(),
+    ordersQuery.get(),
+    visitsQuery.get(),
+    adminDb.collection('customers').get()
   ])
 
   const transactions = txSnap.docs.map((docSnap) => {
@@ -202,6 +213,25 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
     }
   })
 
+  const ordersSnapshot = ordersSnap.docs.map((doc) => ({
+    ...doc.data(),
+    id: doc.id
+  }))
+
+  const visitsSnapshot = visitsSnap.docs.map((doc) => ({
+    ...doc.data(),
+    id: doc.id
+  }))
+
+  // Customer snapshot only retains masked PAN summary, never private subcollections
+  const customersSnapshot = customersSnap.docs.map((doc) => {
+    const cData = doc.data()
+    return {
+      ...cData,
+      id: doc.id
+    }
+  })
+
   const totalTransactions = transactions.length
   const totalAuditLogs = auditLogs.length
 
@@ -245,7 +275,10 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
     breakdown,
     productsSnapshot,
     transactions,
-    auditLogs
+    auditLogs,
+    ordersSnapshot,
+    visitsSnapshot,
+    customersSnapshot
   }
 
   return {
@@ -256,6 +289,121 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
     signature,
     cutoffDate,
     openingDate
+  }
+}
+
+export interface PurgedCrmStats {
+  purgedOrders: number
+  purgedVisits: number
+  purgedCustomers: number
+  purgedMobiles: number
+  purgedPans: number
+  resetCounters: number
+}
+
+/**
+ * Purges CRM records (orders, visits, customers, customer_mobiles, customer_pans, counters)
+ * as part of a comprehensive Zero-Balance reset.
+ */
+export async function purgeCrmDataServer(cutoffDate?: string): Promise<PurgedCrmStats> {
+  let ordersCount = 0
+  let visitsCount = 0
+  let customersCount = 0
+  let mobilesCount = 0
+  let pansCount = 0
+  let countersCount = 0
+
+  // 1. Purge orders on or before cutoff
+  let ordersQuery: FirebaseFirestore.Query = adminDb.collection('orders')
+  if (cutoffDate) {
+    ordersQuery = ordersQuery.where('date', '<=', cutoffDate)
+  }
+  const ordersSnap = await ordersQuery.get()
+  if (!ordersSnap.empty) {
+    ordersCount = ordersSnap.size
+    const chunkSize = 400
+    for (let i = 0; i < ordersSnap.docs.length; i += chunkSize) {
+      const chunk = ordersSnap.docs.slice(i, i + chunkSize)
+      const batch = adminDb.batch()
+      chunk.forEach((d) => batch.delete(d.ref))
+      await batch.commit()
+    }
+  }
+
+  // 2. Purge visits on or before cutoff (or all visits if no cutoff)
+  let visitsQuery: FirebaseFirestore.Query = adminDb.collection('visits')
+  if (cutoffDate) {
+    visitsQuery = visitsQuery.where('at', '<=', cutoffDate)
+  }
+  const visitsSnap = await visitsQuery.get()
+  if (!visitsSnap.empty) {
+    visitsCount = visitsSnap.size
+    const chunkSize = 400
+    for (let i = 0; i < visitsSnap.docs.length; i += chunkSize) {
+      const chunk = visitsSnap.docs.slice(i, i + chunkSize)
+      const batch = adminDb.batch()
+      chunk.forEach((d) => batch.delete(d.ref))
+      await batch.commit()
+    }
+  }
+
+  // 3. Purge customers (and their private subcollections)
+  const customersSnap = await adminDb.collection('customers').get()
+  if (!customersSnap.empty) {
+    customersCount = customersSnap.size
+    for (const cDoc of customersSnap.docs) {
+      const privSnap = await cDoc.ref.collection('private').get()
+      if (!privSnap.empty) {
+        const batch = adminDb.batch()
+        privSnap.docs.forEach((pd) => batch.delete(pd.ref))
+        await batch.commit()
+      }
+      await cDoc.ref.delete()
+    }
+  }
+
+  // 4. Purge customer_mobiles
+  const mobilesSnap = await adminDb.collection('customer_mobiles').get()
+  if (!mobilesSnap.empty) {
+    mobilesCount = mobilesSnap.size
+    const chunkSize = 400
+    for (let i = 0; i < mobilesSnap.docs.length; i += chunkSize) {
+      const chunk = mobilesSnap.docs.slice(i, i + chunkSize)
+      const batch = adminDb.batch()
+      chunk.forEach((d) => batch.delete(d.ref))
+      await batch.commit()
+    }
+  }
+
+  // 5. Purge customer_pans
+  const pansSnap = await adminDb.collection('customer_pans').get()
+  if (!pansSnap.empty) {
+    pansCount = pansSnap.size
+    const chunkSize = 400
+    for (let i = 0; i < pansSnap.docs.length; i += chunkSize) {
+      const chunk = pansSnap.docs.slice(i, i + chunkSize)
+      const batch = adminDb.batch()
+      chunk.forEach((d) => batch.delete(d.ref))
+      await batch.commit()
+    }
+  }
+
+  // 6. Reset counters
+  const countersSnap = await adminDb.collection('counters').get()
+  if (!countersSnap.empty) {
+    countersCount = countersSnap.size
+    const batch = adminDb.batch()
+    countersSnap.docs.forEach((d) => batch.delete(d.ref))
+    await batch.commit()
+  }
+
+  return {
+    purgedOrders: ordersCount,
+    purgedVisits: visitsCount,
+    purgedCustomers: customersCount,
+    purgedMobiles: mobilesCount,
+    purgedPans: pansCount,
+    resetCounters: countersCount
   }
 }
 
