@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from 'react'
 import { Check, AlertCircle, Loader2, ArrowRight } from 'lucide-react'
 import { usePermissions } from '@/lib/context/PermissionsContext'
-import { createCustomer, getCustomerById } from '@/lib/services/customers.service'
+import { createCustomer, getCustomerById, updateCustomer, updateCustomerPan } from '@/lib/services/customers.service'
 import { normaliseMobile } from '@/lib/utils/phone'
 import { isValidPan } from '@/lib/utils/pan'
 import { Customer } from '@/lib/types'
@@ -65,25 +65,27 @@ export interface CustomerFormProps {
     email?: string
     pan?: string
   }
+  initialCustomer?: Customer
 }
 
-export default function CustomerForm({ onSuccess, onCancel, initialValues }: CustomerFormProps) {
+export default function CustomerForm({ onSuccess, onCancel, initialValues, initialCustomer }: CustomerFormProps) {
   const { hasPermission } = usePermissions()
   const canEditPan = hasPermission('customers', 'editPan')
+  const isEditing = Boolean(initialCustomer)
 
-  const [firstName, setFirstName] = useState(initialValues?.firstName || '')
-  const [middleName, setMiddleName] = useState(initialValues?.middleName || '')
-  const [lastName, setLastName] = useState(initialValues?.lastName || '')
-  const [countryCode, setCountryCode] = useState(initialValues?.countryCode || '+91')
-  const [mobile, setMobile] = useState(initialValues?.mobile || '')
-  const [email, setEmail] = useState(initialValues?.email || '')
+  const [firstName, setFirstName] = useState(initialCustomer?.firstName || initialValues?.firstName || '')
+  const [middleName, setMiddleName] = useState(initialCustomer?.middleName || initialValues?.middleName || '')
+  const [lastName, setLastName] = useState(initialCustomer?.lastName || initialValues?.lastName || '')
+  const [countryCode, setCountryCode] = useState(initialCustomer?.mobile.countryCode || initialValues?.countryCode || '+91')
+  const [mobile, setMobile] = useState(initialCustomer?.mobile.number || initialValues?.mobile || '')
+  const [email, setEmail] = useState(initialCustomer?.email || initialValues?.email || '')
 
-  const [line1, setLine1] = useState('')
-  const [line2, setLine2] = useState('')
-  const [city, setCity] = useState('')
-  const [state, setState] = useState<string>('Karnataka')
-  const [pincode, setPincode] = useState('')
-  const [pan, setPan] = useState(initialValues?.pan || '')
+  const [line1, setLine1] = useState(initialCustomer?.address?.line1 || '')
+  const [line2, setLine2] = useState(initialCustomer?.address?.line2 || '')
+  const [city, setCity] = useState(initialCustomer?.address?.city || '')
+  const [state, setState] = useState<string>(initialCustomer?.address?.state || 'Karnataka')
+  const [pincode, setPincode] = useState(initialCustomer?.address?.pincode || '')
+  const [pan, setPan] = useState(initialCustomer?.pan?.masked || initialValues?.pan || '')
 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -113,11 +115,14 @@ export default function CustomerForm({ onSuccess, onCancel, initialValues }: Cus
         if (!/^\d{6}$/.test(value.trim())) return 'PIN code must be exactly 6 digits'
       }
       if (field === 'pan' && value.trim() && canEditPan) {
+        if (isEditing && value.trim() === initialCustomer?.pan?.masked) {
+          return null
+        }
         if (!isValidPan(value.trim())) return 'Invalid PAN format. Must be 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F)'
       }
       return null
     },
-    [countryCode, canEditPan]
+    [countryCode, canEditPan, isEditing, initialCustomer]
   )
 
   const handleBlur = (field: string, value: string) => {
@@ -177,14 +182,8 @@ export default function CustomerForm({ onSuccess, onCancel, initialValues }: Cus
 
     setIsSubmitting(true)
     try {
-      const payload = {
-        firstName: firstName.trim(),
-        middleName: middleName.trim() || undefined,
-        lastName: lastName.trim(),
-        countryCode,
-        mobile: mobile.trim(),
-        email: email.trim() || undefined,
-        address:
+      if (initialCustomer) {
+        const address =
           line1.trim() || city.trim() || pincode.trim()
             ? {
                 line1: line1.trim() || undefined,
@@ -194,13 +193,53 @@ export default function CustomerForm({ onSuccess, onCancel, initialValues }: Cus
                 pincode: pincode.trim() || undefined,
                 country: 'India' as const
               }
-            : undefined,
-        pan: canEditPan && pan.trim() ? pan.trim().toUpperCase() : undefined,
-        source: 'walk_in' as const
-      }
+            : undefined
 
-      const res = await createCustomer(payload)
-      onSuccess(res.customer)
+        const res = await updateCustomer(initialCustomer.id, {
+          firstName: firstName.trim(),
+          middleName: middleName.trim() || undefined,
+          lastName: lastName.trim(),
+          countryCode,
+          mobile: mobile.trim(),
+          email: email.trim() || undefined,
+          address
+        })
+
+        let finalCustomer = res.customer
+
+        // If PAN was modified to a new valid plaintext PAN (not the existing masked representation)
+        if (canEditPan && pan.trim() && pan.trim() !== initialCustomer.pan?.masked && !pan.includes('•')) {
+          const panRes = await updateCustomerPan(initialCustomer.id, pan.trim().toUpperCase())
+          finalCustomer = panRes.customer
+        }
+
+        onSuccess(finalCustomer)
+      } else {
+        const payload = {
+          firstName: firstName.trim(),
+          middleName: middleName.trim() || undefined,
+          lastName: lastName.trim(),
+          countryCode,
+          mobile: mobile.trim(),
+          email: email.trim() || undefined,
+          address:
+            line1.trim() || city.trim() || pincode.trim()
+              ? {
+                  line1: line1.trim() || undefined,
+                  line2: line2.trim() || undefined,
+                  city: city.trim() || undefined,
+                  state: state || undefined,
+                  pincode: pincode.trim() || undefined,
+                  country: 'India' as const
+                }
+              : undefined,
+          pan: canEditPan && pan.trim() ? pan.trim().toUpperCase() : undefined,
+          source: 'walk_in' as const
+        }
+
+        const res = await createCustomer(payload)
+        onSuccess(res.customer)
+      }
     } catch (err: unknown) {
       const errorWithField = err as { field?: 'mobile' | 'pan'; existingCustomerId?: string; message?: string }
       if (errorWithField.field && errorWithField.existingCustomerId) {
@@ -452,7 +491,7 @@ export default function CustomerForm({ onSuccess, onCancel, initialValues }: Cus
           ) : (
             <>
               <Check className="w-3.5 h-3.5" />
-              <span>Save & Select Customer</span>
+              <span>{isEditing ? 'Save Changes' : onCancel ? 'Save & Select Customer' : 'Create Customer Profile'}</span>
             </>
           )}
         </button>

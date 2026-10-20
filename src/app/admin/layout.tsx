@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase/auth'
 import Link from 'next/link'
-import { LogOut, LayoutDashboard, Users, Briefcase, Bookmark, MessageSquare, Menu, X, ShoppingCart, Warehouse, MapPin, BarChart3, ShieldCheck, Lock, Shield } from 'lucide-react'
+import { LogOut, LayoutDashboard, Users, UserCheck, Briefcase, Bookmark, MessageSquare, Menu, X, ShoppingCart, Warehouse, MapPin, BarChart3, ShieldCheck, Lock, Shield } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
 import { AdminUser, UserPermissions, UserRole, UserStatus } from '@/lib/types'
@@ -42,6 +42,7 @@ const navGroups: NavGroupConfig[] = [
     items: [
       { name: 'Inventory', href: '/admin/inventory', icon: Warehouse, module: 'products', action: 'view' },
       { name: 'Sales', href: '/admin/sales', icon: ShoppingCart, module: 'sales', action: 'view' },
+      { name: 'Customers', href: '/admin/customers', icon: UserCheck, module: 'customers', action: 'view' },
       { name: 'Locations', href: '/admin/locations', icon: MapPin, module: 'locations', action: 'view' },
     ]
   },
@@ -88,6 +89,9 @@ function AdminPageGate({ children }: { children: React.ReactNode }) {
   } else if (pathname === '/admin/sales' || pathname.startsWith('/admin/sales/')) {
     hasAccess = hasPermission('sales', 'view') || hasPermission('returns', 'view')
     requiredSection = 'Sales & Returns'
+  } else if (pathname === '/admin/customers' || pathname.startsWith('/admin/customers/')) {
+    hasAccess = hasPermission('customers', 'view')
+    requiredSection = 'Customer Relationship Management (CRM)'
   } else if (pathname === '/admin/locations' || pathname.startsWith('/admin/locations/')) {
     hasAccess = hasPermission('locations', 'view')
     requiredSection = 'Locations Management'
