@@ -17,7 +17,9 @@ export interface PaymentRowState {
 }
 
 export interface PaymentSplitProps {
-  totalBillPaise: number
+  totalBillPaise?: number
+  totalPaise?: number
+  payments?: OrderPayment[]
   onChange: (payments: OrderPayment[], isBalanced: boolean) => void
   disabled?: boolean
 }
@@ -30,12 +32,13 @@ const PAYMENT_MODES: { value: PaymentMode; label: string }[] = [
   { value: 'old_metal', label: 'Old metal' }
 ]
 
-export default function PaymentSplit({ totalBillPaise, onChange, disabled = false }: PaymentSplitProps) {
+export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, disabled = false }: PaymentSplitProps) {
+  const billPaise = totalBillPaise ?? totalPaise ?? 0
   const [rows, setRows] = useState<PaymentRowState[]>(() => [
     {
       id: 'pay_init_1',
       mode: 'cash',
-      amountRupees: (totalBillPaise / 100).toFixed(2),
+      amountRupees: (billPaise / 100).toFixed(2),
       reference: '',
       metal: 'Gold',
       weightGrams: '',
@@ -48,7 +51,7 @@ export default function PaymentSplit({ totalBillPaise, onChange, disabled = fals
     const timer = setTimeout(() => {
       setRows((prev) => {
         if (prev.length === 1 && prev[0].mode === 'cash' && !prev[0].reference) {
-          const expected = (totalBillPaise / 100).toFixed(2)
+          const expected = (billPaise / 100).toFixed(2)
           if (prev[0].amountRupees !== expected) {
             return [
               {
@@ -62,7 +65,7 @@ export default function PaymentSplit({ totalBillPaise, onChange, disabled = fals
       })
     }, 0)
     return () => clearTimeout(timer)
-  }, [totalBillPaise])
+  }, [billPaise])
 
   // Convert row states to OrderPayment[] and calculate totals in paise
   const { payments, totalPaidPaise, isBalanced, remainingPaise } = useMemo(() => {
@@ -96,8 +99,8 @@ export default function PaymentSplit({ totalBillPaise, onChange, disabled = fals
       list.push(item)
     }
 
-    const diff = totalBillPaise - sumPaise
-    const balanced = sumPaise === totalBillPaise && totalBillPaise > 0
+    const diff = billPaise - sumPaise
+    const balanced = sumPaise === billPaise && billPaise > 0
 
     return {
       payments: list,
@@ -105,7 +108,7 @@ export default function PaymentSplit({ totalBillPaise, onChange, disabled = fals
       isBalanced: balanced,
       remainingPaise: diff
     }
-  }, [rows, totalBillPaise])
+  }, [rows, billPaise])
 
   // Notify parent component on changes
   useEffect(() => {
@@ -148,7 +151,7 @@ export default function PaymentSplit({ totalBillPaise, onChange, disabled = fals
           return sum
         }
       }, 0)
-    const neededPaise = Math.max(0, totalBillPaise - otherRowsPaid)
+    const neededPaise = Math.max(0, billPaise - otherRowsPaid)
     handleUpdateRow(id, { amountRupees: (neededPaise / 100).toFixed(2) })
   }
 

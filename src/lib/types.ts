@@ -94,6 +94,8 @@ export interface Transaction {
   toLocationId?: string; // for transfer
   toLocationName?: string; // for transfer
   customerName?: string; // for sale, return
+  customerId?: string; // CRM customer ID
+  orderId?: string; // CRM order ID
   vendorName?: string; // for purchase
   notes?: string;
   weight?: number; // total weight (in grams)

@@ -103,7 +103,7 @@ export default function CustomerForm({ onSuccess, onCancel, initialValues }: Cus
       }
       if (field === 'mobile') {
         const norm = normaliseMobile(countryCode, value)
-        if (!norm.ok) return norm.error
+        if (!norm.success) return norm.error
       }
       if (field === 'email' && value.trim()) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/

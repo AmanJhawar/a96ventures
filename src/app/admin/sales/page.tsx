@@ -579,7 +579,6 @@ export default function AdminSales() {
   // Open Sale modal (multi-item)
   const handleOpenSaleForm = () => {
     setSaleLocationId(isLocationLocked && userAssignedLocationId ? userAssignedLocationId : '')
-    setSaleCustomerName('')
     setSelectedCustomer(null)
     setIsWalkInCustomer(false)
     setSalePayments([])
@@ -780,30 +779,33 @@ export default function AdminSales() {
 
       setOrdersList((prev) => [createdOrder, ...prev])
 
-      const newTransactions: Transaction[] = createdOrder.lines.map((l) => ({
-        id: l.transactionId,
-        orderId: createdOrder.id,
-        type: 'sale' as const,
-        productId: l.productId,
-        productName: l.productName,
-        category: l.category,
-        brand: l.brand,
-        metal: l.metal,
-        quantity: l.qty,
-        pieceWeight: l.pieceWeightMg ? l.pieceWeightMg / 1000 : undefined,
-        price: l.unitPricePaise / 100,
-        locationId: createdOrder.locationId,
-        locationName: createdOrder.locationName,
-        customerId: createdOrder.customerId,
-        customerName: createdOrder.customerSnapshot?.displayName || selectedCustomer?.displayName || undefined,
-        date: createdOrder.date,
-        notes: createdOrder.orderNo,
-        createdAt: createdOrder.createdAt
-      }))
+      const newTransactions: Transaction[] = createdOrder.lines.map((l) => {
+        const prod = products.find((p) => p.id === l.productId)
+        return {
+          id: l.transactionId,
+          orderId: createdOrder.id,
+          type: 'sale' as const,
+          productId: l.productId,
+          productName: l.productName,
+          category: l.category as ProductCategory,
+          brand: prod?.brand,
+          metal: l.metal as MetalType,
+          quantity: l.qty,
+          pieceWeight: l.pieceWeightMg ? l.pieceWeightMg / 1000 : undefined,
+          price: l.unitPricePaise / 100,
+          locationId: createdOrder.locationId,
+          locationName: createdOrder.locationName,
+          customerId: createdOrder.customerId,
+          customerName: createdOrder.customerSnapshot?.displayName || selectedCustomer?.displayName || undefined,
+          date: createdOrder.date,
+          notes: createdOrder.orderNo,
+          createdAt: createdOrder.createdAt
+        }
+      })
 
       setSalesList((prev) => [...newTransactions, ...prev])
       const totalSaleAmt = createdOrder.totals.amountPaise / 100
-      const totalUnits = createdOrder.totals.totalQty
+      const totalUnits = createdOrder.totals.units
 
       setStats((prev) => ({
         ...prev,
@@ -883,7 +885,7 @@ export default function AdminSales() {
       )
 
       const totalOrderAmt = reversedOrder.totals.amountPaise / 100
-      const totalOrderUnits = reversedOrder.totals.totalQty
+      const totalOrderUnits = reversedOrder.totals.units
       setStats((prev) => ({
         ...prev,
         salesCount: Math.max(0, prev.salesCount - reversedOrder.lines.length),
@@ -1568,18 +1570,15 @@ export default function AdminSales() {
                       setSelectedCustomer(cust)
                       if (cust) {
                         setIsWalkInCustomer(false)
-                        setSaleCustomerName(cust.displayName)
                       }
                     }}
                     onSelectWalkIn={() => {
                       setIsWalkInCustomer(true)
                       setSelectedCustomer(null)
-                      setSaleCustomerName('')
                     }}
                     onClear={() => {
                       setSelectedCustomer(null)
                       setIsWalkInCustomer(false)
-                      setSaleCustomerName('')
                     }}
                     disabled={saleSubmitting}
                   />

@@ -10,7 +10,9 @@ import CustomerForm from '@/components/customer-form'
 export interface CustomerPickerProps {
   selectedCustomer: Customer | null
   isWalkIn: boolean
-  onSelectCustomer: (customer: Customer | null, isWalkIn: boolean) => void
+  onSelectCustomer: (customer: Customer | null, isWalkIn?: boolean) => void
+  onSelectWalkIn?: () => void
+  onClear?: () => void
   disabled?: boolean
   className?: string
 }
@@ -31,6 +33,8 @@ export default function CustomerPicker({
   selectedCustomer,
   isWalkIn,
   onSelectCustomer,
+  onSelectWalkIn,
+  onClear,
   disabled = false,
   className = ''
 }: CustomerPickerProps) {
@@ -105,7 +109,11 @@ export default function CustomerPicker({
   }
 
   const handleSelectWalkIn = () => {
-    onSelectCustomer(null, true)
+    if (onSelectWalkIn) {
+      onSelectWalkIn()
+    } else {
+      onSelectCustomer(null, true)
+    }
     setIsOpen(false)
     setShowInlineForm(false)
     setQuery('')
@@ -113,7 +121,11 @@ export default function CustomerPicker({
 
   const handleClearSelection = (e: React.MouseEvent) => {
     e.stopPropagation()
-    onSelectCustomer(null, false)
+    if (onClear) {
+      onClear()
+    } else {
+      onSelectCustomer(null, false)
+    }
     setQuery('')
   }
 
