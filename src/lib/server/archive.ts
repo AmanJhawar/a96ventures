@@ -16,6 +16,7 @@ export interface MasterArchivePayload {
   totalAuditLogs: number
   checksum?: string
   checksumAlgorithm?: string
+  checksumScope?: string
   signature?: string
   signatureAlgorithm?: string
   breakdown: {
@@ -32,8 +33,6 @@ export interface MasterArchivePayload {
   transactions: Array<Record<string, unknown>>
   auditLogs: Array<Record<string, unknown>>
   ordersSnapshot?: Array<Record<string, unknown>>
-  visitsSnapshot?: Array<Record<string, unknown>>
-  customersSnapshot?: Array<Record<string, unknown>>
 }
 
 export interface MasterArchiveResult {
@@ -119,21 +118,17 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
 
   let txQuery: FirebaseFirestore.Query = adminDb.collection('transactions')
   let ordersQuery: FirebaseFirestore.Query = adminDb.collection('orders')
-  let visitsQuery: FirebaseFirestore.Query = adminDb.collection('visits')
 
   if (cutoffDate) {
     txQuery = txQuery.where('date', '<=', cutoffDate)
     ordersQuery = ordersQuery.where('date', '<=', cutoffDate)
-    visitsQuery = visitsQuery.where('at', '<=', cutoffDate)
   }
 
-  const [txSnap, auditSnap, prodsSnap, ordersSnap, visitsSnap, customersSnap] = await Promise.all([
+  const [txSnap, auditSnap, prodsSnap, ordersSnap] = await Promise.all([
     txQuery.get(),
     adminDb.collection('audit_logs').get(),
     adminDb.collection('products').get(),
-    ordersQuery.get(),
-    visitsQuery.get(),
-    adminDb.collection('customers').get()
+    ordersQuery.get()
   ])
 
   const transactions = txSnap.docs.map((docSnap) => {
@@ -218,20 +213,6 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
     id: doc.id
   }))
 
-  const visitsSnapshot = visitsSnap.docs.map((doc) => ({
-    ...doc.data(),
-    id: doc.id
-  }))
-
-  // Customer snapshot only retains masked PAN summary, never private subcollections
-  const customersSnapshot = customersSnap.docs.map((doc) => {
-    const cData = doc.data()
-    return {
-      ...cData,
-      id: doc.id
-    }
-  })
-
   const totalTransactions = transactions.length
   const totalAuditLogs = auditLogs.length
 
@@ -246,7 +227,7 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
     openings: transactions.filter((t) => t.type === 'opening').length
   }
 
-  // Compute canonical SHA-256 checksum over the payload content
+  // Compute canonical SHA-256 checksum over the payload content including ordersSnapshot
   const checksum = await computeArchiveChecksum({
     cutoffDate,
     openingDate,
@@ -254,7 +235,9 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
     totalAuditLogs,
     transactions,
     auditLogs,
-    productsSnapshot
+    productsSnapshot,
+    ordersSnapshot,
+    checksumScope: 'v2-orders'
   })
 
   const signature = signArchiveChecksum(checksum)
@@ -262,7 +245,7 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
   const archive: MasterArchivePayload = {
     system: 'A96 Ventures Unified Inventory System',
     type: 'Master Audit Archive (All History & Activity Trail)',
-    version: '1.4',
+    version: '1.5',
     exportedAt: new Date().toISOString(),
     cutoffDate,
     openingDate,
@@ -270,15 +253,14 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
     totalAuditLogs,
     checksum,
     checksumAlgorithm: 'SHA-256',
+    checksumScope: 'v2-orders',
     signature,
     signatureAlgorithm: 'HMAC-SHA256',
     breakdown,
     productsSnapshot,
     transactions,
     auditLogs,
-    ordersSnapshot,
-    visitsSnapshot,
-    customersSnapshot
+    ordersSnapshot
   }
 
   return {
@@ -292,97 +274,24 @@ export async function buildMasterArchiveServer(options?: { cutoffDate?: string }
   }
 }
 
-export interface PurgedCrmStats {
-  purgedOrders: number
-  purgedVisits: number
-  purgedCustomers: number
-  purgedMobiles: number
-  purgedPans: number
-  resetCounters: number
-}
-
 /**
- * Purges CRM records (orders, visits, customers, customer_mobiles, customer_pans, counters)
- * as part of a comprehensive Zero-Balance reset.
+ * Safely purges archived orders on or before the cutoff date by their exact IDs.
+ * Safe to run twice on a resumed archive (idempotent deletes).
+ * Never touches customers, visits, PANs, mobiles, or sequential counters.
  */
-export async function purgeCrmDataServer(cutoffDate?: string): Promise<PurgedCrmStats> {
-  let ordersCount = 0
-  let visitsCount = 0
-  let countersCount = 0
+export async function purgeArchivedOrdersServer(orderIds: string[]): Promise<number> {
+  if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) return 0
+  const validIds = orderIds.filter((id) => typeof id === 'string' && id.trim().length > 0)
+  if (validIds.length === 0) return 0
 
-  // 1. Purge orders on or before cutoff
-  let ordersQuery: FirebaseFirestore.Query = adminDb.collection('orders')
-  if (cutoffDate) {
-    ordersQuery = ordersQuery.where('date', '<=', cutoffDate)
-  }
-  const ordersSnap = await ordersQuery.get()
-  if (!ordersSnap.empty) {
-    ordersCount = ordersSnap.size
-    const chunkSize = 400
-    for (let i = 0; i < ordersSnap.docs.length; i += chunkSize) {
-      const chunk = ordersSnap.docs.slice(i, i + chunkSize)
-      const batch = adminDb.batch()
-      chunk.forEach((d) => batch.delete(d.ref))
-      await batch.commit()
-    }
-  }
-
-  // 2. Purge visits on or before cutoff (or all visits if no cutoff)
-  let visitsQuery: FirebaseFirestore.Query = adminDb.collection('visits')
-  if (cutoffDate) {
-    visitsQuery = visitsQuery.where('at', '<=', cutoffDate)
-  }
-  const visitsSnap = await visitsQuery.get()
-  if (!visitsSnap.empty) {
-    visitsCount = visitsSnap.size
-    const chunkSize = 400
-    for (let i = 0; i < visitsSnap.docs.length; i += chunkSize) {
-      const chunk = visitsSnap.docs.slice(i, i + chunkSize)
-      const batch = adminDb.batch()
-      chunk.forEach((d) => batch.delete(d.ref))
-      await batch.commit()
-    }
-  }
-
-  // 3. Reset customer transaction history and stats without erasing customer profiles or lookup indexes
-  const customersSnap = await adminDb.collection('customers').get()
-  if (!customersSnap.empty) {
-    const chunkSize = 400
-    for (let i = 0; i < customersSnap.docs.length; i += chunkSize) {
-      const chunk = customersSnap.docs.slice(i, i + chunkSize)
-      const batch = adminDb.batch()
-      chunk.forEach((cDoc) => {
-        batch.update(cDoc.ref, {
-          totalPurchases: 0,
-          purchaseCount: 0,
-          totalWeightPurchasedMg: 0,
-          lastPurchaseAt: null,
-          visitCount: 0,
-          lastVisitAt: null,
-          openFollowUps: 0
-        })
-      })
-      await batch.commit()
-    }
-  }
-
-  // 4. Reset counters
-  const countersSnap = await adminDb.collection('counters').get()
-  if (!countersSnap.empty) {
-    countersCount = countersSnap.size
+  const chunkSize = 400
+  for (let i = 0; i < validIds.length; i += chunkSize) {
+    const chunk = validIds.slice(i, i + chunkSize)
     const batch = adminDb.batch()
-    countersSnap.docs.forEach((d) => batch.delete(d.ref))
+    chunk.forEach((id) => batch.delete(adminDb.collection('orders').doc(id)))
     await batch.commit()
   }
-
-  return {
-    purgedOrders: ordersCount,
-    purgedVisits: visitsCount,
-    purgedCustomers: 0, // Preserved customer database
-    purgedMobiles: 0,
-    purgedPans: 0,
-    resetCounters: countersCount
-  }
+  return validIds.length
 }
 
 /**
@@ -620,7 +529,9 @@ export async function getSavedArchiveServer(archiveId: string): Promise<MasterAr
     totalAuditLogs: Number(parsed.totalAuditLogs ?? parsed.auditLogs?.length ?? 0),
     transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
     auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
-    productsSnapshot: Array.isArray(parsed.productsSnapshot) ? parsed.productsSnapshot : []
+    productsSnapshot: Array.isArray(parsed.productsSnapshot) ? parsed.productsSnapshot : [],
+    ordersSnapshot: Array.isArray(parsed.ordersSnapshot) ? parsed.ordersSnapshot : [],
+    checksumScope: parsed.checksumScope || null
   })
 
   const expectedChecksum = String(metadata.checksum || parsed.checksum || '').trim().toLowerCase()

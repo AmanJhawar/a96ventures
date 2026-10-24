@@ -23,14 +23,17 @@ export interface ArchiveChecksumData {
   transactions: unknown[]
   auditLogs: unknown[]
   productsSnapshot?: unknown[]
+  ordersSnapshot?: unknown[]
+  checksumScope?: string | null
 }
 
 /**
  * Computes a deterministic SHA-256 checksum across the canonical content of an archive.
+ * When checksumScope === 'v2-orders', ordersSnapshot is included in the canonical payload.
  * Works uniformly in Node.js server runtimes and modern browser environments.
  */
 export async function computeArchiveChecksum(data: ArchiveChecksumData): Promise<string> {
-  const canonicalPayload = {
+  const canonicalPayload: Record<string, unknown> = {
     cutoffDate: data.cutoffDate || null,
     openingDate: data.openingDate || null,
     totalTransactions: Number(data.totalTransactions || 0),
@@ -38,6 +41,10 @@ export async function computeArchiveChecksum(data: ArchiveChecksumData): Promise
     transactions: Array.isArray(data.transactions) ? data.transactions : [],
     auditLogs: Array.isArray(data.auditLogs) ? data.auditLogs : [],
     productsSnapshot: Array.isArray(data.productsSnapshot) ? data.productsSnapshot : []
+  }
+
+  if (data.checksumScope === 'v2-orders') {
+    canonicalPayload.ordersSnapshot = Array.isArray(data.ordersSnapshot) ? data.ordersSnapshot : []
   }
 
   const canonicalString = canonicalJsonStringify(canonicalPayload)
@@ -75,6 +82,8 @@ export async function verifyArchiveIntegrity(parsedArchive: Record<string, unkno
 
   const auditLogs = (Array.isArray(parsedArchive.auditLogs) ? parsedArchive.auditLogs : []) as unknown[]
   const productsSnapshot = (Array.isArray(parsedArchive.productsSnapshot) ? parsedArchive.productsSnapshot : []) as unknown[]
+  const ordersSnapshot = (Array.isArray(parsedArchive.ordersSnapshot) ? parsedArchive.ordersSnapshot : []) as unknown[]
+  const checksumScope = typeof parsedArchive.checksumScope === 'string' ? parsedArchive.checksumScope : null
 
   const totalTransactions =
     typeof parsedArchive.totalTransactions === 'number'
@@ -96,7 +105,9 @@ export async function verifyArchiveIntegrity(parsedArchive: Record<string, unkno
     totalAuditLogs,
     transactions,
     auditLogs,
-    productsSnapshot
+    productsSnapshot,
+    ordersSnapshot,
+    checksumScope
   })
 
   const fileChecksum = typeof parsedArchive.checksum === 'string' ? parsedArchive.checksum.trim().toLowerCase() : undefined

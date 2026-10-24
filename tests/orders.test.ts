@@ -6,15 +6,17 @@ import {
   getIndianFiscalYear,
   validateOrderPayments,
   createOrder,
-  reverseOrder
+  reverseOrder,
+  ValidationError
 } from '@/lib/server/orders'
 import {
   executeOrderLinesStockUpdate,
   OrderLineStockInput
 } from '@/lib/server/ledger'
-import { purgeCrmDataServer } from '@/lib/server/archive'
+import { purgeArchivedOrdersServer } from '@/lib/server/archive'
+import { computeArchiveChecksum, verifyArchiveIntegrity } from '@/lib/utils/archive-checksum'
 import { NextRequest } from 'next/server'
-import { Product, OrderPayment, Customer, Order } from '@/lib/types'
+import { Product, OrderPayment, Customer } from '@/lib/types'
 import { adminDb } from '@/lib/firebase/admin'
 import { SUPER_ADMIN_PERMISSIONS } from '@/lib/constants/permissions'
 
@@ -230,134 +232,138 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
     })
   })
 
-  describe('Comprehensive Zero-Balance CRM Purge', () => {
-    it('purges orders, visits, customers, customer_mobiles, customer_pans, and counters', async () => {
-      // Mock Firestore collections and batch delete
+  describe('Zero-Balance Order Archiving & CRM Permanence', () => {
+    it('(a) only the archived order IDs are deleted, and is safe to run twice on a resumed archive', async () => {
       const deletedDocPaths: string[] = []
-      const updatedDocs: { path: string; data: unknown }[] = []
       const fakeBatch = {
         delete: vi.fn((ref: { path: string }) => {
           deletedDocPaths.push(ref.path)
-        }),
-        update: vi.fn((ref: { path: string }, data: unknown) => {
-          updatedDocs.push({ path: ref.path, data })
         }),
         commit: vi.fn(async () => {})
       }
 
       vi.spyOn(adminDb, 'batch').mockReturnValue(fakeBatch as unknown as FirebaseFirestore.WriteBatch)
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id: string) => ({ id, path: `${colName}/${id}` })
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
 
-      // Mock collection queries
-      const mockOrdersSnap = {
-        empty: false,
-        size: 2,
-        docs: [
-          { ref: { path: 'orders/ord_1', delete: vi.fn() } },
-          { ref: { path: 'orders/ord_2', delete: vi.fn() } }
-        ]
+      const archivedOrderIds = ['ord_101', 'ord_102', 'ord_103']
+
+      // First run
+      const countRun1 = await purgeArchivedOrdersServer(archivedOrderIds)
+      expect(countRun1).toBe(3)
+      expect(deletedDocPaths).toEqual(['orders/ord_101', 'orders/ord_102', 'orders/ord_103'])
+
+      // Second run (resumed archive: safe and idempotent)
+      const countRun2 = await purgeArchivedOrdersServer(archivedOrderIds)
+      expect(countRun2).toBe(3)
+      expect(deletedDocPaths).toHaveLength(6)
+      expect(deletedDocPaths.slice(3)).toEqual(['orders/ord_101', 'orders/ord_102', 'orders/ord_103'])
+
+      // Empty or non-matching array does nothing
+      const emptyCount = await purgeArchivedOrdersServer([])
+      expect(emptyCount).toBe(0)
+    })
+
+    it('(b) customers, customer_mobiles, customer_pans, visits and counters are never touched', async () => {
+      const deletedDocPaths: string[] = []
+      const fakeBatch = {
+        delete: vi.fn((ref: { path: string }) => {
+          deletedDocPaths.push(ref.path)
+        }),
+        commit: vi.fn(async () => {})
       }
 
-      const mockVisitsSnap = {
-        empty: false,
-        size: 1,
-        docs: [{ ref: { path: 'visits/vis_1', delete: vi.fn() } }]
-      }
+      vi.spyOn(adminDb, 'batch').mockReturnValue(fakeBatch as unknown as FirebaseFirestore.WriteBatch)
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id: string) => ({ id, path: `${colName}/${id}` })
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
 
-      const mockCustomersSnap = {
-        empty: false,
-        size: 1,
-        docs: [
+      const orderIds = ['ord_archived_1', 'ord_archived_2']
+      await purgeArchivedOrdersServer(orderIds)
+
+      // Verified only orders were targeted for deletion
+      expect(deletedDocPaths).toEqual(['orders/ord_archived_1', 'orders/ord_archived_2'])
+      expect(deletedDocPaths.some((p) => p.startsWith('customers/'))).toBe(false)
+      expect(deletedDocPaths.some((p) => p.startsWith('customer_mobiles/'))).toBe(false)
+      expect(deletedDocPaths.some((p) => p.startsWith('customer_pans/'))).toBe(false)
+      expect(deletedDocPaths.some((p) => p.startsWith('visits/'))).toBe(false)
+      expect(deletedDocPaths.some((p) => p.startsWith('counters/'))).toBe(false)
+    })
+
+    it('(c) tampering with an archived bill fails the checksum, and an older v1.4 archive still verifies', async () => {
+      // 1. Build a valid v1.5 archive payload with checksumScope: 'v2-orders'
+      const v15Archive = {
+        cutoffDate: '2026-03-31',
+        openingDate: '2026-04-01',
+        totalTransactions: 1,
+        totalAuditLogs: 1,
+        checksumScope: 'v2-orders',
+        transactions: [{ id: 'tx_1', type: 'sale', quantity: 1 }],
+        auditLogs: [{ id: 'aud_1', action: 'sale' }],
+        productsSnapshot: [{ id: 'prod_1', stock: 10 }],
+        ordersSnapshot: [
           {
-            ref: {
-              path: 'customers/cust_1',
-              delete: vi.fn(async () => {
-                deletedDocPaths.push('customers/cust_1')
-              }),
-              collection: vi.fn(() => ({
-                get: vi.fn(async () => ({
-                  empty: false,
-                  docs: [{ ref: { path: 'customers/cust_1/private/pan' } }]
-                }))
-              }))
-            }
+            id: 'ord_1',
+            orderNo: 'A96-2026-000001',
+            date: '2026-03-15',
+            customerName: 'Aman Jhawar',
+            totals: { amountPaise: 500000 }
           }
         ]
       }
 
-      const mockMobilesSnap = {
-        empty: false,
-        size: 1,
-        docs: [{ ref: { path: 'customer_mobiles/+919876543210' } }]
+      const validV15Checksum = await computeArchiveChecksum(v15Archive)
+      const v15File = {
+        ...v15Archive,
+        version: '1.5',
+        checksum: validV15Checksum
       }
 
-      const mockPansSnap = {
-        empty: false,
-        size: 1,
-        docs: [{ ref: { path: 'customer_pans/hash_abc' } }]
+      // Valid v1.5 verifies cleanly
+      const verifyResult1 = await verifyArchiveIntegrity(v15File)
+      expect(verifyResult1.status).toBe('verified')
+
+      // Tampering with an archived bill in ordersSnapshot fails checksum
+      const tamperedV15File = {
+        ...v15File,
+        ordersSnapshot: [
+          {
+            id: 'ord_1',
+            orderNo: 'A96-2026-000001',
+            date: '2026-03-15',
+            customerName: 'Aman Jhawar',
+            totals: { amountPaise: 9999999 } // Tampered amount
+          }
+        ]
       }
+      const tamperedResult = await verifyArchiveIntegrity(tamperedV15File)
+      expect(tamperedResult.status).toBe('tampered')
 
-      const mockCountersSnap = {
-        empty: false,
-        size: 1,
-        docs: [{ ref: { path: 'counters/2026' } }]
+      // 2. Older v1.4 archive (no checksumScope or ordersSnapshot in checksum) still verifies
+      const v14ArchiveData = {
+        cutoffDate: '2026-03-31',
+        openingDate: '2026-04-01',
+        totalTransactions: 1,
+        totalAuditLogs: 1,
+        transactions: [{ id: 'tx_legacy_1', type: 'sale', quantity: 2 }],
+        auditLogs: [{ id: 'aud_legacy_1', action: 'create' }],
+        productsSnapshot: [{ id: 'prod_legacy_1', stock: 5 }]
       }
-
-      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
-        if (colName === 'orders') {
-          return {
-            where: vi.fn().mockReturnThis(),
-            get: vi.fn(async () => mockOrdersSnap)
-          } as unknown as FirebaseFirestore.CollectionReference
-        }
-        if (colName === 'visits') {
-          return {
-            where: vi.fn().mockReturnThis(),
-            get: vi.fn(async () => mockVisitsSnap)
-          } as unknown as FirebaseFirestore.CollectionReference
-        }
-        if (colName === 'customers') {
-          return {
-            get: vi.fn(async () => mockCustomersSnap)
-          } as unknown as FirebaseFirestore.CollectionReference
-        }
-        if (colName === 'customer_mobiles') {
-          return {
-            get: vi.fn(async () => mockMobilesSnap)
-          } as unknown as FirebaseFirestore.CollectionReference
-        }
-        if (colName === 'customer_pans') {
-          return {
-            get: vi.fn(async () => mockPansSnap)
-          } as unknown as FirebaseFirestore.CollectionReference
-        }
-        if (colName === 'counters') {
-          return {
-            get: vi.fn(async () => mockCountersSnap)
-          } as unknown as FirebaseFirestore.CollectionReference
-        }
-        return {
-          get: vi.fn(async () => ({ empty: true, docs: [] }))
-        } as unknown as FirebaseFirestore.CollectionReference
-      })
-
-      const stats = await purgeCrmDataServer('2026-03-31')
-
-      expect(stats.purgedOrders).toBe(2)
-      expect(stats.purgedVisits).toBe(1)
-      expect(stats.purgedCustomers).toBe(0)
-      expect(stats.purgedMobiles).toBe(0)
-      expect(stats.purgedPans).toBe(0)
-      expect(stats.resetCounters).toBe(1)
-
-      // Verified that customer database and lookup indexes are PRESERVED
-      expect(deletedDocPaths).not.toContain('customers/cust_1/private/pan')
-      expect(deletedDocPaths).not.toContain('customers/cust_1')
-      expect(deletedDocPaths).not.toContain('customer_mobiles/+919876543210')
-      expect(deletedDocPaths).not.toContain('customer_pans/hash_abc')
-      // Verified that orders, visits and counters were purged/reset
-      expect(deletedDocPaths).toContain('orders/ord_1')
-      expect(deletedDocPaths).toContain('visits/vis_1')
-      expect(deletedDocPaths).toContain('counters/2026')
+      const validV14Checksum = await computeArchiveChecksum(v14ArchiveData)
+      const v14File = {
+        ...v14ArchiveData,
+        version: '1.4',
+        checksum: validV14Checksum,
+        // Even if v1.4 has an ordersSnapshot or extra metadata, older archives verify without error
+        ordersSnapshot: [{ id: 'ord_legacy_1', orderNo: 'A96-2025-000001' }]
+      }
+      const verifyV14Result = await verifyArchiveIntegrity(v14File)
+      expect(verifyV14Result.status).toBe('verified')
     })
   })
 
@@ -764,6 +770,117 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
       ).rejects.toThrow(
         'Cannot reverse order "A96-2026-000002": line item transaction "tx_already_reversed_1" has already been reversed.'
       )
+    })
+
+    it('rejects with 400 "This bill is from a closed period and cannot be reversed" when line transaction no longer exists because it was archived', async () => {
+      const mockOrderWithMissingTx = {
+        id: 'order_closed_period',
+        orderNo: 'A96-2026-000003',
+        type: 'sale',
+        locationId: 'loc_vault',
+        date: '2026-05-15',
+        isReversed: false,
+        lines: [
+          {
+            transactionId: 'tx_archived_and_purged',
+            productId: 'prod_gold_coin',
+            qty: 1,
+            unitPricePaise: 7500000,
+            lineTotalPaise: 7500000
+          }
+        ],
+        totals: {
+          amountPaise: 7500000,
+          units: 1,
+          weightMg: { Gold: 10000, Silver: 0 }
+        }
+      }
+
+      const fakeTransaction = {
+        get: vi.fn(async (ref: { path: string }) => {
+          if (ref.path === 'system/zero_balance_lock') {
+            return { exists: false, data: () => ({ isLocked: false }) }
+          }
+          if (ref.path === 'orders/order_closed_period') {
+            return { exists: true, id: 'order_closed_period', data: () => mockOrderWithMissingTx }
+          }
+          if (ref.path === 'transactions/tx_archived_and_purged') {
+            // Transaction no longer exists because it was purged during Zero Balance
+            return { exists: false }
+          }
+          return { exists: false }
+        }),
+        set: vi.fn(),
+        update: vi.fn()
+      }
+
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id?: string) => ({ id: id || 'mock_doc', path: `${colName}/${id || 'mock_doc'}` }),
+          add: vi.fn(async () => ({ id: 'mock_add_id' }))
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
+
+      vi.spyOn(adminDb, 'runTransaction').mockImplementation(async (cb: unknown) => {
+        return (cb as (t: unknown) => Promise<unknown>)(fakeTransaction)
+      })
+
+      await expect(
+        reverseOrder({
+          orderId: 'order_closed_period',
+          caller: { callerUid: 'admin_1', callerName: 'Admin', callerEmail: 'admin@a96.com' }
+        })
+      ).rejects.toThrowError(ValidationError)
+      await expect(
+        reverseOrder({
+          orderId: 'order_closed_period',
+          caller: { callerUid: 'admin_1', callerName: 'Admin', callerEmail: 'admin@a96.com' }
+        })
+      ).rejects.toThrow('This bill is from a closed period and cannot be reversed')
+
+      // Also verify that reverse API route maps this ValidationError to HTTP 400
+      const { POST: reverseRouteHandler } = await import('@/app/api/admin/orders/[id]/reverse/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'admin_1',
+          callerName: 'Admin',
+          callerEmail: 'admin@a96.com',
+          callerData: { email: 'admin@a96.com', displayName: 'Admin', role: 'super_admin', status: 'active' },
+          isSuperAdmin: true,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {} as any
+        }
+      })
+
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        if (colName === 'orders') {
+          return {
+            doc: (id?: string) => ({
+              id: id || 'mock_order_doc',
+              path: `orders/${id || 'mock_order_doc'}`,
+              get: vi.fn(async () => ({
+                exists: true,
+                data: () => mockOrderWithMissingTx
+              }))
+            })
+          } as unknown as FirebaseFirestore.CollectionReference
+        }
+        return {
+          doc: (id?: string) => ({ id: id || 'mock_doc', path: `${colName}/${id || 'mock_doc'}` }),
+          add: vi.fn(async () => ({ id: 'mock_add_id' }))
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
+
+      const req = new NextRequest('http://localhost:3000/api/admin/orders/order_closed_period/reverse', {
+        method: 'POST'
+      })
+      const res = await reverseRouteHandler(req, { params: Promise.resolve({ id: 'order_closed_period' }) })
+      expect(res.status).toBe(400)
+      const json = await res.json()
+      expect(json.error).toBe('This bill is from a closed period and cannot be reversed')
     })
 
     it('refuses to reverse an individual transaction line belonging to a bill via DELETE /api/admin/transactions', async () => {

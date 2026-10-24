@@ -744,7 +744,7 @@ export async function PUT(req: NextRequest) {
       getSavedArchiveServer,
       updateArchiveProgress,
       findIncompleteArchiveForCutoff,
-      purgeCrmDataServer
+      purgeArchivedOrdersServer
     } = await import('@/lib/server/archive')
 
     // Check if an incomplete / interrupted archive run already exists for this cutoff date
@@ -847,6 +847,10 @@ export async function PUT(req: NextRequest) {
       .map((l: Record<string, unknown>) => String(l.id || ''))
       .filter(Boolean)
     const auditCount = archivedAuditIds.length
+
+    const archivedOrderIds = (Array.isArray(archivePayload.ordersSnapshot) ? archivePayload.ordersSnapshot : [])
+      .map((o: Record<string, unknown>) => String(o.id || ''))
+      .filter(Boolean)
 
     // Stage 1: Purge historical transaction records by archived IDs in chunks of 400
     if (currentStage === 'archive_saved' || currentStage === 'purging_transactions') {
@@ -971,8 +975,8 @@ export async function PUT(req: NextRequest) {
       })
     }
 
-    // Stage 3: Purge CRM records (orders, visits, customers, customer_mobiles, customer_pans, counters)
-    const crmStats = await purgeCrmDataServer(cutoffDate)
+    // Stage 3: Purge archived orders on or before cutoff by exact archived IDs (idempotent across resume runs)
+    const purgedOrdersCount = await purgeArchivedOrdersServer(archivedOrderIds)
 
     // Stage 4: Scrub audit trail by archived IDs in chunks of 400
     if (currentStage !== 'audit_scrubbed' && currentStage !== 'completed') {
@@ -1008,7 +1012,7 @@ export async function PUT(req: NextRequest) {
         openingDate,
         purgedTransactions: count,
         scrubbedAuditLogs: auditCount,
-        purgedCrm: crmStats,
+        purgedOrders: purgedOrdersCount,
         resumed: Boolean(incompleteArchive)
       },
       timestamp: FieldValue.serverTimestamp(),

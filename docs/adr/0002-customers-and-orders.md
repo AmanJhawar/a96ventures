@@ -16,12 +16,12 @@ Furthermore, compliance guidelines necessitate secure handling of sensitive Pers
 
 We chose to implement a decoupled Customer CRM and Atomic Order architecture:
 
-1. **Independent Collections for Longevity:**
+1. **Independent Collections for Longevity & Fiscal Reset:**
    - Customer profiles live in `customers/{customerId}`.
    - Comprehensive multi-item bills live in `orders/{orderId}`.
    - Customer interactions and follow-ups live in `visits/{visitId}`.
    - Sequential bill numbers are generated from `counters/{fiscalYear}`.
-   - These collections are strictly permanent and isolated from Zero-Balance purges. The existing `transactions` collection remains purely as the annual stock ledger.
+   - **Zero-Balance Lifecycle:** Customer profiles, visits, PAN reservations, mobile reservations, lifetime stats (`customers.stats`), and fiscal bill counters are permanent and NEVER deleted during Zero-Balance. Bills in `orders` dated on or before the fiscal cutoff are archived into `ordersSnapshot` within the master archive (protected by SHA-256 checksum with `checksumScope: 'v2-orders'`), and then safely deleted by exact ID via `purgeArchivedOrdersServer(orderIds)`.
 
 2. **Atomic Order Commit in One `runTransaction`:**
    - Multi-item sales and returns are committed in a single Firestore transaction (`runTransaction`).
@@ -41,10 +41,12 @@ We chose to implement a decoupled Customer CRM and Atomic Order architecture:
 ## Consequences
 
 - **Pros:**
-  - Customer purchase history, loyalty metrics, and visit logs survive fiscal year-end closes indefinitely.
+  - Customer lifetime loyalty metrics, contact cards, PAN mappings, and visit logs survive fiscal year-end closes permanently.
+  - Closed fiscal periods purge historical sales bills from active collections after sealing them in cryptographic master archives (`version: '1.5'`, `checksumScope: 'v2-orders'`).
+  - Bill numbers generated from `counters/{fiscalYear}` remain unique across the fiscal year and are never reset.
+  - Attempting to reverse a bill whose ledger entries have been archived and purged returns a clean 400 validation error ("This bill is from a closed period and cannot be reversed").
   - POS checkouts are 100% atomic: zero risk of partial inventory commits or unlinked line items.
-  - Clean separation of concerns between physical inventory tracking (`transactions`) and commercial customer relationships (`orders`).
   - Military-grade PII protection adhering to Indian data privacy expectations.
 - **Cons:**
-  - Order lines link to `transactionId` in the stock ledger; after an annual Zero-Balance purge, the historical `transactions` record will no longer exist in the active ledger (though the complete item breakdown remains preserved in `orders.lines`).
+  - After Zero-Balance, historical bills prior to the cutoff date are only retrievable via the downloaded and verified master audit archives.
   - Strict atomic Firestore transactions require staging all reads before writes and must complete within Firestore's 500 document mutation limits (more than sufficient for retail sales).

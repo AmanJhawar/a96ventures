@@ -4,8 +4,8 @@ These rules govern all code, API routes, data mutations, and UI components touch
 
 ## 1. Architectural Boundaries & Zero-Balance Isolation
 
-1. **Isolation from Zero-Balance:** `customers`, `customer_mobiles`, `customer_pans`, `orders`, `visits`, and `counters` are permanent collections. They must NEVER be deleted, purged, or truncated by the annual Zero-Balance / fiscal closing process (`src/lib/server/archive.ts`).
-2. **Stock Ledger Separation:** The existing `transactions` collection serves strictly as the annual stock/inventory ledger. Sales transactions recorded in `transactions` are tagged with `orderId` and `customerId`. During year-end Zero-Balance, historical `transactions` and `audit_logs` (including any customer/security audit logs) are purged as part of the fiscal reset, while `orders` and `customers` remain intact permanently.
+1. **Isolation of Customer Identities & Fiscal Counters:** `customers`, `customers/*/private`, `customer_mobiles`, `customer_pans`, `visits`, and `counters` are permanent collections. They must NEVER be deleted, purged, or truncated by the annual Zero-Balance / fiscal closing process (`src/lib/server/archive.ts`). Customer lifetime statistics (`customers.stats`) stay as they are, and bill counters are never reset so bill numbers remain unique within a fiscal year.
+2. **Stock Ledger & Bill Purging:** During year-end Zero-Balance, historical ledger rows in `transactions` AND bills in `orders` dated on or before the cutoff date are purged. Prior to deletion, orders on or before the cutoff are sealed into `ordersSnapshot` within the archive with cryptographic checksum verification (`version: '1.5'`, `checksumScope: 'v2-orders'`). Archived bills are deleted strictly by their exact IDs via `purgeArchivedOrdersServer(orderIds)` which is safe to run twice on resumed archive runs.
 3. **Atomic Multi-Item Bills:** Sales and returns with multiple lines must be written as a single `orders` document in ONE atomic `runTransaction`. Looping individual transaction writes at the POS counter is forbidden.
 
 ## 2. Data Types & Field Rules

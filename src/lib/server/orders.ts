@@ -504,7 +504,7 @@ export async function reverseOrder(params: ReverseOrderParams): Promise<Order> {
     for (let i = 0; i < txSnaps.length; i++) {
       const snap = txSnaps[i]
       if (!snap.exists) {
-        throw new ValidationError(`Transaction record "${orderData.lines[i].transactionId}" not found for line ${i + 1}`)
+        throw new ValidationError('This bill is from a closed period and cannot be reversed')
       }
       const txData = { ...snap.data(), id: snap.id } as Transaction
       if (txData.isReversed) {

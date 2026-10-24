@@ -38,7 +38,7 @@ export function ZeroBalanceModal({
     <ConfirmModal
       isOpen={isOpen}
       title="Zero balance all history & audit log"
-      description="Archives and clears transactions and audit logs up to the specified cutoff date. Consolidated opening balances will be dated the following day. All future entries on or before the cutoff date will be permanently blocked."
+      description="Archives and clears stock transactions, audit logs, and sales bills up to the specified cutoff date. Customers, customer visits, PAN records, and bill counters are kept permanently. Consolidated opening balances will be dated the following day. All future entries on or before the cutoff date will be permanently blocked."
       confirmText={zeroBalanceSubmitting ? 'Archiving & Erasing...' : 'Purge & Zero Balance'}
       disabled={
         zeroBalanceSubmitting ||
@@ -118,7 +118,7 @@ export function ZeroBalanceModal({
         </div>
 
         <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5 leading-relaxed">
-          <strong>Server lock & protection:</strong> A distributed lock pauses new entries during the run. The archive is saved server-side with count and SHA-256 checksum recorded before records are deleted. Opening balances cannot be reversed. Future entries on or before {formatDisplayDateIST(zeroBalanceCutoffDate)} will be blocked.
+          <strong>Server lock & protection:</strong> A distributed lock pauses new entries during the run. The archive is saved server-side with count and SHA-256 checksum recorded before records are deleted. Stock transactions and bills up to {formatDisplayDateIST(zeroBalanceCutoffDate)} are cleared, while customers, visits, PANs, and bill counters are kept permanently. Opening balances cannot be reversed. Future entries on or before {formatDisplayDateIST(zeroBalanceCutoffDate)} will be blocked.
         </div>
       </div>
     </ConfirmModal>
