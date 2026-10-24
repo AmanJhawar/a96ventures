@@ -3,10 +3,11 @@
 import React from 'react'
 import { Plus, ChevronLeft, ChevronRight, Pencil, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Transaction, UserPermissions } from '@/lib/types'
 
 interface PurchasesTableProps {
-  filteredPurchases: any[]
-  paginatedPurchases: any[]
+  filteredPurchases: Transaction[]
+  paginatedPurchases: Transaction[]
   purchasesPage: number
   totalPurchasesPages: number
   pageSize: number
@@ -14,10 +15,10 @@ interface PurchasesTableProps {
   formatWeight: (w?: number) => string
   archivedSession: boolean
   isSuperAdmin: boolean
-  hasPermission: (module: any, action: any) => boolean
+  hasPermission: (module: keyof UserPermissions, action: string) => boolean
   handleOpenAddPurchase: () => void
-  handleOpenEditPurchase: (tx: any) => void
-  setDeleteTxTarget: (tx: any) => void
+  handleOpenEditPurchase: (tx: Transaction) => void
+  setDeleteTxTarget: (tx: Transaction | null) => void
   canAddPurchase: boolean
 }
 
@@ -120,12 +121,12 @@ export function PurchasesTable({
                       </div>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-right tabular-nums">
+                  <td className="px-6 py-4 text-right font-mono tabular-nums">
                     <div className="font-semibold text-black">
                       {totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')}` : '—'}
                     </div>
                     {tx.price ? (
-                      <div className="text-[11px] text-gray-500">
+                      <div className="text-[11px] text-gray-500 font-mono">
                         @ ₹{tx.price.toLocaleString('en-IN')} / unit
                       </div>
                     ) : null}

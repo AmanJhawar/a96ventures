@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react'
 import { Transaction, AuditLogEntry, ProductCategory } from '@/lib/types'
 import { verifyArchiveIntegrity, ArchiveVerificationResult } from '@/lib/utils/archive-checksum'
-import { getAuthHeaders } from '@/lib/services/inventory.service'
+import { verifyArchiveWithServer } from '@/lib/services/inventory.service'
 import { toast } from 'sonner'
 
 export interface ArchivedSession {
@@ -72,32 +72,21 @@ export function ArchiveProvider({ children }: { children: React.ReactNode }) {
       // Validate against server secret and system_archives
       if (verification.status === 'verified' || parsedRecord.checksum || parsedRecord.signature || parsedRecord.archiveId) {
         try {
-          const authHeaders = await getAuthHeaders().catch(() => ({}))
-          const verifyRes = await fetch('/api/admin/transactions/archive/verify', {
-            method: 'POST',
-            headers: {
-              ...authHeaders,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              checksum: typeof parsedRecord.checksum === 'string' ? parsedRecord.checksum : verification.computedChecksum,
-              signature: typeof parsedRecord.signature === 'string' ? parsedRecord.signature : undefined,
-              archiveId: typeof parsedRecord.archiveId === 'string' ? parsedRecord.archiveId : undefined
-            })
+          const serverResult = await verifyArchiveWithServer({
+            checksum: typeof parsedRecord.checksum === 'string' ? parsedRecord.checksum : verification.computedChecksum,
+            signature: typeof parsedRecord.signature === 'string' ? parsedRecord.signature : undefined,
+            archiveId: typeof parsedRecord.archiveId === 'string' ? parsedRecord.archiveId : undefined
           })
 
-          if (verifyRes.ok) {
-            const serverResult = await verifyRes.json()
-            if (serverResult.status === 'tampered') {
-              verification.status = 'tampered'
-              verification.message = serverResult.message
-            } else if (serverResult.status === 'unverified') {
-              verification.status = 'unverified'
-              verification.message = serverResult.message
-            } else if (serverResult.status === 'verified') {
-              verification.status = 'verified'
-              verification.message = serverResult.message
-            }
+          if (serverResult.status === 'tampered') {
+            verification.status = 'tampered'
+            verification.message = serverResult.message || ''
+          } else if (serverResult.status === 'unverified') {
+            verification.status = 'unverified'
+            verification.message = serverResult.message || ''
+          } else if (serverResult.status === 'verified') {
+            verification.status = 'verified'
+            verification.message = serverResult.message || ''
           }
         } catch (serverVerifErr) {
           console.warn('Server archive verification check unavailable:', serverVerifErr)

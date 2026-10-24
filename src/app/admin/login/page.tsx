@@ -13,6 +13,7 @@ import {
   User
 } from 'firebase/auth'
 import { auth } from '@/lib/firebase/auth'
+import { syncAuthClaims } from '@/lib/services/auth.service'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -112,17 +113,9 @@ function LoginForm() {
     // Check if user has custom claims, otherwise sync with server
     const tokenResult = await user.getIdTokenResult()
     if (!tokenResult.claims.role) {
-      try {
-        await fetch('/api/admin/auth/sync', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${tokenResult.token}`
-          }
-        })
+      const synced = await syncAuthClaims(tokenResult.token)
+      if (synced) {
         await user.getIdTokenResult(true) // Force fresh token with claims
-      } catch (syncErr) {
-        console.warn('Sync claims warning:', syncErr)
       }
     }
 

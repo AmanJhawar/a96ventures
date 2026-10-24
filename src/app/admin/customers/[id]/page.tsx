@@ -29,7 +29,8 @@ import {
   X
 } from 'lucide-react'
 import { Customer, Order, Visit, PaymentMode } from '@/lib/types'
-import { getCustomerById, archiveCustomer, revealCustomerPan } from '@/lib/services/customers.service'
+import { getCustomerById, archiveCustomer, revealCustomerPan, removeCustomerPan } from '@/lib/services/customers.service'
+import { updateVisit } from '@/lib/services/visits.service'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatINR } from '@/lib/utils/money'
 import { formatMgToGrams } from '@/lib/utils/weight'
@@ -100,6 +101,7 @@ export default function CustomerDetailPage() {
   const canEdit = hasPermission('customers', 'edit')
   const canArchive = hasPermission('customers', 'delete') || isSuperAdmin
   const canViewPan = hasPermission('customers', 'viewPan') || isSuperAdmin
+  const canEditPan = hasPermission('customers', 'editPan') || isSuperAdmin
   const canAddVisit = hasPermission('visits', 'add')
   const canEditVisit = hasPermission('visits', 'edit')
 
@@ -114,6 +116,8 @@ export default function CustomerDetailPage() {
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false)
   const [isLogVisitOpen, setIsLogVisitOpen] = useState(false)
   const [archiving, setArchiving] = useState(false)
+  const [isRemovePanModalOpen, setIsRemovePanModalOpen] = useState(false)
+  const [isRemovingPan, setIsRemovingPan] = useState(false)
 
   // PAN Reveal State & Timer
   const [revealedPan, setRevealedPan] = useState<string | null>(null)
@@ -194,6 +198,26 @@ export default function CustomerDetailPage() {
     }
   }
 
+  const handleRemovePan = async () => {
+    if (!customer) return
+    setIsRemovingPan(true)
+    try {
+      await removeCustomerPan(customer.id)
+      setCustomer({
+        ...customer,
+        hasPan: false,
+        pan: undefined
+      })
+      setRevealedPan(null)
+      toast.success('PAN removed successfully')
+      setIsRemovePanModalOpen(false)
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove PAN')
+    } finally {
+      setIsRemovingPan(false)
+    }
+  }
+
   const handleCopyPhone = () => {
     if (!customer) return
     navigator.clipboard.writeText(customer.mobile.e164)
@@ -218,15 +242,7 @@ export default function CustomerDetailPage() {
 
   const handleMarkFollowUpDone = async (visitId: string) => {
     try {
-      const res = await fetch(`/api/admin/visits/${visitId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ followUpDone: true })
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || 'Failed to update follow-up')
-      }
+      await updateVisit(visitId, { followUpDone: true })
       toast.success('Follow-up marked as completed')
       // Update local visits state
       setVisits((prev) =>
@@ -440,6 +456,19 @@ export default function CustomerDetailPage() {
                         <span>Reveal</span>
                       </>
                     )}
+                  </button>
+                )}
+
+                {/* Remove PAN Action */}
+                {customer.hasPan && canEditPan && (
+                  <button
+                    type="button"
+                    onClick={() => setIsRemovePanModalOpen(true)}
+                    disabled={isRemovingPan}
+                    className="ml-2 inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Remove PAN</span>
                   </button>
                 )}
               </div>
@@ -750,10 +779,10 @@ export default function CustomerDetailPage() {
                                   </p>
                                 </div>
                                 <div className="text-right">
-                                  <p className="font-bold text-foreground">
+                                  <p className="font-bold font-mono text-foreground">
                                     {formatINR(line.lineTotalPaise)}
                                   </p>
-                                  <p className="text-[11px] text-muted-foreground">
+                                  <p className="text-[11px] font-mono text-muted-foreground">
                                     @{formatINR(line.unitPricePaise)}/unit
                                   </p>
                                 </div>
@@ -944,6 +973,17 @@ export default function CustomerDetailPage() {
         disabled={archiving}
         onConfirm={handleArchive}
         onClose={() => setIsArchiveModalOpen(false)}
+      />
+
+      {/* Remove PAN Modal */}
+      <ConfirmModal
+        isOpen={isRemovePanModalOpen}
+        title="Remove Customer PAN"
+        description="Are you sure you want to remove the PAN record for this customer? The encrypted PAN and its search index will be permanently deleted. This action is audited."
+        confirmText={isRemovingPan ? 'Removing...' : 'Remove PAN'}
+        disabled={isRemovingPan}
+        onConfirm={handleRemovePan}
+        onClose={() => setIsRemovePanModalOpen(false)}
       />
 
       {/* Log Visit Slide-Over Sheet */}

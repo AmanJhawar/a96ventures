@@ -542,7 +542,7 @@ export default function AdminReportsPage() {
               <span className="text-xs uppercase font-semibold tracking-wider text-gray-400 block mb-1">
                 Total Sales Revenue
               </span>
-              <div className="text-2xl font-bold text-black tabular-nums">
+              <div className="text-2xl font-bold text-black font-mono tabular-nums">
                 ₹{topSellingOverview.totalRevenue.toLocaleString('en-IN')}
               </div>
               <span className="text-xs text-gray-500 mt-1 block">
@@ -579,7 +579,7 @@ export default function AdminReportsPage() {
                   <span className="text-gray-300 italic">No sales yet</span>
                 )}
               </div>
-              <span className="text-xs text-gray-500 mt-1 block">
+              <span className="text-xs text-gray-500 mt-1 block font-mono">
                 {topSellingOverview.topProductByRevenue
                   ? `₹${topSellingOverview.topProductByRevenue.totalRevenue.toLocaleString('en-IN')}`
                   : '—'}
@@ -830,10 +830,10 @@ export default function AdminReportsPage() {
                                 {sharePercent}% of top item
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-right tabular-nums font-bold text-black">
+                            <td className="px-6 py-4 text-right font-mono tabular-nums font-bold text-black">
                               ₹{item.totalRevenue.toLocaleString('en-IN')}
                             </td>
-                            <td className="px-6 py-4 text-right tabular-nums text-gray-600">
+                            <td className="px-6 py-4 text-right font-mono tabular-nums text-gray-600">
                               ₹{item.averagePrice.toLocaleString('en-IN')}
                             </td>
                             <td className="px-6 py-4 text-right tabular-nums">
@@ -930,10 +930,10 @@ export default function AdminReportsPage() {
                               <td className="px-6 py-3.5 text-right tabular-nums font-semibold text-black">
                                 {tx.quantity}
                               </td>
-                              <td className="px-6 py-3.5 text-right tabular-nums text-gray-600 text-xs">
+                              <td className="px-6 py-3.5 text-right font-mono tabular-nums text-gray-600 text-xs">
                                 {typeof tx.price === 'number' ? `₹${tx.price.toLocaleString('en-IN')}` : '—'}
                               </td>
-                              <td className="px-6 py-3.5 text-right tabular-nums font-bold text-black">
+                              <td className="px-6 py-3.5 text-right font-mono tabular-nums font-bold text-black">
                                 ₹{total.toLocaleString('en-IN')}
                               </td>
                             </tr>

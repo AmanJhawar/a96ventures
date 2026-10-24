@@ -19,7 +19,8 @@ import {
   applyRecordTransaction,
   applyReverseTransaction,
   calculateNetTransactionsEffect,
-  calculateOpeningBalances
+  calculateOpeningBalances,
+  normalizeProductLedgerState
 } from '@/lib/server/ledger'
 
 export async function GET(req: NextRequest) {
@@ -231,6 +232,14 @@ export async function POST(req: NextRequest) {
         {
           error: `Entries dated on or before ${closedCutoff} are blocked. The financial period up to ${closedCutoff} has been closed and archived.`
         },
+        { status: 400 }
+      )
+    }
+
+    const todayIST = getTodayIST()
+    if (effectiveDate > todayIST) {
+      return NextResponse.json(
+        { error: `Transaction date cannot be in the future (${effectiveDate}). Today is ${todayIST}.` },
         { status: 400 }
       )
     }
@@ -468,6 +477,21 @@ export async function DELETE(req: NextRequest) {
     const tx = txSnap.data()!
     const txType = tx.type as TransactionType
 
+    // Bill lines cannot be deleted or reversed individually
+    if (tx.orderId) {
+      let orderNo = tx.orderNo || (tx as Record<string, unknown>).invoiceNo
+      if (!orderNo) {
+        const orderSnap = await adminDb.collection('orders').doc(tx.orderId).get()
+        if (orderSnap.exists) {
+          orderNo = orderSnap.data()?.orderNo
+        }
+      }
+      return NextResponse.json(
+        { error: `This line belongs to bill ${orderNo || tx.orderId}; reverse the whole bill` },
+        { status: 400 }
+      )
+    }
+
     // Check if transaction has already been reversed or is a reversal
     if (tx.isReversed) {
       return NextResponse.json({ error: 'This transaction has already been reversed' }, { status: 400 })
@@ -487,6 +511,16 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json(
         {
           error: `Reversal blocked: This transaction is dated ${tx.date}, which falls on or before the closed fiscal cutoff date (${closedCutoff}). Archived financial periods cannot be modified.`
+        },
+        { status: 400 }
+      )
+    }
+
+    const todayDate = getTodayIST()
+    if (tx.date && String(tx.date) > todayDate) {
+      return NextResponse.json(
+        {
+          error: `Reversal blocked: This transaction is dated in the future (${tx.date}). Today is ${todayDate}.`
         },
         { status: 400 }
       )
@@ -519,12 +553,29 @@ export async function DELETE(req: NextRequest) {
 
     // Atomic Reversal via Reversing Entry (Never Delete)
     const reversalResult = await adminDb.runTransaction(async (t) => {
+      // Re-read transaction inside the atomic transaction to prevent concurrent duplicate reversals (double click)
+      const latestTxSnap = await t.get(txDocRef)
+      if (!latestTxSnap.exists) {
+        throw new Error('Transaction not found')
+      }
+      const latestTx = latestTxSnap.data() as Transaction
+      if (latestTx.isReversed) {
+        throw new Error('This transaction has already been reversed')
+      }
+      if (latestTx.isReversal || latestTx.reversalOf) {
+        throw new Error('A reversing entry cannot be reversed')
+      }
+      if (latestTx.orderId) {
+        const orderNo = latestTx.orderNo || latestTx.invoiceNo
+        throw new Error(`This line belongs to bill ${orderNo || latestTx.orderId}; reverse the whole bill`)
+      }
+
       // Check zero-balance lock inside the write transaction
       const lockRef = getZeroBalanceLockRef()
       const lockSnap = await t.get(lockRef)
       assertNotZeroBalanceLocked(lockSnap)
 
-      const productRef = adminDb.collection('products').doc(tx.productId)
+      const productRef = adminDb.collection('products').doc(latestTx.productId)
       const productSnap = await t.get(productRef)
 
       const nowIso = new Date().toISOString()
@@ -541,7 +592,7 @@ export async function DELETE(req: NextRequest) {
       const ledgerResult = applyReverseTransaction({
         productData,
         originalTx: {
-          ...tx,
+          ...latestTx,
           id: txId
         }
       })
@@ -555,15 +606,15 @@ export async function DELETE(req: NextRequest) {
       reversingPayload = {
         type: 'reversal',
         quantity: ledgerResult.reversalTxData.quantity,
-        locationId: tx.locationId,
-        locationName: tx.locationName,
+        locationId: latestTx.locationId,
+        locationName: latestTx.locationName,
         notes: ledgerResult.reversalTxData.notes
       }
-      if (txType === 'transfer' && tx.toLocationId) {
-        reversingPayload.locationId = tx.toLocationId
-        reversingPayload.locationName = tx.toLocationName || 'Unknown'
-        reversingPayload.toLocationId = tx.locationId
-        reversingPayload.toLocationName = tx.locationName
+      if (txType === 'transfer' && latestTx.toLocationId) {
+        reversingPayload.locationId = latestTx.toLocationId
+        reversingPayload.locationName = latestTx.toLocationName || 'Unknown'
+        reversingPayload.toLocationId = latestTx.locationId
+        reversingPayload.toLocationName = latestTx.locationName
       }
       if (ledgerResult.reversalTxData.previousWeight !== undefined) {
         reversingPayload.previousWeight = ledgerResult.reversalTxData.previousWeight
@@ -588,10 +639,10 @@ export async function DELETE(req: NextRequest) {
       // 2. Post reversing entry pointing at the original transaction
       const reversingEntryDoc: Record<string, unknown> = {
         ...reversingPayload,
-        productId: tx.productId,
-        productName: tx.productName,
-        category: tx.category,
-        metal: tx.metal || 'Gold',
+        productId: latestTx.productId,
+        productName: latestTx.productName,
+        category: latestTx.category,
+        metal: latestTx.metal || 'Gold',
         date: todayDate,
         createdAt: FieldValue.serverTimestamp(),
         timestamp: FieldValue.serverTimestamp(),
@@ -1013,6 +1064,43 @@ export async function PATCH(req: NextRequest) {
 
     const currentTx = txSnap.data() as Transaction
 
+    // Bill lines cannot be modified individually
+    if (currentTx.orderId) {
+      let orderNo = currentTx.orderNo || currentTx.invoiceNo
+      if (!orderNo) {
+        const orderSnap = await adminDb.collection('orders').doc(currentTx.orderId).get()
+        if (orderSnap.exists) {
+          orderNo = orderSnap.data()?.orderNo
+        }
+      }
+      return NextResponse.json(
+        { error: `This line belongs to bill ${orderNo || currentTx.orderId}; reverse the whole bill` },
+        { status: 400 }
+      )
+    }
+
+    // Staff Assigned Location Enforcement (Store Lock Check)
+    const isSuperAdmin = caller.isSuperAdmin
+    const userAssignedLoc = caller.callerData.assignedLocationId
+    if (!isSuperAdmin && userAssignedLoc) {
+      if (currentTx.locationId && currentTx.locationId !== userAssignedLoc) {
+        return NextResponse.json(
+          {
+            error: `Access Denied: You are assigned to ${caller.callerData.assignedLocationName || 'another store'} and cannot edit transactions for a different location.`
+          },
+          { status: 403 }
+        )
+      }
+      if (locationId && String(locationId).trim() !== userAssignedLoc) {
+        return NextResponse.json(
+          {
+            error: `Access Denied: You are assigned to ${caller.callerData.assignedLocationName || 'another store'} and cannot reassign transactions to a different location.`
+          },
+          { status: 403 }
+        )
+      }
+    }
+
     // Authorize caller: Super Admin or granular edit permission for the transaction type (purchase or sale)
     const txType = currentTx.type
     const hasEditPermission =
@@ -1059,40 +1147,112 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Quantity must be at least 1' }, { status: 400 })
     }
 
-    const oldQty = Number(currentTx.quantity || 1)
-    const newQty = quantity !== undefined ? Number(quantity) : oldQty
-    const oldLoc = currentTx.locationId
-    const newLoc = locationId ? String(locationId).trim() : oldLoc
-
     const updatedTxData = await adminDb.runTransaction(async (t) => {
+      // Re-read transaction inside the atomic transaction to prevent concurrent race conditions
+      const latestTxSnap = await t.get(txRef)
+      if (!latestTxSnap.exists) {
+        throw new Error('Transaction not found')
+      }
+
+      const latestTx = latestTxSnap.data() as Transaction
+
+      if (latestTx.isReversed || latestTx.reversalOf || latestTx.type === 'reversal') {
+        throw new Error('Cannot modify a reversed transaction or reversal entry')
+      }
+
+      if (latestTx.orderId) {
+        const orderNo = latestTx.orderNo || latestTx.invoiceNo
+        throw new Error(`This line belongs to bill ${orderNo || latestTx.orderId}; reverse the whole bill`)
+      }
+
+      if (!isSuperAdmin && userAssignedLoc && latestTx.locationId && latestTx.locationId !== userAssignedLoc) {
+        throw new Error(
+          `Access Denied: You are assigned to ${caller.callerData.assignedLocationName || 'another store'} and cannot edit transactions for a different location.`
+        )
+      }
+
       const lockRef = getZeroBalanceLockRef()
       const lockSnap = await t.get(lockRef)
       assertNotZeroBalanceLocked(lockSnap)
 
-      // Adjust product stock if product is linked and quantity or location changed
-      if (currentTx.productId) {
-        const prodRef = adminDb.collection('products').doc(currentTx.productId)
+      const oldQty = Number(latestTx.quantity || 1)
+      const newQty = quantity !== undefined ? Number(quantity) : oldQty
+      const oldLoc = latestTx.locationId
+      const newLoc = locationId ? String(locationId).trim() : oldLoc
+
+      // Adjust product stock and idol pieces if product is linked and quantity or location changed
+      if (latestTx.productId) {
+        const prodRef = adminDb.collection('products').doc(latestTx.productId)
         const prodSnap = await t.get(prodRef)
         if (prodSnap.exists) {
           const prodData = prodSnap.data() as Product
+          const isIdol = prodData.category === 'Idols' || (prodData as unknown as Record<string, unknown>).isIdol === true
+          const ledgerState = normalizeProductLedgerState(prodData)
+
           let currentStock = Number(prodData.stock || 0)
           const stockByLoc = { ...((prodData.stockByLocation as Record<string, number>) || {}) }
 
-          if (currentTx.type === 'sale') {
+          // Idol pieces maps
+          const updatedPiecesMg = [...ledgerState.piecesMg]
+          const updatedPiecesByLocMg: Record<string, number[]> = {}
+          Object.entries(ledgerState.piecesByLocMg).forEach(([loc, list]) => {
+            updatedPiecesByLocMg[loc] = [...list]
+          })
+
+          // Extract transaction pieces in mg
+          let txPiecesMg: number[] = []
+          if (Array.isArray(latestTx.pieceWeights) && latestTx.pieceWeights.length > 0) {
+            txPiecesMg = latestTx.pieceWeights.map(Number).filter((w) => !isNaN(w) && w > 0).map(gramsToMg)
+          } else if (latestTx.pieceWeight !== undefined && !isNaN(Number(latestTx.pieceWeight))) {
+            txPiecesMg = [gramsToMg(Number(latestTx.pieceWeight))]
+          }
+          const unitMg = prodData.weightMg !== undefined
+            ? Number(prodData.weightMg)
+            : gramsToMg(Number(prodData.weight || 0))
+          while (txPiecesMg.length < oldQty) {
+            txPiecesMg.push(unitMg > 0 ? unitMg : 0)
+          }
+
+          if (latestTx.type === 'sale') {
             if (oldLoc === newLoc) {
               const diff = newQty - oldQty
               const locStock = Number(stockByLoc[oldLoc] || 0)
               if (diff > 0 && locStock < diff) {
                 throw new Error(
-                  `Insufficient stock at ${currentTx.locationName || 'store'}. Available: ${locStock}, additional units needed: ${diff}`
+                  `Insufficient stock at ${latestTx.locationName || 'store'}. Available: ${locStock}, additional units needed: ${diff}`
                 )
               }
               currentStock -= diff
               stockByLoc[oldLoc] = locStock - diff
+
+              if (isIdol && diff !== 0) {
+                const locPieces = updatedPiecesByLocMg[oldLoc] ? [...updatedPiecesByLocMg[oldLoc]] : []
+                if (diff > 0) {
+                  // Selling more: remove additional pieces from location
+                  if (locPieces.length < diff) {
+                    throw new Error(
+                      `Insufficient idol piece stock at ${latestTx.locationName || 'store'}. Available: ${locPieces.length}, needed: ${diff}`
+                    )
+                  }
+                  for (let i = 0; i < diff; i++) {
+                    const removedMg = locPieces.shift()!
+                    const allIdx = updatedPiecesMg.indexOf(removedMg)
+                    if (allIdx !== -1) updatedPiecesMg.splice(allIdx, 1)
+                  }
+                } else {
+                  // Reducing sale: restore pieces back to location
+                  const restoreCount = Math.abs(diff)
+                  const restored = txPiecesMg.slice(newQty, newQty + restoreCount)
+                  locPieces.push(...restored)
+                  updatedPiecesMg.push(...restored)
+                }
+                updatedPiecesByLocMg[oldLoc] = locPieces
+              }
             } else {
-              // Restore oldQty to old location
+              // Location changed
+              // 1. Restore oldQty to old location
               stockByLoc[oldLoc] = Number(stockByLoc[oldLoc] || 0) + oldQty
-              // Deduct newQty from new location
+              // 2. Deduct newQty from new location
               const newLocStock = Number(stockByLoc[newLoc] || 0)
               if (newLocStock < newQty) {
                 throw new Error(
@@ -1101,8 +1261,31 @@ export async function PATCH(req: NextRequest) {
               }
               stockByLoc[newLoc] = newLocStock - newQty
               currentStock -= (newQty - oldQty)
+
+              if (isIdol) {
+                // Restore sold pieces to old location
+                const oldLocPieces = updatedPiecesByLocMg[oldLoc] ? [...updatedPiecesByLocMg[oldLoc]] : []
+                const piecesToRestore = txPiecesMg.slice(0, oldQty)
+                oldLocPieces.push(...piecesToRestore)
+                updatedPiecesMg.push(...piecesToRestore)
+                updatedPiecesByLocMg[oldLoc] = oldLocPieces
+
+                // Deduct newQty pieces from new location
+                const newLocPieces = updatedPiecesByLocMg[newLoc] ? [...updatedPiecesByLocMg[newLoc]] : []
+                if (newLocPieces.length < newQty) {
+                  throw new Error(
+                    `Insufficient idol piece stock at destination location. Available: ${newLocPieces.length}, needed: ${newQty}`
+                  )
+                }
+                for (let i = 0; i < newQty; i++) {
+                  const removedMg = newLocPieces.shift()!
+                  const allIdx = updatedPiecesMg.indexOf(removedMg)
+                  if (allIdx !== -1) updatedPiecesMg.splice(allIdx, 1)
+                }
+                updatedPiecesByLocMg[newLoc] = newLocPieces
+              }
             }
-          } else if (currentTx.type === 'purchase') {
+          } else if (latestTx.type === 'purchase') {
             if (oldLoc === newLoc) {
               const diff = newQty - oldQty
               const locStock = Number(stockByLoc[oldLoc] || 0)
@@ -1113,33 +1296,96 @@ export async function PATCH(req: NextRequest) {
               }
               currentStock += diff
               stockByLoc[oldLoc] = locStock + diff
+
+              if (isIdol && diff !== 0) {
+                const locPieces = updatedPiecesByLocMg[oldLoc] ? [...updatedPiecesByLocMg[oldLoc]] : []
+                if (diff < 0) {
+                  // Reducing purchase: remove pieces from location
+                  const reduceCount = Math.abs(diff)
+                  for (let i = 0; i < reduceCount; i++) {
+                    const removedMg = locPieces.pop() ?? unitMg
+                    const allIdx = updatedPiecesMg.lastIndexOf(removedMg)
+                    if (allIdx !== -1) updatedPiecesMg.splice(allIdx, 1)
+                  }
+                } else {
+                  // Increasing purchase: add pieces to location
+                  const addedPieces = Array.isArray(body.pieceWeights)
+                    ? body.pieceWeights.slice(oldQty).map(gramsToMg)
+                    : Array(diff).fill(unitMg)
+                  locPieces.push(...addedPieces)
+                  updatedPiecesMg.push(...addedPieces)
+                }
+                updatedPiecesByLocMg[oldLoc] = locPieces
+              }
             } else {
               // Revert old purchase from old location
               const oldLocStock = Number(stockByLoc[oldLoc] || 0)
               if (oldLocStock < oldQty) {
                 throw new Error(
-                  `Cannot reassign location: ${currentTx.locationName || 'original store'} only has ${oldLocStock} units in stock`
+                  `Cannot reassign location: ${latestTx.locationName || 'original store'} only has ${oldLocStock} units in stock`
                 )
               }
               stockByLoc[oldLoc] = oldLocStock - oldQty
               // Add new purchase to new location
               stockByLoc[newLoc] = Number(stockByLoc[newLoc] || 0) + newQty
               currentStock += (newQty - oldQty)
+
+              if (isIdol) {
+                // Move pieces from oldLoc to newLoc
+                const oldLocPieces = updatedPiecesByLocMg[oldLoc] ? [...updatedPiecesByLocMg[oldLoc]] : []
+                const newLocPieces = updatedPiecesByLocMg[newLoc] ? [...updatedPiecesByLocMg[newLoc]] : []
+
+                const movedPieces: number[] = []
+                for (let i = 0; i < oldQty; i++) {
+                  const targetPiece = txPiecesMg[i] ?? unitMg
+                  const idx = oldLocPieces.indexOf(targetPiece)
+                  if (idx !== -1) {
+                    movedPieces.push(oldLocPieces.splice(idx, 1)[0])
+                  } else if (oldLocPieces.length > 0) {
+                    movedPieces.push(oldLocPieces.pop()!)
+                  }
+                }
+                while (movedPieces.length < newQty) {
+                  movedPieces.push(unitMg)
+                }
+                newLocPieces.push(...movedPieces.slice(0, newQty))
+
+                updatedPiecesByLocMg[oldLoc] = oldLocPieces
+                updatedPiecesByLocMg[newLoc] = newLocPieces
+              }
             }
           }
 
-          t.update(prodRef, {
+          const prodUpdates: Record<string, unknown> = {
             stock: Math.max(0, currentStock),
             stockByLocation: stockByLoc,
             updatedAt: new Date().toISOString()
-          })
+          }
+
+          if (isIdol) {
+            const updatedPiecesByLocGrams: Record<string, number[]> = {}
+            Object.entries(updatedPiecesByLocMg).forEach(([lId, list]) => {
+              updatedPiecesByLocGrams[lId] = list.map(mgToGrams)
+            })
+            const updatedPiecesGrams = updatedPiecesMg.map(mgToGrams)
+            const avgMg = updatedPiecesMg.length > 0 ? Math.round(updatedPiecesMg.reduce((a, b) => a + b, 0) / updatedPiecesMg.length) : 0
+
+            prodUpdates.pieceWeightsByLocation = updatedPiecesByLocGrams
+            prodUpdates.pieceWeightsByLocationMg = updatedPiecesByLocMg
+            prodUpdates.pieceWeights = updatedPiecesGrams
+            prodUpdates.pieceWeightsMg = updatedPiecesMg
+            prodUpdates.weight = mgToGrams(avgMg)
+            prodUpdates.weightMg = avgMg
+          }
+
+          t.update(prodRef, prodUpdates)
         }
       }
 
-      const finalPrice = price !== undefined ? Number(price) : currentTx.price
-      const finalTotal = finalPrice !== undefined ? finalPrice * newQty : (currentTx.totalAmount || 0)
-      const finalLocationName = locationName || (newLoc === oldLoc ? currentTx.locationName : newLoc)
-      const finalNotes = notes !== undefined ? String(notes).trim() : (currentTx.notes || '')
+      const finalPrice = price !== undefined ? Number(price) : latestTx.price
+      const finalTotal = finalPrice !== undefined ? finalPrice * newQty : (latestTx.totalAmount || 0)
+      const finalLocationName = locationName || (newLoc === oldLoc ? latestTx.locationName : newLoc)
+      const finalNotes = notes !== undefined ? String(notes).trim() : (latestTx.notes || '')
 
       const updatePayload: Record<string, unknown> = {
         quantity: newQty,
@@ -1164,7 +1410,7 @@ export async function PATCH(req: NextRequest) {
 
       t.update(txRef, updatePayload)
 
-      // Audit Log
+      // Audit Log (Never hardcode "Super Admin")
       const auditRef = adminDb.collection('audit_logs').doc()
       t.set(auditRef, {
         userId: caller.callerUid,
@@ -1173,20 +1419,20 @@ export async function PATCH(req: NextRequest) {
         action: 'transaction_modified',
         entityType: 'transaction',
         entityId: id,
-        entityName: `${currentTx.type.toUpperCase()}: ${currentTx.productName}`,
-        description: `Super Admin ${caller.callerName} updated ${currentTx.type} transaction #${id}. Qty: ${oldQty} -> ${newQty}, Price: ₹${currentTx.price || 0} -> ₹${finalPrice || 0}, Location: ${currentTx.locationName} -> ${finalLocationName}, Date: ${currentTx.date} -> ${targetDate}`,
+        entityName: `${latestTx.type.toUpperCase()}: ${latestTx.productName}`,
+        description: `${caller.callerName} updated ${latestTx.type} transaction #${id}. Qty: ${oldQty} -> ${newQty}, Price: ₹${latestTx.price || 0} -> ₹${finalPrice || 0}, Location: ${latestTx.locationName} -> ${finalLocationName}, Date: ${latestTx.date} -> ${targetDate}`,
         metadata: {
           transactionId: id,
-          type: currentTx.type,
+          type: latestTx.type,
           previous: {
             quantity: oldQty,
-            price: currentTx.price,
+            price: latestTx.price,
             locationId: oldLoc,
-            locationName: currentTx.locationName,
-            date: currentTx.date,
-            customerName: currentTx.customerName,
-            vendorName: currentTx.vendorName,
-            notes: currentTx.notes
+            locationName: latestTx.locationName,
+            date: latestTx.date,
+            customerName: latestTx.customerName,
+            vendorName: latestTx.vendorName,
+            notes: latestTx.notes
           },
           updated: {
             quantity: newQty,
@@ -1204,7 +1450,7 @@ export async function PATCH(req: NextRequest) {
       })
 
       return {
-        ...currentTx,
+        ...latestTx,
         ...updatePayload,
         id,
         quantity: newQty,

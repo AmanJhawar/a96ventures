@@ -308,9 +308,6 @@ export interface PurgedCrmStats {
 export async function purgeCrmDataServer(cutoffDate?: string): Promise<PurgedCrmStats> {
   let ordersCount = 0
   let visitsCount = 0
-  let customersCount = 0
-  let mobilesCount = 0
-  let pansCount = 0
   let countersCount = 0
 
   // 1. Purge orders on or before cutoff
@@ -347,48 +344,29 @@ export async function purgeCrmDataServer(cutoffDate?: string): Promise<PurgedCrm
     }
   }
 
-  // 3. Purge customers (and their private subcollections)
+  // 3. Reset customer transaction history and stats without erasing customer profiles or lookup indexes
   const customersSnap = await adminDb.collection('customers').get()
   if (!customersSnap.empty) {
-    customersCount = customersSnap.size
-    for (const cDoc of customersSnap.docs) {
-      const privSnap = await cDoc.ref.collection('private').get()
-      if (!privSnap.empty) {
-        const batch = adminDb.batch()
-        privSnap.docs.forEach((pd) => batch.delete(pd.ref))
-        await batch.commit()
-      }
-      await cDoc.ref.delete()
-    }
-  }
-
-  // 4. Purge customer_mobiles
-  const mobilesSnap = await adminDb.collection('customer_mobiles').get()
-  if (!mobilesSnap.empty) {
-    mobilesCount = mobilesSnap.size
     const chunkSize = 400
-    for (let i = 0; i < mobilesSnap.docs.length; i += chunkSize) {
-      const chunk = mobilesSnap.docs.slice(i, i + chunkSize)
+    for (let i = 0; i < customersSnap.docs.length; i += chunkSize) {
+      const chunk = customersSnap.docs.slice(i, i + chunkSize)
       const batch = adminDb.batch()
-      chunk.forEach((d) => batch.delete(d.ref))
+      chunk.forEach((cDoc) => {
+        batch.update(cDoc.ref, {
+          totalPurchases: 0,
+          purchaseCount: 0,
+          totalWeightPurchasedMg: 0,
+          lastPurchaseAt: null,
+          visitCount: 0,
+          lastVisitAt: null,
+          openFollowUps: 0
+        })
+      })
       await batch.commit()
     }
   }
 
-  // 5. Purge customer_pans
-  const pansSnap = await adminDb.collection('customer_pans').get()
-  if (!pansSnap.empty) {
-    pansCount = pansSnap.size
-    const chunkSize = 400
-    for (let i = 0; i < pansSnap.docs.length; i += chunkSize) {
-      const chunk = pansSnap.docs.slice(i, i + chunkSize)
-      const batch = adminDb.batch()
-      chunk.forEach((d) => batch.delete(d.ref))
-      await batch.commit()
-    }
-  }
-
-  // 6. Reset counters
+  // 4. Reset counters
   const countersSnap = await adminDb.collection('counters').get()
   if (!countersSnap.empty) {
     countersCount = countersSnap.size
@@ -400,9 +378,9 @@ export async function purgeCrmDataServer(cutoffDate?: string): Promise<PurgedCrm
   return {
     purgedOrders: ordersCount,
     purgedVisits: visitsCount,
-    purgedCustomers: customersCount,
-    purgedMobiles: mobilesCount,
-    purgedPans: pansCount,
+    purgedCustomers: 0, // Preserved customer database
+    purgedMobiles: 0,
+    purgedPans: 0,
     resetCounters: countersCount
   }
 }

@@ -19,7 +19,8 @@ export async function GET(
     }
 
     const { id } = await params
-    const result = await getCustomerByIdServer(authResult.caller, id)
+    const allowArchived = req.nextUrl.searchParams.get('allowArchived') === 'true'
+    const result = await getCustomerByIdServer(authResult.caller, id, { allowArchived })
     return NextResponse.json({ success: true, ...result })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed to fetch customer'
@@ -49,7 +50,9 @@ export async function PATCH(
         {
           error: err.message,
           field: err.field,
-          existingCustomerId: err.existingCustomerId
+          existingCustomerId: err.existingCustomerId,
+          existingCustomerName: err.existingCustomerName,
+          isArchived: err.isArchived
         },
         { status: 409 }
       )

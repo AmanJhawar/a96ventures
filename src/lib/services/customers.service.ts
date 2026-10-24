@@ -17,6 +17,8 @@ export interface GetCustomersParams {
   q?: string
   cursor?: string
   limit?: number
+  lastVisit?: string
+  hasFollowUp?: boolean
 }
 
 export interface GetCustomersResponse {
@@ -34,7 +36,7 @@ export interface CustomerDetailResponse {
 }
 
 /**
- * Fetches paginated customers with optional keyword/mobile search query.
+ * Fetches paginated customers with optional keyword/mobile search query, lastVisit, and hasFollowUp filters.
  */
 export async function getCustomers(params?: GetCustomersParams): Promise<GetCustomersResponse> {
   const headers = await getAuthHeaders()
@@ -42,6 +44,8 @@ export async function getCustomers(params?: GetCustomersParams): Promise<GetCust
   if (params?.q) search.set('q', params.q)
   if (params?.cursor) search.set('cursor', params.cursor)
   if (params?.limit) search.set('limit', String(params.limit))
+  if (params?.lastVisit && params.lastVisit !== 'all') search.set('lastVisit', params.lastVisit)
+  if (params?.hasFollowUp) search.set('hasFollowUp', 'true')
 
   const qs = search.toString()
   const res = await fetch(`/api/admin/customers${qs ? `?${qs}` : ''}`, { headers })
@@ -57,9 +61,15 @@ export async function getCustomers(params?: GetCustomersParams): Promise<GetCust
 /**
  * Fetches a single customer's full profile plus recent orders and visits.
  */
-export async function getCustomerById(id: string): Promise<CustomerDetailResponse> {
+export async function getCustomerById(
+  id: string,
+  options?: { allowArchived?: boolean }
+): Promise<CustomerDetailResponse> {
   const headers = await getAuthHeaders()
-  const res = await fetch(`/api/admin/customers/${id}`, { headers })
+  const url = options?.allowArchived
+    ? `/api/admin/customers/${id}?allowArchived=true`
+    : `/api/admin/customers/${id}`
+  const res = await fetch(url, { headers })
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -104,9 +114,13 @@ export async function createCustomer(data: {
     const errorObj = new Error(err.error || `Failed to create customer (${res.status})`) as Error & {
       field?: string
       existingCustomerId?: string
+      existingCustomerName?: string
+      isArchived?: boolean
     }
     errorObj.field = err.field
     errorObj.existingCustomerId = err.existingCustomerId
+    errorObj.existingCustomerName = err.existingCustomerName
+    errorObj.isArchived = err.isArchived
     throw errorObj
   }
 
@@ -120,13 +134,13 @@ export async function updateCustomer(
   id: string,
   data: {
     firstName?: string
-    middleName?: string
+    middleName?: string | null
     lastName?: string
     countryCode?: string
     mobile?: string
-    email?: string
-    address?: Record<string, unknown>
-    notes?: string
+    email?: string | null
+    address?: Record<string, unknown> | null
+    notes?: string | null
     source?: 'walk_in' | 'inquiry' | 'referral' | 'import'
   }
 ): Promise<{ success: boolean; customer: Customer }> {
@@ -142,9 +156,13 @@ export async function updateCustomer(
     const errorObj = new Error(err.error || `Failed to update customer (${res.status})`) as Error & {
       field?: string
       existingCustomerId?: string
+      existingCustomerName?: string
+      isArchived?: boolean
     }
     errorObj.field = err.field
     errorObj.existingCustomerId = err.existingCustomerId
+    errorObj.existingCustomerName = err.existingCustomerName
+    errorObj.isArchived = err.isArchived
     throw errorObj
   }
 
@@ -164,6 +182,34 @@ export async function archiveCustomer(id: string): Promise<{ success: boolean }>
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Failed to archive customer (${res.status})`)
+  }
+
+  return res.json()
+}
+
+/**
+ * Restores an archived customer profile and re-reserves their mobile number.
+ */
+export async function restoreCustomer(id: string): Promise<{ success: boolean; customer: Customer }> {
+  const headers = await getAuthHeaders()
+  const res = await fetch(`/api/admin/customers/${id}/restore`, {
+    method: 'POST',
+    headers
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    const errorObj = new Error(err.error || `Failed to restore customer (${res.status})`) as Error & {
+      field?: string
+      existingCustomerId?: string
+      existingCustomerName?: string
+      isArchived?: boolean
+    }
+    errorObj.field = err.field
+    errorObj.existingCustomerId = err.existingCustomerId
+    errorObj.existingCustomerName = err.existingCustomerName
+    errorObj.isArchived = err.isArchived
+    throw errorObj
   }
 
   return res.json()

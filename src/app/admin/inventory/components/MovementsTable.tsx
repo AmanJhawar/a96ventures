@@ -4,10 +4,11 @@ import React from 'react'
 import { Plus, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MovementSubtype } from './types'
+import { Transaction, UserPermissions } from '@/lib/types'
 
 interface MovementsTableProps {
-  filteredMovements: any[]
-  paginatedMovements: any[]
+  filteredMovements: Transaction[]
+  paginatedMovements: Transaction[]
   movementsPage: number
   totalMovementsPages: number
   pageSize: number
@@ -18,8 +19,8 @@ interface MovementsTableProps {
   canRecordMovement: boolean
   formatWeight: (w?: number) => string
   archivedSession: boolean
-  hasPermission: (module: any, action: any) => boolean
-  setDeleteTxTarget: (tx: any) => void
+  hasPermission: (module: keyof UserPermissions, action: string) => boolean
+  setDeleteTxTarget: (tx: Transaction | null) => void
 }
 
 function formatDateDisplay(rawDate: string): string {
@@ -189,7 +190,7 @@ export function MovementsTable({
                             </span>
                           )}
                         </div>
-                        {tx.price ? <div className="text-gray-500">Labor: ₹{tx.price.toLocaleString('en-IN')}</div> : null}
+                        {tx.price ? <div className="text-gray-500 font-mono tabular-nums">Labor: ₹{tx.price.toLocaleString('en-IN')}</div> : null}
                       </div>
                     )}
                     {tx.type === 'melt' && tx.recoveredWeight && (

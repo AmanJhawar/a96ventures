@@ -129,7 +129,7 @@ export const SALES_CASHIER_PERMISSIONS: UserPermissions = {
     viewPan: false,
     editPan: true
   },
-  visits: { view: true, add: true, edit: false, delete: false }
+  visits: { view: true, add: true, edit: true, delete: false }
 }
 
 export const VAULT_CUSTODIAN_PERMISSIONS: UserPermissions = {

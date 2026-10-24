@@ -81,8 +81,26 @@ export function buildSearchTerms(customer: CustomerSearchInput): string[] {
 /**
  * Normalises a client search query into a single search token
  * suitable for `where('searchTerms', 'array-contains', queryToken(q))` queries.
+ * Strips spaces, dashes, and leading +91 or 0 from numeric mobile queries.
  */
 export function queryToken(q: string | null | undefined): string {
   if (!q || typeof q !== 'string') return ''
-  return q.toLowerCase().trim()
+  const trimmed = q.trim()
+  if (!trimmed) return ''
+
+  // If query is numeric (digits with optional spaces, dashes, or a leading +)
+  if (/^\+?\d[\d\s-]*$/.test(trimmed)) {
+    let digits = trimmed.replace(/[\s-]+/g, '')
+    if (digits.startsWith('+91')) {
+      digits = digits.slice(3)
+    }
+    if (digits.startsWith('0')) {
+      digits = digits.replace(/^0+/, '')
+    }
+    if (digits) {
+      return digits
+    }
+  }
+
+  return trimmed.toLowerCase()
 }

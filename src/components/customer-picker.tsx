@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, UserCheck, UserPlus, UserX, X, ChevronDown, Loader2, Calendar } from 'lucide-react'
 import { Customer } from '@/lib/types'
@@ -30,6 +30,8 @@ function formatDateDisplay(rawDate?: string) {
   return rawDate
 }
 
+const emptySubscribe = () => () => {}
+
 export default function CustomerPicker({
   selectedCustomer,
   isWalkIn,
@@ -47,14 +49,10 @@ export default function CustomerPicker({
   const [results, setResults] = useState<Customer[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false)
 
   const dropdownRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // Close modal on Escape key
   useEffect(() => {
@@ -85,8 +83,8 @@ export default function CustomerPicker({
     const trimmed = query.trim()
     if (trimmed.length < 2) return
 
-    setIsLoading(true)
     const timer = setTimeout(async () => {
+      setIsLoading(true)
       try {
         const { customers } = await getCustomers({
           q: trimmed,

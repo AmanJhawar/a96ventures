@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase/auth'
+import { syncAuthClaims } from '@/lib/services/auth.service'
 import Link from 'next/link'
 import { LogOut, LayoutDashboard, Users, UserCheck, Briefcase, Bookmark, MessageSquare, Menu, X, ShoppingCart, Warehouse, MapPin, BarChart3, ShieldCheck, Lock, Shield } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
@@ -358,20 +359,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           // If the auth token doesn't have custom claims yet, sync with server
           if (!claims.role) {
-            try {
-              const syncRes = await fetch('/api/admin/auth/sync', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${tokenResult.token}`
-                }
-              })
-              if (syncRes.ok) {
-                tokenResult = await currentUser.getIdTokenResult(true)
-                claims = tokenResult.claims
-              }
-            } catch (syncErr) {
-              console.warn('Notice: Custom claims sync error:', syncErr)
+            const synced = await syncAuthClaims(tokenResult.token)
+            if (synced) {
+              tokenResult = await currentUser.getIdTokenResult(true)
+              claims = tokenResult.claims
             }
           }
 

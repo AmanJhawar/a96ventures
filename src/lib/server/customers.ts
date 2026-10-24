@@ -15,17 +15,27 @@ import {
 } from '@/lib/server/pan'
 import { buildSearchTerms, queryToken } from '@/lib/utils/customer-search'
 import { buildCSVContent } from '@/lib/utils/csv'
+import { getDaysAgoIST } from '@/lib/utils/date'
 import { z } from 'zod'
 
 export class ConflictError extends Error {
   field: 'mobile' | 'pan'
   existingCustomerId: string
+  existingCustomerName?: string
+  isArchived?: boolean
 
-  constructor(field: 'mobile' | 'pan', existingCustomerId: string) {
+  constructor(
+    field: 'mobile' | 'pan',
+    existingCustomerId: string,
+    existingCustomerName?: string,
+    isArchived?: boolean
+  ) {
     super(`A customer already exists with this ${field}`)
     this.name = 'ConflictError'
     this.field = field
     this.existingCustomerId = existingCustomerId
+    this.existingCustomerName = existingCustomerName
+    this.isArchived = isArchived
   }
 }
 
@@ -76,22 +86,26 @@ export const CreateCustomerSchema = z.object({
 
 export const UpdateCustomerSchema = z.object({
   firstName: z.string().trim().min(1).max(60).optional(),
-  middleName: z.string().trim().max(60).optional(),
+  middleName: z.union([z.string().trim().max(60), z.literal(''), z.null()]).optional(),
   lastName: z.string().trim().min(1).max(60).optional(),
   countryCode: z.string().trim().optional(),
   mobile: z.string().trim().optional(),
-  email: z.string().trim().email('Invalid email address').toLowerCase().optional().or(z.literal('')),
+  email: z.union([z.string().trim().email('Invalid email address').toLowerCase(), z.literal(''), z.null()]).optional(),
   address: z
-    .object({
-      line1: z.string().trim().optional(),
-      line2: z.string().trim().optional(),
-      city: z.string().trim().optional(),
-      state: z.string().trim().optional(),
-      pincode: z.string().trim().regex(/^\d{6}$/, 'PIN code must be 6 digits').optional().or(z.literal('')),
-      country: z.literal('India').default('India')
-    })
+    .union([
+      z.object({
+        line1: z.string().trim().optional(),
+        line2: z.string().trim().optional(),
+        city: z.string().trim().optional(),
+        state: z.string().trim().optional(),
+        pincode: z.string().trim().regex(/^\d{6}$/, 'PIN code must be 6 digits').optional().or(z.literal('')),
+        country: z.literal('India').default('India')
+      }),
+      z.literal(''),
+      z.null()
+    ])
     .optional(),
-  notes: z.string().trim().max(1000).optional(),
+  notes: z.union([z.string().trim().max(1000), z.literal(''), z.null()]).optional(),
   source: z.enum(['walk_in', 'inquiry', 'referral', 'import']).optional()
 })
 
@@ -158,8 +172,6 @@ export async function createCustomerServer(
   })
 
   const initialStats: CustomerStats = {
-    firstVisitAt: now,
-    lastVisitAt: now,
     visitCount: 0,
     orderCount: 0,
     lifetimeValuePaise: 0,
@@ -197,7 +209,14 @@ export async function createCustomerServer(
     const mobileIndexSnap = await t.get(mobileIndexRef)
     if (mobileIndexSnap.exists) {
       const existingCustomerId = mobileIndexSnap.data()?.customerId || ''
-      throw new ConflictError('mobile', existingCustomerId)
+      const existingCustomerSnap = await t.get(adminDb.collection('customers').doc(existingCustomerId))
+      const existingCustomer = existingCustomerSnap.data() as Customer | undefined
+      throw new ConflictError(
+        'mobile',
+        existingCustomerId,
+        existingCustomer?.displayName,
+        Boolean(existingCustomer?.isArchived)
+      )
     }
 
     // Check PAN uniqueness if provided
@@ -207,7 +226,14 @@ export async function createCustomerServer(
       const panIndexSnap = await t.get(panIndexRef)
       if (panIndexSnap.exists) {
         const existingCustomerId = panIndexSnap.data()?.customerId || ''
-        throw new ConflictError('pan', existingCustomerId)
+        const existingCustomerSnap = await t.get(adminDb.collection('customers').doc(existingCustomerId))
+        const existingCustomer = existingCustomerSnap.data() as Customer | undefined
+        throw new ConflictError(
+          'pan',
+          existingCustomerId,
+          existingCustomer?.displayName,
+          Boolean(existingCustomer?.isArchived)
+        )
       }
     }
 
@@ -258,9 +284,50 @@ export async function createCustomerServer(
   return customerDocData as unknown as Customer
 }
 
+export interface GetCustomersServerOptions {
+  q?: string
+  cursor?: string
+  limit?: number
+  lastVisit?: '30' | '90' | '365' | 'never' | 'all' | string
+  hasFollowUp?: boolean
+}
+
+function matchesCustomerFilters(
+  c: Customer,
+  options?: { lastVisit?: string; hasFollowUp?: boolean }
+): boolean {
+  if (!options) return true
+
+  if (options.hasFollowUp && !(c.stats?.openFollowUps && c.stats.openFollowUps > 0)) {
+    return false
+  }
+
+  if (options.lastVisit && options.lastVisit !== 'all') {
+    const rawLast = c.stats?.lastVisitAt
+    const lastVisitAt = rawLast ? rawLast.slice(0, 10) : undefined
+
+    if (options.lastVisit === 'never') {
+      if (lastVisitAt || (c.stats?.visitCount && c.stats.visitCount > 0)) {
+        return false
+      }
+    } else {
+      if (!lastVisitAt) return false
+      const days = Number(options.lastVisit)
+      if (!isNaN(days) && days > 0) {
+        const cutoff = getDaysAgoIST(days)
+        if (lastVisitAt < cutoff) {
+          return false
+        }
+      }
+    }
+  }
+
+  return true
+}
+
 export async function getCustomersServer(
   caller: AuthenticatedCaller,
-  options?: { q?: string; cursor?: string; limit?: number }
+  options?: GetCustomersServerOptions
 ): Promise<{ customers: Customer[]; nextCursor: string | null; hasMore: boolean }> {
   if (!hasModulePermission(caller, 'customers', 'view')) {
     throw new Error('Forbidden: Insufficient permissions to view customers')
@@ -269,6 +336,8 @@ export async function getCustomersServer(
   const limitCount = Math.min(Math.max(1, options?.limit || 25), 100)
   const q = options?.q ? queryToken(options.q) : ''
   const cursor = options?.cursor
+  const lastVisit = options?.lastVisit
+  const hasFollowUp = options?.hasFollowUp
 
   let query: FirebaseFirestore.Query = adminDb.collection('customers')
 
@@ -276,11 +345,22 @@ export async function getCustomersServer(
     query = query
       .where('searchTerms', 'array-contains', q)
       .where('isArchived', '==', false)
-      .orderBy('stats.lastVisitAt', 'desc')
   } else {
-    query = query
-      .where('isArchived', '==', false)
-      .orderBy('stats.lastVisitAt', 'desc')
+    query = query.where('isArchived', '==', false)
+  }
+
+  if (hasFollowUp && (!lastVisit || lastVisit === 'all')) {
+    query = query.where('stats.openFollowUps', '>', 0)
+  } else if (lastVisit === 'never' && !hasFollowUp) {
+    query = query.where('stats.visitCount', '==', 0)
+  } else if (lastVisit && lastVisit !== 'all' && lastVisit !== 'never' && !hasFollowUp) {
+    const days = Number(lastVisit)
+    if (!isNaN(days) && days > 0) {
+      const cutoff = getDaysAgoIST(days)
+      query = query.where('stats.lastVisitAt', '>=', cutoff).orderBy('stats.lastVisitAt', 'desc')
+    }
+  } else {
+    query = query.orderBy('stats.lastVisitAt', 'desc')
   }
 
   if (cursor) {
@@ -294,50 +374,53 @@ export async function getCustomersServer(
   let snap: FirebaseFirestore.QuerySnapshot
   try {
     snap = await query.get()
-  } catch (err: unknown) {
-    const errorObj = err as { code?: number; message?: string }
-    if (
-      errorObj?.code === 9 ||
-      errorObj?.message?.includes('requires an index') ||
-      errorObj?.message?.includes('FAILED_PRECONDITION')
-    ) {
-      // Graceful fallback while index is building in Firestore
-      let fallbackQuery: FirebaseFirestore.Query = adminDb.collection('customers')
-      if (q) {
-        fallbackQuery = fallbackQuery.where('searchTerms', 'array-contains', q)
-      } else {
-        fallbackQuery = fallbackQuery.where('isArchived', '==', false)
-      }
-      const rawSnap = await fallbackQuery.limit(Math.max(limitCount * 4, 100)).get()
-      const filteredDocs = rawSnap.docs
-        .filter((d) => !d.data().isArchived)
-        .sort((a, b) => {
-          const aTime = a.data().stats?.lastVisitAt || a.data().createdAt || ''
-          const bTime = b.data().stats?.lastVisitAt || b.data().createdAt || ''
-          return bTime.localeCompare(aTime)
-        })
+    const allMatches = snap.docs
+      .map((d) => d.data() as Customer)
+      .filter((c) => matchesCustomerFilters(c, { lastVisit, hasFollowUp }))
 
-      const hasMore = filteredDocs.length > limitCount
-      const docs = filteredDocs.slice(0, limitCount)
-      const customers = docs.map((d) => d.data() as Customer)
-      const nextCursor = hasMore && docs.length > 0 ? docs[docs.length - 1].id : null
+    const hasMore = snap.docs.length > limitCount || allMatches.length > limitCount
+    const docs = allMatches.slice(0, limitCount)
+    const nextCursor = hasMore && snap.docs.length > 0 ? snap.docs[Math.min(limitCount - 1, snap.docs.length - 1)].id : null
 
-      return { customers, nextCursor, hasMore }
+    return { customers: docs, nextCursor, hasMore }
+  } catch (_err: unknown) {
+    // Graceful fallback while index is building or for multi-inequality queries
+    let fallbackQuery: FirebaseFirestore.Query = adminDb.collection('customers')
+    if (q) {
+      fallbackQuery = fallbackQuery.where('searchTerms', 'array-contains', q).where('isArchived', '==', false)
+    } else {
+      fallbackQuery = fallbackQuery.where('isArchived', '==', false)
     }
-    throw err
+
+    if (cursor) {
+      const cursorSnap = await adminDb.collection('customers').doc(cursor).get()
+      if (cursorSnap.exists) {
+        fallbackQuery = fallbackQuery.startAfter(cursorSnap)
+      }
+    }
+
+    const rawSnap = await fallbackQuery.limit(Math.max(limitCount * 4, 100)).get()
+    const filteredDocs = rawSnap.docs
+      .filter((d) => !d.data().isArchived && matchesCustomerFilters(d.data() as Customer, { lastVisit, hasFollowUp }))
+      .sort((a, b) => {
+        const aTime = a.data().stats?.lastVisitAt || a.data().createdAt || ''
+        const bTime = b.data().stats?.lastVisitAt || b.data().createdAt || ''
+        return bTime.localeCompare(aTime)
+      })
+
+    const hasMore = filteredDocs.length > limitCount || rawSnap.docs.length >= Math.max(limitCount * 4, 100)
+    const docs = filteredDocs.slice(0, limitCount)
+    const customers = docs.map((d) => d.data() as Customer)
+    const nextCursor = hasMore && rawSnap.docs.length > 0 ? rawSnap.docs[Math.min(limitCount - 1, rawSnap.docs.length - 1)].id : null
+
+    return { customers, nextCursor, hasMore }
   }
-
-  const hasMore = snap.docs.length > limitCount
-  const docs = snap.docs.slice(0, limitCount)
-  const customers = docs.map((d) => d.data() as Customer)
-  const nextCursor = hasMore && docs.length > 0 ? docs[docs.length - 1].id : null
-
-  return { customers, nextCursor, hasMore }
 }
 
 export async function getCustomerByIdServer(
   caller: AuthenticatedCaller,
-  customerId: string
+  customerId: string,
+  options?: { allowArchived?: boolean }
 ): Promise<{ customer: Customer; orders: Record<string, unknown>[]; visits: Record<string, unknown>[] }> {
   if (!hasModulePermission(caller, 'customers', 'view')) {
     throw new Error('Forbidden: Insufficient permissions to view customer details')
@@ -349,7 +432,7 @@ export async function getCustomerByIdServer(
   }
 
   const customer = customerSnap.data() as Customer
-  if (customer.isArchived) {
+  if (customer.isArchived && !options?.allowArchived) {
     throw new Error('Customer profile has been archived')
   }
 
@@ -413,15 +496,27 @@ export async function updateCustomerServer(
         const newMobileRef = adminDb.collection('customer_mobiles').doc(normalisedMobile.e164)
         const newMobileSnap = await t.get(newMobileRef)
         if (newMobileSnap.exists && newMobileSnap.data()?.customerId !== customerId) {
-          throw new ConflictError('mobile', newMobileSnap.data()?.customerId || '')
+          const conflictingId = newMobileSnap.data()?.customerId || ''
+          const conflictingSnap = await t.get(adminDb.collection('customers').doc(conflictingId))
+          const conflictingCust = conflictingSnap.data() as Customer | undefined
+          throw new ConflictError(
+            'mobile',
+            conflictingId,
+            conflictingCust?.displayName,
+            Boolean(conflictingCust?.isArchived)
+          )
         }
         mobileSwapped = true
       }
     }
 
-    const firstName = input.firstName !== undefined ? input.firstName : current.firstName
-    const middleName = input.middleName !== undefined ? input.middleName : current.middleName
-    const lastName = input.lastName !== undefined ? input.lastName : current.lastName
+    const middleNameCleared = input.middleName === null || (typeof input.middleName === 'string' && input.middleName.trim() === '')
+    const middleName = middleNameCleared
+      ? undefined
+      : (input.middleName ? input.middleName.trim() : current.middleName)
+
+    const firstName = input.firstName !== undefined ? input.firstName.trim() : current.firstName
+    const lastName = input.lastName !== undefined ? input.lastName.trim() : current.lastName
     const displayName = formatDisplayName(firstName, middleName, lastName)
 
     const searchTerms = buildSearchTerms({
@@ -430,6 +525,18 @@ export async function updateCustomerServer(
       lastName,
       mobile: normalisedMobile
     })
+
+    const emailCleared = input.email === null || (typeof input.email === 'string' && input.email.trim() === '')
+    const notesCleared = input.notes === null || (typeof input.notes === 'string' && input.notes.trim() === '')
+
+    let addressCleared = input.address === null || input.address === ''
+    if (!addressCleared && input.address && typeof input.address === 'object') {
+      const a = input.address as Record<string, string | undefined>
+      const hasContent = Boolean(
+        a.line1?.trim() || a.line2?.trim() || a.city?.trim() || a.state?.trim() || a.pincode?.trim()
+      )
+      if (!hasContent) addressCleared = true
+    }
 
     // Execute writes
     if (mobileSwapped) {
@@ -442,9 +549,8 @@ export async function updateCustomerServer(
       })
     }
 
-    const updates: Partial<Customer> = {
+    const updates: Record<string, unknown> = {
       firstName,
-      middleName: middleName || undefined,
       lastName,
       displayName,
       mobile: normalisedMobile,
@@ -453,13 +559,50 @@ export async function updateCustomerServer(
       updatedBy: caller.callerUid
     }
 
-    if (input.email !== undefined) updates.email = input.email || undefined
-    if (input.address !== undefined) updates.address = (input.address as CustomerAddress) || undefined
-    if (input.notes !== undefined) updates.notes = input.notes || undefined
+    if (middleNameCleared) {
+      updates.middleName = FieldValue.delete()
+    } else if (middleName !== undefined) {
+      updates.middleName = middleName
+    }
+
+    if (emailCleared) {
+      updates.email = FieldValue.delete()
+    } else if (input.email !== undefined && input.email) {
+      updates.email = input.email.trim()
+    }
+
+    if (notesCleared) {
+      updates.notes = FieldValue.delete()
+    } else if (input.notes !== undefined && input.notes) {
+      updates.notes = input.notes.trim()
+    }
+
+    if (addressCleared) {
+      updates.address = FieldValue.delete()
+    } else if (input.address !== undefined && input.address) {
+      updates.address = input.address as CustomerAddress
+    }
+
     if (input.source !== undefined) updates.source = input.source
 
     t.update(customerRef, updates)
-    return { ...current, ...updates }
+
+    const returnedCustomer: Customer = {
+      ...current,
+      firstName,
+      lastName,
+      displayName,
+      mobile: normalisedMobile,
+      searchTerms,
+      updatedAt: now,
+      updatedBy: caller.callerUid,
+      middleName: middleNameCleared ? undefined : (middleName !== undefined ? middleName : current.middleName),
+      email: emailCleared ? undefined : (input.email !== undefined && input.email ? input.email.trim() : current.email),
+      notes: notesCleared ? undefined : (input.notes !== undefined && input.notes ? input.notes.trim() : current.notes),
+      address: addressCleared ? undefined : (input.address !== undefined && input.address ? (input.address as CustomerAddress) : current.address),
+      source: input.source !== undefined ? input.source : current.source
+    }
+    return returnedCustomer
   })
 
   // Audit update
@@ -487,18 +630,28 @@ export async function archiveCustomerServer(
     throw new Error('Forbidden: Insufficient permissions to archive customers')
   }
 
-  const customerRef = adminDb.collection('customers').doc(customerId)
-  const snap = await customerRef.get()
-  if (!snap.exists) {
-    throw new Error('Customer not found')
-  }
-  const customer = snap.data() as Customer
-
   const now = new Date().toISOString()
-  await customerRef.update({
-    isArchived: true,
-    updatedAt: now,
-    updatedBy: caller.callerUid
+  let displayName = ''
+
+  await adminDb.runTransaction(async (t) => {
+    const customerRef = adminDb.collection('customers').doc(customerId)
+    const snap = await t.get(customerRef)
+    if (!snap.exists) {
+      throw new Error('Customer not found')
+    }
+    const customer = snap.data() as Customer
+    displayName = customer.displayName
+
+    t.update(customerRef, {
+      isArchived: true,
+      updatedAt: now,
+      updatedBy: caller.callerUid
+    })
+
+    // Release the customer_mobiles reservation when a customer is archived
+    if (customer.mobile?.e164) {
+      t.delete(adminDb.collection('customer_mobiles').doc(customer.mobile.e164))
+    }
   })
 
   await adminDb.collection('audit_logs').add({
@@ -508,13 +661,91 @@ export async function archiveCustomerServer(
     action: 'delete',
     entityType: 'customer',
     entityId: customerId,
-    entityName: customer.displayName,
-    description: `Archived customer profile for ${customer.displayName}`,
+    entityName: displayName,
+    description: `Archived customer profile for ${displayName}`,
     timestamp: FieldValue.serverTimestamp(),
     createdAt: FieldValue.serverTimestamp()
   })
 
   return { success: true }
+}
+
+export async function restoreCustomerServer(
+  caller: AuthenticatedCaller,
+  customerId: string
+): Promise<{ success: true; customer: Customer }> {
+  if (!hasModulePermission(caller, 'customers', 'delete')) {
+    throw new Error('Forbidden: Insufficient permissions to restore customers')
+  }
+
+  const now = new Date().toISOString()
+  let restoredCustomer: Customer
+
+  await adminDb.runTransaction(async (t) => {
+    const customerRef = adminDb.collection('customers').doc(customerId)
+    const snap = await t.get(customerRef)
+    if (!snap.exists) {
+      throw new Error('Customer not found')
+    }
+    const current = snap.data() as Customer
+    if (!current.isArchived) {
+      restoredCustomer = current
+      return
+    }
+
+    const mobileE164 = current.mobile?.e164
+    if (mobileE164) {
+      const mobileRef = adminDb.collection('customer_mobiles').doc(mobileE164)
+      const mobileSnap = await t.get(mobileRef)
+      if (mobileSnap.exists && mobileSnap.data()?.customerId !== customerId) {
+        const conflictingCustomerId = mobileSnap.data()?.customerId || ''
+        const conflictingCustomerSnap = await t.get(adminDb.collection('customers').doc(conflictingCustomerId))
+        const conflictingCustomer = conflictingCustomerSnap.data() as Customer | undefined
+        throw new ConflictError(
+          'mobile',
+          conflictingCustomerId,
+          conflictingCustomer?.displayName,
+          Boolean(conflictingCustomer?.isArchived)
+        )
+      }
+
+      // Re-reserve the mobile number
+      t.set(mobileRef, {
+        customerId,
+        e164: mobileE164,
+        updatedAt: now,
+        updatedBy: caller.callerUid
+      })
+    }
+
+    t.update(customerRef, {
+      isArchived: false,
+      updatedAt: now,
+      updatedBy: caller.callerUid
+    })
+
+    restoredCustomer = {
+      ...current,
+      isArchived: false,
+      updatedAt: now,
+      updatedBy: caller.callerUid
+    }
+  })
+
+  await adminDb.collection('audit_logs').add({
+    userId: caller.callerUid,
+    userName: caller.callerName,
+    userEmail: caller.callerEmail,
+    action: 'restore',
+    entityType: 'customer',
+    entityId: customerId,
+    entityName: restoredCustomer!.displayName,
+    description: `Restored customer profile for ${restoredCustomer!.displayName}`,
+    timestamp: FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp()
+  })
+
+  return { success: true, customer: restoredCustomer! }
 }
 
 export async function updateCustomerPanServer(
@@ -555,7 +786,15 @@ export async function updateCustomerPanServer(
     const newPanIndexRef = adminDb.collection('customer_pans').doc(newPanHmac)
     const newPanIndexSnap = await t.get(newPanIndexRef)
     if (newPanIndexSnap.exists && newPanIndexSnap.data()?.customerId !== customerId) {
-      throw new ConflictError('pan', newPanIndexSnap.data()?.customerId || '')
+      const conflictingId = newPanIndexSnap.data()?.customerId || ''
+      const conflictingSnap = await t.get(adminDb.collection('customers').doc(conflictingId))
+      const conflictingCust = conflictingSnap.data() as Customer | undefined
+      throw new ConflictError(
+        'pan',
+        conflictingId,
+        conflictingCust?.displayName,
+        Boolean(conflictingCust?.isArchived)
+      )
     }
 
     // Release old PAN index if swapping

@@ -94,8 +94,9 @@ export async function addLocation(data: { name: string; description?: string }):
     if (res.status === 400) {
       throw new Error(await getErrorMessage(res, 'Failed to add location'));
     }
-  } catch (apiErr: any) {
-    if (apiErr?.message && !apiErr.message.includes('(500)') && !apiErr.message.includes('(502)') && !apiErr.message.includes('fetch')) {
+  } catch (apiErr: unknown) {
+    const message = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    if (message && !message.includes('(500)') && !message.includes('(502)') && !message.includes('fetch')) {
       throw apiErr;
     }
     console.warn('Add location API failed, falling back to direct Firestore:', apiErr);
@@ -126,8 +127,9 @@ export async function updateLocation(id: string, data: { name: string; descripti
     if (res.status === 400) {
       throw new Error(await getErrorMessage(res, 'Failed to update location'));
     }
-  } catch (apiErr: any) {
-    if (apiErr?.message && !apiErr.message.includes('(500)') && !apiErr.message.includes('(502)') && !apiErr.message.includes('fetch')) {
+  } catch (apiErr: unknown) {
+    const message = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    if (message && !message.includes('(500)') && !message.includes('(502)') && !message.includes('fetch')) {
       throw apiErr;
     }
     console.warn('Update location API failed, falling back to direct Firestore:', apiErr);
@@ -154,8 +156,9 @@ export async function deleteLocation(id: string): Promise<void> {
     if (res.status === 400) {
       throw new Error(await getErrorMessage(res, 'Failed to delete location'));
     }
-  } catch (apiErr: any) {
-    if (apiErr?.message && !apiErr.message.includes('(500)') && !apiErr.message.includes('(502)') && !apiErr.message.includes('fetch')) {
+  } catch (apiErr: unknown) {
+    const message = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    if (message && !message.includes('(500)') && !message.includes('(502)') && !message.includes('fetch')) {
       throw apiErr;
     }
     console.warn('Delete location API failed, falling back to direct Firestore:', apiErr);
@@ -235,8 +238,8 @@ function cleanUndefined<T>(value: T): T {
       .map((item) => cleanUndefined(item)) as unknown as T;
   }
   if (typeof value === 'object' && !(value instanceof Date)) {
-    const res: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value as Record<string, any>)) {
+    const res: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       if (v !== undefined) {
         res[k] = cleanUndefined(v);
       }
@@ -345,8 +348,9 @@ export async function addProduct(data: {
     if (res.status === 400) {
       throw new Error(await getErrorMessage(res, 'Failed to add product'));
     }
-  } catch (apiErr: any) {
-    if (apiErr?.message && !apiErr.message.includes('(500)') && !apiErr.message.includes('(502)') && !apiErr.message.includes('fetch')) {
+  } catch (apiErr: unknown) {
+    const message = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    if (message && !message.includes('(500)') && !message.includes('(502)') && !message.includes('fetch')) {
       throw apiErr;
     }
     console.warn('Add product API failed, falling back to direct Firestore:', apiErr);
@@ -403,8 +407,9 @@ export async function updateProduct(id: string, data: {
     if (res.status === 400) {
       throw new Error(await getErrorMessage(res, 'Failed to update product'));
     }
-  } catch (apiErr: any) {
-    if (apiErr?.message && !apiErr.message.includes('(500)') && !apiErr.message.includes('(502)') && !apiErr.message.includes('fetch')) {
+  } catch (apiErr: unknown) {
+    const message = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    if (message && !message.includes('(500)') && !message.includes('(502)') && !message.includes('fetch')) {
       throw apiErr;
     }
     console.warn('Update product API failed, falling back to direct Firestore:', apiErr);
@@ -441,8 +446,9 @@ export async function deleteProduct(id: string): Promise<void> {
     if (res.status === 400) {
       throw new Error(await getErrorMessage(res, 'Failed to delete product'));
     }
-  } catch (apiErr: any) {
-    if (apiErr?.message && !apiErr.message.includes('(500)') && !apiErr.message.includes('(502)') && !apiErr.message.includes('fetch')) {
+  } catch (apiErr: unknown) {
+    const message = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    if (message && !message.includes('(500)') && !message.includes('(502)') && !message.includes('fetch')) {
       throw apiErr;
     }
     console.warn('Delete product API failed, falling back to direct Firestore:', apiErr);
@@ -750,8 +756,9 @@ export async function recordTransaction(params: RecordTransactionParams): Promis
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Failed to record transaction (${res.status})`);
     }
-  } catch (apiErr: any) {
-    if (apiErr?.message && !apiErr.message.includes('(500)') && !apiErr.message.includes('(502)') && !apiErr.message.includes('fetch')) {
+  } catch (apiErr: unknown) {
+    const message = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    if (message && !message.includes('(500)') && !message.includes('(502)') && !message.includes('fetch')) {
       throw apiErr;
     }
     console.warn('Record transaction API failed, falling back to direct Firestore:', apiErr);
@@ -837,8 +844,9 @@ export async function reverseTransaction(tx: Transaction): Promise<{ reversingTr
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Failed to reverse transaction (${res.status})`);
     }
-  } catch (apiErr: any) {
-    if (apiErr?.message && !apiErr.message.includes('(500)') && !apiErr.message.includes('(502)') && !apiErr.message.includes('fetch')) {
+  } catch (apiErr: unknown) {
+    const message = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    if (message && !message.includes('(500)') && !message.includes('(502)') && !message.includes('fetch')) {
       throw apiErr;
     }
     console.warn('Reverse transaction API failed, falling back to direct Firestore:', apiErr);
@@ -999,4 +1007,30 @@ export async function downloadArchiveById(archiveId: string, filename?: string):
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Verifies archive integrity with the server.
+ */
+export async function verifyArchiveWithServer(payload: {
+  checksum: string;
+  signature?: string;
+  archiveId?: string;
+}): Promise<{ status: 'verified' | 'tampered' | 'unverified'; message?: string }> {
+  const headers = await getAuthHeaders().catch(() => ({}));
+  const res = await fetch('/api/admin/transactions/archive/verify', {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to verify archive with server (${res.status})`);
+  }
+
+  return res.json();
 }

@@ -1,12 +1,15 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Calendar, Clock, MessageSquare, AlertCircle, Loader2 } from 'lucide-react'
+import { X, Calendar, Clock, MessageSquare, AlertCircle, Loader2, MapPin } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { EASE_OUT } from '@/components/motion-transitions'
-import { Visit, VisitKind } from '@/lib/types'
+import { Visit, Location } from '@/lib/types'
+import { logVisit, CreateVisitInput } from '@/lib/services/visits.service'
+import { getLocations } from '@/lib/services/inventory.service'
 import { getTodayIST } from '@/lib/utils/date'
 import CustomDatePicker from '@/components/custom-date-picker'
+import { usePermissions } from '@/lib/context/PermissionsContext'
 import { toast } from 'sonner'
 
 export interface LogVisitSheetProps {
@@ -17,13 +20,11 @@ export interface LogVisitSheetProps {
   onSuccess: (visit: Visit) => void
 }
 
-const VISIT_KINDS: { kind: VisitKind; label: string; description: string }[] = [
+const VISIT_KINDS: { kind: CreateVisitInput['kind']; label: string; description: string }[] = [
   { kind: 'walk_in', label: 'Walk-in Visit', description: 'General in-store visit or consultation' },
   { kind: 'inquiry', label: 'Inquiry', description: 'Product, rate, or catalog query' },
-  { kind: 'purchase', label: 'Store Purchase', description: 'In-store purchase interaction' },
-  { kind: 'repair', label: 'Service & Repair', description: 'Cleaning, sizing, testing, maintenance' },
   { kind: 'follow_up', label: 'Follow-up', description: 'Scheduled follow-up contact' },
-  { kind: 'return', label: 'Return / Exchange', description: 'Item return or exchange discussion' }
+  { kind: 'repair', label: 'Service & Repair', description: 'Cleaning, sizing, testing, maintenance' }
 ]
 
 export default function LogVisitSheet({
@@ -33,8 +34,13 @@ export default function LogVisitSheet({
   onClose,
   onSuccess
 }: LogVisitSheetProps) {
-  const [kind, setKind] = useState<VisitKind | ''>('')
-  const [date, setDate] = useState('')
+  const { adminUser } = usePermissions()
+  const userAssignedLocationId = adminUser?.assignedLocationId
+
+  const [locations, setLocations] = useState<Location[]>([])
+  const [selectedLocationId, setSelectedLocationId] = useState('')
+  const [kind, setKind] = useState<CreateVisitInput['kind'] | ''>('')
+  const [date, setDate] = useState(() => getTodayIST())
   const [notes, setNotes] = useState('')
   const [hasFollowUp, setHasFollowUp] = useState(false)
   const [followUpDate, setFollowUpDate] = useState('')
@@ -44,9 +50,22 @@ export default function LogVisitSheet({
 
   const sheetRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    if (isOpen && !userAssignedLocationId) {
+      getLocations()
+        .then((locs) => {
+          setLocations(locs)
+          if (locs.length > 0 && !selectedLocationId) {
+            setSelectedLocationId(locs[0].id)
+          }
+        })
+        .catch((err) => console.error('Failed to load locations', err))
+    }
+  }, [isOpen, userAssignedLocationId, selectedLocationId])
+
   const resetForm = useCallback(() => {
     setKind('')
-    setDate('')
+    setDate(getTodayIST())
     setNotes('')
     setHasFollowUp(false)
     setFollowUpDate('')
@@ -73,6 +92,12 @@ export default function LogVisitSheet({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    const effectiveLocationId = userAssignedLocationId || selectedLocationId
+    if (!effectiveLocationId) {
+      setError('Please select a store location')
+      return
+    }
     if (!kind) {
       setError('Please select an interaction type')
       return
@@ -94,25 +119,21 @@ export default function LogVisitSheet({
     setError(null)
 
     try {
-      const payload = {
+      let mergedNote = notes.trim()
+      if (hasFollowUp && followUpNote.trim()) {
+        mergedNote = `${mergedNote}\nFollow-up: ${followUpNote.trim()}`
+      }
+
+      const payload: CreateVisitInput = {
         customerId,
+        locationId: effectiveLocationId,
         kind,
-        date,
-        notes: notes.trim(),
-        followUpDate: hasFollowUp && followUpDate ? followUpDate : undefined,
-        followUpNote: hasFollowUp && followUpNote.trim() ? followUpNote.trim() : undefined
+        at: date,
+        note: mergedNote,
+        followUpOn: hasFollowUp && followUpDate ? followUpDate : undefined
       }
 
-      const res = await fetch('/api/admin/visits', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to log visit')
-      }
+      const data = await logVisit(payload)
 
       toast.success('Visit logged successfully')
       resetForm()
@@ -174,6 +195,28 @@ export default function LogVisitSheet({
                   <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-xs font-medium text-red-700">
                     <AlertCircle size={14} className="shrink-0 text-red-500" />
                     <span>{error}</span>
+                  </div>
+                )}
+
+                {/* Location Picker (if user is not assigned to a specific store) */}
+                {!userAssignedLocationId && (
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5 flex items-center gap-1.5">
+                      <MapPin size={13} className="text-gray-500" />
+                      <span>Store Location <span className="text-red-500">*</span></span>
+                    </label>
+                    <select
+                      value={selectedLocationId}
+                      onChange={(e) => setSelectedLocationId(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    >
+                      <option value="">Select store location</option>
+                      {locations.map((loc) => (
+                        <option key={loc.id} value={loc.id}>
+                          {loc.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
 

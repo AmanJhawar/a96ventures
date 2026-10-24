@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useState, useCallback, useMemo } from 'react'
-import { AlertCircle, Loader2, ArrowRight } from 'lucide-react'
+import { AlertCircle, Loader2, ArrowRight, RotateCcw } from 'lucide-react'
+import { toast } from 'sonner'
 import { usePermissions } from '@/lib/context/PermissionsContext'
-import { createCustomer, getCustomerById, updateCustomer, updateCustomerPan } from '@/lib/services/customers.service'
+import { createCustomer, getCustomerById, updateCustomer, updateCustomerPan, restoreCustomer } from '@/lib/services/customers.service'
 import { normaliseMobile } from '@/lib/utils/phone'
 import { isValidPan } from '@/lib/utils/pan'
 import { Customer } from '@/lib/types'
@@ -109,6 +110,7 @@ export default function CustomerForm({
   const [state, setState] = useState<string>(initialCustomer?.address?.state || '')
   const [pincode, setPincode] = useState(initialCustomer?.address?.pincode || '')
   const [pan, setPan] = useState(initialCustomer?.pan?.masked || initialValues?.pan || '')
+  const [notes, setNotes] = useState(initialCustomer?.notes || initialValues?.notes || '')
 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -116,6 +118,7 @@ export default function CustomerForm({
     field: 'mobile' | 'pan'
     existingCustomerId: string
     customerName?: string
+    isArchived?: boolean
   } | null>(null)
 
   const validateField = useCallback(
@@ -179,6 +182,24 @@ export default function CustomerForm({
     }
   }
 
+  const handleRestoreCustomer = async () => {
+    if (!conflictState?.existingCustomerId) return
+    setIsSubmitting(true)
+    try {
+      const res = await restoreCustomer(conflictState.existingCustomerId)
+      toast.success('Customer restored successfully')
+      onSuccess(res.customer)
+    } catch (err: unknown) {
+      console.error('Failed to restore customer:', err)
+      setErrors((prev) => ({
+        ...prev,
+        submit: err instanceof Error ? err.message : 'Failed to restore customer'
+      }))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) => {
     if (e) {
       e.preventDefault()
@@ -209,26 +230,27 @@ export default function CustomerForm({
     setIsSubmitting(true)
     try {
       if (initialCustomer) {
-        const address =
-          line1.trim() || city.trim() || pincode.trim()
-            ? {
-                line1: line1.trim() || undefined,
-                line2: line2.trim() || undefined,
-                city: city.trim() || undefined,
-                state: state || undefined,
-                pincode: pincode.trim() || undefined,
-                country: 'India' as const
-              }
-            : undefined
+        const hasAddress = Boolean(line1.trim() || line2.trim() || city.trim() || state || pincode.trim())
+        const address = hasAddress
+          ? {
+              line1: line1.trim() || undefined,
+              line2: line2.trim() || undefined,
+              city: city.trim() || undefined,
+              state: state || undefined,
+              pincode: pincode.trim() || undefined,
+              country: 'India' as const
+            }
+          : null
 
         const res = await updateCustomer(initialCustomer.id, {
           firstName: firstName.trim(),
-          middleName: middleName.trim() || undefined,
+          middleName: middleName.trim() ? middleName.trim() : null,
           lastName: lastName.trim(),
           countryCode,
           mobile: mobile.trim(),
-          email: email.trim() || undefined,
-          address
+          email: email.trim() ? email.trim() : null,
+          address,
+          notes: notes.trim() ? notes.trim() : null
         })
 
         let finalCustomer = res.customer
@@ -241,6 +263,7 @@ export default function CustomerForm({
 
         onSuccess(finalCustomer)
       } else {
+        const hasAddress = Boolean(line1.trim() || line2.trim() || city.trim() || state || pincode.trim())
         const payload = {
           firstName: firstName.trim(),
           middleName: middleName.trim() || undefined,
@@ -248,19 +271,18 @@ export default function CustomerForm({
           countryCode,
           mobile: mobile.trim(),
           email: email.trim() || undefined,
-          address:
-            line1.trim() || city.trim() || pincode.trim()
-              ? {
-                  line1: line1.trim() || undefined,
-                  line2: line2.trim() || undefined,
-                  city: city.trim() || undefined,
-                  state: state || undefined,
-                  pincode: pincode.trim() || undefined,
-                  country: 'India' as const
-                }
-              : undefined,
+          address: hasAddress
+            ? {
+                line1: line1.trim() || undefined,
+                line2: line2.trim() || undefined,
+                city: city.trim() || undefined,
+                state: state || undefined,
+                pincode: pincode.trim() || undefined,
+                country: 'India' as const
+              }
+            : undefined,
           pan: canEditPan && pan.trim() ? pan.trim().toUpperCase() : undefined,
-          notes: initialValues?.notes,
+          notes: notes.trim() || undefined,
           source: initialValues?.source || 'walk_in',
           inquiryId: initialValues?.inquiryId
         }
@@ -269,19 +291,30 @@ export default function CustomerForm({
         onSuccess(res.customer)
       }
     } catch (err: unknown) {
-      const errorWithField = err as { field?: 'mobile' | 'pan'; existingCustomerId?: string; message?: string }
+      const errorWithField = err as {
+        field?: 'mobile' | 'pan'
+        existingCustomerId?: string
+        existingCustomerName?: string
+        isArchived?: boolean
+        message?: string
+      }
       if (errorWithField.field && errorWithField.existingCustomerId) {
-        let custName: string | undefined
-        try {
-          const existing = await getCustomerById(errorWithField.existingCustomerId)
-          custName = existing.customer.displayName
-        } catch {
-          // fallback if fetch fails
+        let custName = errorWithField.existingCustomerName
+        let isArchived = errorWithField.isArchived
+        if (custName === undefined || isArchived === undefined) {
+          try {
+            const existing = await getCustomerById(errorWithField.existingCustomerId, { allowArchived: true })
+            custName = existing.customer.displayName
+            isArchived = Boolean(existing.customer.isArchived)
+          } catch {
+            // fallback if fetch fails
+          }
         }
         setConflictState({
           field: errorWithField.field,
           existingCustomerId: errorWithField.existingCustomerId,
-          customerName: custName
+          customerName: custName,
+          isArchived: Boolean(isArchived)
         })
       } else {
         setErrors((prev) => ({
@@ -308,19 +341,43 @@ export default function CustomerForm({
         <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="flex-1 text-xs text-amber-900">
-            <p className="font-semibold text-amber-950">Existing Customer Match</p>
+            <p className="font-semibold text-amber-950">
+              {conflictState.isArchived ? 'Archived Customer Match' : 'Existing Customer Match'}
+            </p>
             <p className="mt-0.5">
               This {conflictState.field === 'pan' ? 'PAN' : 'mobile number'} already belongs to{' '}
-              <span className="font-bold text-black">{conflictState.customerName || 'an existing customer'}</span>.
+              <span className="font-bold text-black">{conflictState.customerName || 'an existing customer'}</span>
+              {conflictState.isArchived ? ' (currently archived)' : ''}.
             </p>
-            <button
-              type="button"
-              onClick={handleUseExistingCustomer}
-              disabled={isSubmitting}
-              className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-[background-color,transform] duration-150 active:scale-[0.97]"
-            >
-              Use this customer <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            {conflictState.isArchived ? (
+              <button
+                type="button"
+                onClick={handleRestoreCustomer}
+                disabled={isSubmitting}
+                className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-[background-color,transform] duration-150 active:scale-[0.97]"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Restoring...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Restore this customer</span>
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleUseExistingCustomer}
+                disabled={isSubmitting}
+                className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-[background-color,transform] duration-150 active:scale-[0.97]"
+              >
+                Use this customer <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -526,6 +583,18 @@ export default function CustomerForm({
             />
             {errors.pincode && <p className="text-[11px] text-rose-600 mt-1 font-medium">{errors.pincode}</p>}
           </div>
+        </div>
+
+        {/* Notes */}
+        <div className="mt-3">
+          <label className="block text-xs font-medium text-gray-700 mb-1.5">Notes</label>
+          <textarea
+            rows={2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Optional customer notes or preferences..."
+            className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-black focus:ring-black/10 transition-[border-color,box-shadow] duration-150 resize-none"
+          />
         </div>
       </div>
 

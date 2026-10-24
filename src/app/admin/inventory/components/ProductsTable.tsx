@@ -2,18 +2,19 @@
 
 import React from 'react'
 import { ArrowUp, ArrowDown, ArrowUpDown, Edit2, Archive, Plus } from 'lucide-react'
-import { Product } from '@/lib/types'
-import { ProductSortOption } from './types'
+import { Product, UserPermissions } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/empty-state'
 
+export type ProductSortColumn = 'name' | 'sku' | 'weight' | 'stock' | 'date'
+
 interface ProductsTableProps {
   products: Product[]
-  sortBy: any
-  toggleSort: (col: any) => void
+  sortBy: string
+  toggleSort: (col: ProductSortColumn) => void
   locationMap: Map<string, string>
   formatWeight: (w?: number) => string
-  hasPermission: (module: any, action: any) => boolean
+  hasPermission: (module: keyof UserPermissions, action: string) => boolean
   archivedSession: boolean
   handleOpenAddProduct: () => void
   handleEditProduct: (p: Product) => void

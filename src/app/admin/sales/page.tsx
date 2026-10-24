@@ -61,6 +61,7 @@ function formatDateDisplay(rawDate?: string) {
 import { Product, Location, Transaction, ProductCategory, MetalType, TransactionStats, Customer, Order, OrderPayment } from '@/lib/types'
 import CustomerPicker from '@/components/customer-picker'
 import PaymentSplit from '@/components/payment-split'
+import MoneyInput from '@/components/money-input'
 import { rupeesToPaise } from '@/lib/utils/money'
 import { gramsToMg } from '@/lib/utils/weight'
 import {
@@ -72,6 +73,11 @@ import {
   deleteTransaction,
   updateTransaction
 } from '@/lib/services/inventory.service'
+import {
+  getOrders,
+  createOrder,
+  reverseOrder
+} from '@/lib/services/orders.service'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
 import CustomSelect, { SelectOption } from '@/components/custom-select'
@@ -263,8 +269,7 @@ export default function AdminSales() {
           setReturnsHasMore(returnsPageRes.hasMore)
           setLoading(false)
 
-          fetch('/api/admin/orders?limit=100')
-            .then((r) => (r.ok ? r.json() : null))
+          getOrders({ limit: 100 })
             .then((data) => {
               if (!ignore && data?.orders) {
                 setOrdersList(data.orders)
@@ -300,7 +305,7 @@ export default function AdminSales() {
     } catch (err) {
       console.warn('Failed to refresh stats:', err)
     }
-  }, [effectiveStartDate, effectiveEndDate, userAssignedLocationId])
+  }, [effectiveStartDate, effectiveEndDate, userAssignedLocationId, setStats])
 
   const broadcastTxUpdate = useCallback(() => {
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -502,7 +507,7 @@ export default function AdminSales() {
     saleItems.forEach((item) => {
       const prod = products.find((p) => p.id === item.productId)
       const qty = Number(item.quantity) || 0
-      const price = Number(item.price) || 0
+      const price = Number(String(item.price || '').replace(/,/g, '')) || 0
       totalUnits += qty
       grandTotal += qty * price
 
@@ -551,7 +556,7 @@ export default function AdminSales() {
       const qty = isIdol ? 1 : Number(item.quantity)
       if (isNaN(qty) || qty <= 0) return false
 
-      const unitPrice = Number(item.price)
+      const unitPrice = Number(String(item.price || '').replace(/,/g, ''))
       if (isNaN(unitPrice) || unitPrice <= 0) return false
 
       if (isIdol && item.pieceWeight) {
@@ -755,7 +760,7 @@ export default function AdminSales() {
         return
       }
 
-      const unitPrice = Number(item.price)
+      const unitPrice = Number(String(item.price || '').replace(/,/g, ''))
       if (isNaN(unitPrice) || unitPrice <= 0) {
         setSaleError(`Item #${itemNum} (${prod.name}): Selling price per unit is required and must be greater than ₹0`)
         return
@@ -802,7 +807,7 @@ export default function AdminSales() {
       }
 
       const payload = {
-        type: 'sale',
+        type: 'sale' as const,
         customerId: selectedCustomer ? selectedCustomer.id : undefined,
         locationId: effectiveLocId,
         date: saleDate,
@@ -816,17 +821,7 @@ export default function AdminSales() {
         notes: saleNotes.trim() || undefined
       }
 
-      const res = await fetch('/api/admin/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to record sale order')
-      }
-
+      const data = await createOrder(payload)
       const createdOrder: Order = data.order
 
       setIsSaleFormOpen(false)
@@ -923,14 +918,7 @@ export default function AdminSales() {
     if (!reverseOrderTarget || !reverseOrderTarget.orderId) return
     try {
       setReversingOrder(true)
-      const res = await fetch(`/api/admin/orders/${reverseOrderTarget.orderId}/reverse`, {
-        method: 'POST'
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to reverse order')
-      }
-
+      const data = await reverseOrder(reverseOrderTarget.orderId)
       const reversedOrder: Order = data.order
       toast.success(`Bill ${reversedOrder.orderNo} reversed successfully`)
 
@@ -1360,7 +1348,7 @@ export default function AdminSales() {
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-black tabular-nums tracking-tight">
+            <div className="text-2xl font-bold text-black font-mono tabular-nums tracking-tight">
               ₹{stats.salesRevenue.toLocaleString('en-IN')}
             </div>
             <div className="text-xs text-gray-400 mt-1 font-medium">{stats.salesCount} sales</div>
@@ -1375,7 +1363,7 @@ export default function AdminSales() {
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-black tabular-nums tracking-tight">
+            <div className="text-2xl font-bold text-black font-mono tabular-nums tracking-tight">
               {stats.salesUnits.toLocaleString('en-IN')}
             </div>
             <div className="text-xs text-gray-400 mt-1 font-medium">units dispatched</div>
@@ -1390,7 +1378,7 @@ export default function AdminSales() {
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-black tabular-nums tracking-tight">
+            <div className="text-2xl font-bold text-black font-mono tabular-nums tracking-tight">
               ₹{stats.returnsAmount.toLocaleString('en-IN')}
             </div>
             <div className="text-xs text-gray-400 mt-1 font-medium">{stats.returnsCount} returns</div>
@@ -1405,7 +1393,7 @@ export default function AdminSales() {
             </div>
           </div>
           <div>
-            <div className={`text-2xl font-bold tabular-nums tracking-tight ${
+            <div className={`text-2xl font-bold font-mono tabular-nums tracking-tight ${
               (stats.profit ?? stats.netRevenue) < 0 ? 'text-rose-600' : 'text-black'
             }`}>
               {(stats.profit ?? stats.netRevenue) < 0
@@ -1569,9 +1557,9 @@ export default function AdminSales() {
       <AnimatePresence>
         {isSaleFormOpen && (
           <motion.div
-            initial={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
-            animate={{ opacity: 1, transform: "scale(1) translateY(0px)" }}
-            exit={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
+            initial={{ opacity: 0, scale: 0.97, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ duration: 0.18, ease: EASE_OUT }}
             className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
           >
@@ -1717,9 +1705,9 @@ export default function AdminSales() {
                         <motion.div
                           key={item.id}
                           style={{ zIndex: 50 - idx }}
-                          initial={{ opacity: 0, transform: 'scale(0.98) translateY(6px)' }}
-                          animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
-                          exit={{ opacity: 0, transform: 'scale(0.98) translateY(-6px)' }}
+                          initial={{ opacity: 0, scale: 0.98, y: 6 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.98, y: -6 }}
                           transition={{ duration: 0.16, ease: EASE_OUT }}
                           className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3 relative"
                         >
@@ -1794,14 +1782,10 @@ export default function AdminSales() {
                             <label className="block text-xs font-medium text-gray-700 mb-1.5">
                               Unit Price (₹) <span className="text-rose-500">*</span>
                             </label>
-                            <input
-                              type="number"
-                              min="0.01"
-                              step="0.01"
+                            <MoneyInput
                               placeholder="e.g. 78500"
                               value={item.price}
-                              onChange={(e) => handleUpdateSaleItem(item.id, { price: e.target.value })}
-                              className="h-10 w-full px-3.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              onChange={(val) => handleUpdateSaleItem(item.id, { price: val })}
                               required
                             />
                           </div>
@@ -1810,11 +1794,11 @@ export default function AdminSales() {
                             <label className="block text-xs font-medium text-gray-700 mb-1.5">
                               Total
                             </label>
-                            <div className="h-10 px-3.5 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-end font-bold text-sm tabular-nums">
+                            <div className="h-10 px-3.5 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-end font-mono font-bold text-sm tabular-nums">
                               {lineTotal > 0 ? (
-                                <span className="text-black font-semibold">₹{lineTotal.toLocaleString('en-IN')}</span>
+                                <span className="text-black font-semibold font-mono">₹{lineTotal.toLocaleString('en-IN')}</span>
                               ) : (
-                                <span className="text-gray-400 font-medium">₹0</span>
+                                <span className="text-gray-400 font-medium font-mono">₹0</span>
                               )}
                             </div>
                           </div>
@@ -1894,7 +1878,7 @@ export default function AdminSales() {
                   )}
                   <div className="pl-6">
                     <span className="text-gray-500 block">Grand Total</span>
-                    <span className="font-extrabold text-base text-black tabular-nums">
+                    <span className="font-extrabold text-base text-black font-mono tabular-nums">
                       ₹{saleTotals.grandTotal.toLocaleString('en-IN')}
                     </span>
                   </div>
@@ -1929,9 +1913,9 @@ export default function AdminSales() {
       <AnimatePresence>
         {isReturnFormOpen && (
           <motion.div
-            initial={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
-            animate={{ opacity: 1, transform: "scale(1) translateY(0px)" }}
-            exit={{ opacity: 0, transform: "scale(0.97) translateY(8px)" }}
+            initial={{ opacity: 0, scale: 0.97, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ duration: 0.2, ease: EASE_OUT }}
             className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
           >
@@ -2040,14 +2024,10 @@ export default function AdminSales() {
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Refund Price per Unit (₹)
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                  <MoneyInput
                     placeholder="e.g. 78500"
                     value={returnPrice}
-                    onChange={(e) => setReturnPrice(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                    onChange={setReturnPrice}
                   />
                 </div>
 
@@ -2210,12 +2190,12 @@ export default function AdminSales() {
                               {bill.items.length} {bill.items.length === 1 ? 'item' : 'items'} • {bill.totalQuantity} {bill.totalQuantity === 1 ? 'unit' : 'units'}
                             </span>
                           </td>
-                          <td className="px-5 py-4 text-right tabular-nums font-bold text-black">
+                          <td className="px-5 py-4 text-right font-mono tabular-nums font-bold text-black">
                             ₹{bill.totalAmount.toLocaleString('en-IN')}
                           </td>
                           <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1">
-                              {bill.items.length === 1 && (isSuperAdmin || hasPermission('sales', 'edit')) && !bill.items[0].isReversed && !bill.items[0].reversalOf && (
+                              {bill.items.length === 1 && !bill.orderId && (isSuperAdmin || hasPermission('sales', 'edit')) && !bill.items[0].isReversed && !bill.items[0].reversalOf && (
                                 <button
                                   onClick={() => handleOpenEditSale(bill.items[0])}
                                   title="Edit sale"
@@ -2234,7 +2214,7 @@ export default function AdminSales() {
                                       if (activeItem) setDeleteTxTarget(activeItem)
                                     }
                                   }}
-                                  title="Post reversing entry (restores stock)"
+                                  title={bill.orderId ? 'Reverse bill' : 'Post reversing entry (restores stock)'}
                                   className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
                                 >
                                   <RotateCcw size={14} />
@@ -2262,7 +2242,9 @@ export default function AdminSales() {
                                       <th className="py-2.5 px-4 text-right font-normal">Qty / Weight</th>
                                       <th className="py-2.5 px-4 text-right font-normal">Unit Price</th>
                                       <th className="py-2.5 px-4 text-right font-normal">Total</th>
-                                      <th className="py-2.5 px-4 text-right font-normal">Item Action</th>
+                                      <th className="py-2.5 px-4 text-right font-normal">
+                                        {bill.orderId ? 'Status' : 'Actions'}
+                                      </th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-100">
@@ -2289,33 +2271,48 @@ export default function AdminSales() {
                                               </span>
                                             )}
                                           </td>
-                                          <td className="py-2.5 px-4 text-right tabular-nums text-gray-600">
+                                          <td className="py-2.5 px-4 text-right font-mono tabular-nums text-gray-600">
                                             {item.price ? `₹${item.price.toLocaleString('en-IN')}` : '—'}
                                           </td>
-                                          <td className="py-2.5 px-4 text-right tabular-nums font-bold text-black">
+                                          <td className="py-2.5 px-4 text-right font-mono tabular-nums font-bold text-black">
                                             ₹{lineTotal.toLocaleString('en-IN')}
                                           </td>
                                           <td className="py-2.5 px-4 text-right">
-                                            <div className="flex items-center justify-end gap-1">
-                                              {(isSuperAdmin || hasPermission('sales', 'edit')) && !item.isReversed && !item.reversalOf && (
-                                                <button
-                                                  onClick={() => handleOpenEditSale(item)}
-                                                  title="Edit item"
-                                                  className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded transition-[color,background-color] duration-150"
-                                                >
-                                                  <Pencil size={13} />
-                                                </button>
-                                              )}
-                                              {hasPermission('sales', 'delete') && !item.isReversed && !item.reversalOf && (
-                                                <button
-                                                  onClick={() => setDeleteTxTarget(item)}
-                                                  title="Reverse this item"
-                                                  className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded transition-[color,background-color] duration-150"
-                                                >
-                                                  <RotateCcw size={13} />
-                                                </button>
-                                              )}
-                                            </div>
+                                            {item.orderId ? (
+                                              item.isReversed || item.reversalOf ? (
+                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
+                                                  Reversed
+                                                </span>
+                                              ) : (
+                                                <span className="text-gray-400 text-xs">—</span>
+                                              )
+                                            ) : (
+                                              <div className="flex items-center justify-end gap-1">
+                                                {(isSuperAdmin || hasPermission('sales', 'edit')) && !item.isReversed && !item.reversalOf && (
+                                                  <button
+                                                    onClick={() => handleOpenEditSale(item)}
+                                                    title="Edit item"
+                                                    className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded transition-[color,background-color] duration-150 active:scale-[0.97]"
+                                                  >
+                                                    <Pencil size={13} />
+                                                  </button>
+                                                )}
+                                                {hasPermission('sales', 'delete') && !item.isReversed && !item.reversalOf && (
+                                                  <button
+                                                    onClick={() => setDeleteTxTarget(item)}
+                                                    title="Reverse this item"
+                                                    className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded transition-[color,background-color] duration-150 active:scale-[0.97]"
+                                                  >
+                                                    <RotateCcw size={13} />
+                                                  </button>
+                                                )}
+                                                {(item.isReversed || item.reversalOf) && (
+                                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
+                                                    Reversed
+                                                  </span>
+                                                )}
+                                              </div>
+                                            )}
                                           </td>
                                         </tr>
                                       )
@@ -2427,7 +2424,7 @@ export default function AdminSales() {
                             </div>
                           )}
                         </td>
-                        <td className="px-5 py-4 text-right tabular-nums font-bold text-black">
+                        <td className="px-5 py-4 text-right font-mono tabular-nums font-bold text-black">
                           {totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')}` : '—'}
                           {tx.notes && (
                             <div className="text-[11px] text-gray-400 font-normal truncate max-w-xs ml-auto">
@@ -2436,7 +2433,7 @@ export default function AdminSales() {
                           )}
                         </td>
                         <td className="px-5 py-4 text-right">
-                          {hasPermission('returns', 'delete') && !tx.isReversed && !tx.reversalOf && (
+                          {hasPermission('returns', 'delete') && !tx.isReversed && !tx.reversalOf && !tx.orderId && (
                             <button
                               onClick={() => setDeleteTxTarget(tx)}
                               title="Post reversing entry (reverses restock)"
@@ -2601,15 +2598,12 @@ export default function AdminSales() {
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
                       Unit Price (₹) <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
+                    <MoneyInput
                       required
                       value={editSalePrice}
-                      onChange={(e) => setEditSalePrice(e.target.value)}
+                      onChange={setEditSalePrice}
                       placeholder="e.g. 15000"
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                      size="sm"
                     />
                   </div>
                 </div>
@@ -2617,8 +2611,8 @@ export default function AdminSales() {
                 {/* Live total display */}
                 <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-between text-xs">
                   <span className="text-gray-500">Total Sale Amount:</span>
-                  <span className="font-bold text-black text-sm">
-                    ₹{((Number(editSaleQuantity) || 0) * (Number(editSalePrice) || 0)).toLocaleString('en-IN')}
+                  <span className="font-bold text-black text-sm font-mono tabular-nums">
+                    ₹{((Number(editSaleQuantity) || 0) * (Number(String(editSalePrice || '').replace(/,/g, '')) || 0)).toLocaleString('en-IN')}
                   </span>
                 </div>
 

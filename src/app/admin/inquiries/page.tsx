@@ -9,7 +9,8 @@ import {
   UserPlus,
   ExternalLink,
   CheckCircle2,
-  X
+  X,
+  MapPin
 } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { ConfirmModal } from '@/components/confirm-modal'
@@ -20,7 +21,9 @@ import {
   updateInquiryStatus,
   linkInquiryToCustomer
 } from '@/lib/services/inquiry.service'
-import { Inquiry, Customer } from '@/lib/types'
+import { logVisit, CreateVisitInput } from '@/lib/services/visits.service'
+import { getLocations } from '@/lib/services/inventory.service'
+import { Inquiry, Customer, Location } from '@/lib/types'
 import { isValidPan } from '@/lib/utils/pan'
 import { getTodayIST } from '@/lib/utils/date'
 import { EASE_OUT } from '@/components/motion-transitions'
@@ -109,9 +112,13 @@ function StatusDropdown({
 const ITEMS_PER_PAGE = 10;
 
 export default function AdminInquiries() {
-  const { hasPermission, isSuperAdmin, userIdentity } = usePermissions()
+  const { hasPermission, isSuperAdmin, userIdentity, adminUser } = usePermissions()
   const canAddCustomer = hasPermission('customers', 'add')
   const canEditPan = hasPermission('customers', 'editPan')
+  const userAssignedLocationId = adminUser?.assignedLocationId
+
+  const [locations, setLocations] = useState<Location[]>([])
+  const [conversionLocationId, setConversionLocationId] = useState('')
 
   const [inquiries, setInquiries] = useState<Inquiry[]>([])
   const [loading, setLoading] = useState(true)
@@ -122,6 +129,19 @@ export default function AdminInquiries() {
 
   // Customer conversion modal state
   const [convertingInquiry, setConvertingInquiry] = useState<Inquiry | null>(null)
+
+  useEffect(() => {
+    if (!userAssignedLocationId) {
+      getLocations()
+        .then((locs) => {
+          setLocations(locs)
+          if (locs.length > 0 && !conversionLocationId) {
+            setConversionLocationId(locs[0].id)
+          }
+        })
+        .catch((err) => console.error('Failed to load locations', err))
+    }
+  }, [userAssignedLocationId, conversionLocationId])
 
   useEffect(() => {
     let ignore = false
@@ -254,6 +274,12 @@ export default function AdminInquiries() {
     if (!convertingInquiry) return
     const currentInq = convertingInquiry
 
+    const effectiveLocationId = userAssignedLocationId || conversionLocationId
+    if (!effectiveLocationId) {
+      toast.error('Store location is required to log the visit record')
+      return
+    }
+
     try {
       // 1. Link inquiry in Firestore
       await linkInquiryToCustomer(
@@ -274,17 +300,21 @@ export default function AdminInquiries() {
       }
 
       // 3. Write visit of kind inquiry dated at inquiry's createdAt
-      await fetch('/api/admin/visits', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      try {
+        const visitPayload: CreateVisitInput = {
           customerId: customer.id,
+          locationId: effectiveLocationId,
           kind: 'inquiry',
-          date: visitDate,
-          notes: currentInq.message || 'Converted from online inquiry',
+          at: visitDate,
+          note: currentInq.message || 'Converted from online inquiry',
           inquiryId: currentInq.id
-        })
-      })
+        }
+        await logVisit(visitPayload)
+      } catch (visitErr) {
+        console.error('Failed to log visit for inquiry:', visitErr)
+        toast.error(visitErr instanceof Error ? visitErr.message : 'Failed to record visit for inquiry')
+        throw visitErr
+      }
 
       // 4. Update local state
       setInquiries((prev) =>
@@ -474,6 +504,26 @@ export default function AdminInquiries() {
                 <X size={16} />
               </button>
             </div>
+            {!userAssignedLocationId && (
+              <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                  <MapPin size={13} className="text-gray-500" />
+                  <span>Store Location for Visit Record <span className="text-red-500">*</span></span>
+                </label>
+                <select
+                  value={conversionLocationId}
+                  onChange={(e) => setConversionLocationId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
+                >
+                  <option value="">Select store location</option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <CustomerForm
               initialValues={getInitialValuesForInquiry(convertingInquiry)}
               onSuccess={handleCustomerConverted}

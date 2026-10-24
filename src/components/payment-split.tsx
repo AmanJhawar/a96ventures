@@ -9,6 +9,7 @@ import { rupeesToPaise, formatINR } from '@/lib/utils/money'
 import { gramsToMg } from '@/lib/utils/weight'
 import { Button } from '@/components/ui/button'
 import CustomSelect, { SelectOption } from '@/components/custom-select'
+import MoneyInput from '@/components/money-input'
 
 export interface PaymentRowState {
   id: string
@@ -206,9 +207,9 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
             <motion.div
               key={row.id}
               style={{ zIndex: rows.length - idx }}
-              initial={{ opacity: 0, transform: 'scale(0.98) translateY(4px)' }}
-              animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
-              exit={{ opacity: 0, transform: 'scale(0.98) translateY(-4px)' }}
+              initial={{ opacity: 0, scale: 0.98, y: 4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: -4 }}
               transition={{ duration: 0.15, ease: EASE_OUT }}
               className="p-3.5 bg-gray-50/70 border border-gray-200 rounded-xl space-y-2.5 transition-[border-color] duration-150 relative"
             >
@@ -224,26 +225,23 @@ export default function PaymentSplit({ totalBillPaise, totalPaise, onChange, dis
                   />
                 </div>
 
-                {/* Amount Input */}
+                {/* Amount Input with Live Comma Integration */}
                 <div className="sm:col-span-4 relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-mono pointer-events-none">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-mono pointer-events-none z-10">
                     ₹
                   </span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                  <MoneyInput
                     disabled={disabled}
                     value={row.amountRupees}
-                    onChange={(e) => handleUpdateRow(row.id, { amountRupees: e.target.value })}
+                    onChange={(val) => handleUpdateRow(row.id, { amountRupees: val })}
                     placeholder="0.00"
-                    className="w-full h-10 pl-7 pr-12 bg-white border border-gray-200 rounded-lg text-sm font-mono text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="w-full h-10 pl-7 pr-12 text-sm font-mono"
                   />
                   {remainingPaise > 0 && !disabled && (
                     <button
                       type="button"
                       onClick={() => handleFillRemaining(row.id)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded text-[11px] font-semibold text-black bg-gray-100 hover:bg-gray-200 transition-colors font-mono"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded text-[11px] font-semibold text-black bg-gray-100 hover:bg-gray-200 transition-colors font-mono z-10"
                       title="Fill remaining balance into this mode"
                     >
                       Fill

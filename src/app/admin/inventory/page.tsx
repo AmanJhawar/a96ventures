@@ -162,11 +162,13 @@ export default function AdminInventory() {
     return 'products'
   })
 
-  useEffect(() => {
+  const [prevTabParam, setPrevTabParam] = useState(tabParam)
+  if (tabParam !== prevTabParam) {
+    setPrevTabParam(tabParam)
     if (tabParam && ['products', 'purchases', 'movements', 'archived-audit'].includes(tabParam)) {
       setRequestedTab(tabParam)
     }
-  }, [tabParam])
+  }
 
   // Automatically keep activeTab on an allowed tab without cascading effect renders
   const activeTab: InventoryTab = useMemo(() => {
@@ -806,7 +808,7 @@ export default function AdminInventory() {
     if (!editPurchaseDate.trim() || !editPurchaseLocationId.trim()) return false
     const q = Number(editPurchaseQuantity)
     if (isNaN(q) || q <= 0) return false
-    const p = Number(editPurchasePrice)
+    const p = Number(String(editPurchasePrice).replace(/,/g, ''))
     if (isNaN(p) || p < 0) return false
     return true
   }, [editPurchaseDate, editPurchaseLocationId, editPurchaseQuantity, editPurchasePrice])
@@ -1311,7 +1313,7 @@ export default function AdminInventory() {
         return
       }
 
-      const unitPrice = item.price ? Number(item.price) : undefined
+      const unitPrice = item.price ? Number(String(item.price).replace(/,/g, '')) : undefined
       if (unitPrice !== undefined && (isNaN(unitPrice) || unitPrice < 0)) {
         setPurchaseError(`Item #${itemNum} (${prod.name}): Please enter a valid purchase price`)
         return
@@ -1855,7 +1857,7 @@ export default function AdminInventory() {
       return
     }
 
-    const priceNum = Number(editPurchasePrice)
+    const priceNum = Number(String(editPurchasePrice).replace(/,/g, ''))
     if (isNaN(priceNum) || priceNum < 0) {
       setEditPurchaseError('Unit cost must be a valid non-negative number')
       return

@@ -11,6 +11,7 @@ import CustomDatePicker from '@/components/custom-date-picker'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/ui/form-error'
 import { formatWeight } from '@/lib/utils/weight'
+import MoneyInput from '@/components/money-input'
 
 interface RecordPurchaseModalProps {
   isOpen: boolean
@@ -182,16 +183,16 @@ export function RecordPurchaseModal({
                   const prod = products.find((p) => p.id === item.productId)
                   const isIdol = prod?.category === 'Idols'
                   const lineTotal =
-                    (Number(item.price) || 0) *
+                    (Number(String(item.price || '').replace(/,/g, '')) || 0) *
                     (isIdol ? item.pieceWeights.length : Number(item.quantity) || 0)
 
                   return (
                     <motion.div
                       key={item.id}
                       style={{ zIndex: 50 - idx }}
-                      initial={{ opacity: 0, transform: 'scale(0.98) translateY(6px)' }}
-                      animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
-                      exit={{ opacity: 0, transform: 'scale(0.98) translateY(-6px)' }}
+                      initial={{ opacity: 0, scale: 0.98, y: 6 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.98, y: -6 }}
                       transition={{ duration: 0.16, ease: EASE_OUT }}
                       className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3 relative"
                     >
@@ -278,16 +279,13 @@ export function RecordPurchaseModal({
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           Unit Cost (₹)
                         </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <MoneyInput
                           placeholder="e.g. 75000"
                           value={item.price}
-                          onChange={(e) =>
-                            onUpdatePurchaseItem(item.id, { price: e.target.value })
+                          onChange={(val) =>
+                            onUpdatePurchaseItem(item.id, { price: val })
                           }
-                          className="h-9 w-full px-3 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                          size="sm"
                         />
                       </div>
 
@@ -295,7 +293,7 @@ export function RecordPurchaseModal({
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           Total
                         </label>
-                        <div className="h-9 px-3 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-end font-bold text-xs text-black tabular-nums">
+                        <div className="h-9 px-3 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-end font-mono font-bold text-xs text-black tabular-nums">
                           {lineTotal > 0
                             ? `₹${lineTotal.toLocaleString('en-IN')}`
                             : '—'}

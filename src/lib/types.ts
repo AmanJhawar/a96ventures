@@ -98,6 +98,8 @@ export interface Transaction {
   customerName?: string; // for sale, return
   customerId?: string; // CRM customer ID
   orderId?: string; // CRM order ID
+  orderNo?: string; // Bill / Order sequence identifier
+  invoiceNo?: string; // Invoice number
   vendorName?: string; // for purchase
   notes?: string;
   weight?: number; // total weight (in grams)

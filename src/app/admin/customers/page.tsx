@@ -19,7 +19,7 @@ import {
   X
 } from 'lucide-react'
 import { Customer } from '@/lib/types'
-import { getCustomers } from '@/lib/services/customers.service'
+import { getCustomers, exportCustomersCSV } from '@/lib/services/customers.service'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatINR } from '@/lib/utils/money'
 import { auth } from '@/lib/firebase/auth'
@@ -66,14 +66,12 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [isNewCustomerOpen, setIsNewCustomerOpen] = useState(false)
-
-  // Auto-open modal if ?new=true query param present
-  useEffect(() => {
+  const [isNewCustomerOpen, setIsNewCustomerOpen] = useState(() => {
     if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('new') === 'true') {
-      setIsNewCustomerOpen(true)
+      return true
     }
-  }, [])
+    return false
+  })
 
   // 150ms debounced search per Emil Kowalski responsiveness rule
   useEffect(() => {
@@ -83,13 +81,16 @@ export default function CustomersPage() {
     return () => clearTimeout(timer)
   }, [query])
 
-  // Fetch initial / filtered customers
+  // Fetch initial / filtered customers from server query
   useEffect(() => {
     let ignore = false
     async function load() {
       try {
+        setLoading(true)
         const res = await getCustomers({
           q: debouncedQuery.trim() || undefined,
+          lastVisit: lastVisitFilter,
+          hasFollowUp: hasFollowUpOnly,
           limit: 30
         })
         if (!ignore) {
@@ -111,7 +112,7 @@ export default function CustomersPage() {
     return () => {
       ignore = true
     }
-  }, [debouncedQuery])
+  }, [debouncedQuery, lastVisitFilter, hasFollowUpOnly])
 
   const handleLoadMore = async () => {
     if (!cursor || loadingMore) return
@@ -119,6 +120,8 @@ export default function CustomersPage() {
     try {
       const res = await getCustomers({
         q: debouncedQuery.trim() || undefined,
+        lastVisit: lastVisitFilter,
+        hasFollowUp: hasFollowUpOnly,
         cursor,
         limit: 30
       })
@@ -133,63 +136,15 @@ export default function CustomersPage() {
     }
   }
 
-  // Client-side filter for visit recency & open follow-up badge
-  const filteredCustomers = useMemo(() => {
-    return customers.filter((c) => {
-      // Open follow-up filter
-      if (hasFollowUpOnly && !(c.stats?.openFollowUps && c.stats.openFollowUps > 0)) {
-        return false
-      }
-
-      // Last visit recency filter
-      if (lastVisitFilter !== 'all') {
-        const lastVisit = c.stats?.lastVisitAt
-        if (lastVisitFilter === 'never') {
-          if (lastVisit) return false
-        } else {
-          if (!lastVisit) return false
-          const parts = lastVisit.split('-')
-          if (parts.length === 3) {
-            const visitTime = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime()
-            const daysAgo = (baseTimestamp - visitTime) / (1000 * 60 * 60 * 24)
-            const maxDays = Number(lastVisitFilter)
-            if (daysAgo > maxDays) return false
-          }
-        }
-      }
-
-      return true
-    })
-  }, [customers, hasFollowUpOnly, lastVisitFilter, baseTimestamp])
+  // Server query covers all customers; rendered list is customers
+  const filteredCustomers = customers
 
   // Export CSV Handler (calls server export route which guarantees masked PAN)
   const handleExportCSV = async () => {
     if (!canExport || exporting) return
     try {
       setExporting(true)
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error('Authentication required')
-      const token = await currentUser.getIdToken()
-
-      const res = await fetch('/api/admin/customers/export', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Export failed')
-      }
-
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `a96-customers-${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      window.URL.revokeObjectURL(url)
-
+      await exportCustomersCSV()
       toast.success('Customer CSV exported successfully')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to export customer CSV'

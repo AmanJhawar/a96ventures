@@ -2,14 +2,15 @@
 
 import React from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { AuditLogEntry, AuditFieldDiff } from '@/lib/types'
 
 interface ArchivedAuditTabProps {
   archivedAuditSearch: string
   setArchivedAuditSearch: (val: string) => void
   archivedAuditEntityFilter: string
   setArchivedAuditEntityFilter: (filter: 'all' | 'product' | 'sale' | 'movement' | 'purchase' | 'user' | 'archive') => void
-  filteredArchivedAuditLogs: any[]
-  paginatedArchivedAuditLogs: any[]
+  filteredArchivedAuditLogs: AuditLogEntry[]
+  paginatedArchivedAuditLogs: AuditLogEntry[]
   totalArchivedAuditPages: number
   archivedAuditPage: number
   setArchivedAuditPage: React.Dispatch<React.SetStateAction<number>>
@@ -104,7 +105,7 @@ export function ArchivedAuditTab({
                       <div>{entry.description}</div>
                       {Array.isArray(entry.diffs) && entry.diffs.length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
-                          {entry.diffs.map((d: any, idx: number) => (
+                          {entry.diffs.map((d: AuditFieldDiff, idx: number) => (
                             <span key={idx} className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded text-gray-600">
                               {d.label || d.field}: {String(d.oldValue ?? 'None')} → {String(d.newValue ?? 'None')}
                             </span>

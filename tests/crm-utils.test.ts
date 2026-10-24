@@ -248,6 +248,38 @@ describe('CRM Utilities', () => {
       expect(decrypted).toBe('ABCDE1234F')
     })
 
+    it('picks correct encryption key by keyVersion from environment variables (PAN_ENCRYPTION_KEY_V1, _V2)', () => {
+      const originalKeyV1 = process.env.PAN_ENCRYPTION_KEY_V1
+      const originalKeyV2 = process.env.PAN_ENCRYPTION_KEY_V2
+      const originalKeyVer = process.env.PAN_KEY_VERSION
+
+      try {
+        const v1Key = randomBytes(32).toString('base64')
+        const v2Key = randomBytes(32).toString('base64')
+
+        process.env.PAN_ENCRYPTION_KEY_V1 = v1Key
+        process.env.PAN_ENCRYPTION_KEY_V2 = v2Key
+
+        // Encrypt with V1
+        process.env.PAN_KEY_VERSION = '1'
+        const encV1 = encryptPan('ABCDE1234F')
+        expect(encV1.keyVersion).toBe(1)
+
+        // Encrypt with V2
+        process.env.PAN_KEY_VERSION = '2'
+        const encV2 = encryptPan('XYZPK9876G')
+        expect(encV2.keyVersion).toBe(2)
+
+        // Decrypt automatically picking keys by version
+        expect(decryptPan(encV1)).toBe('ABCDE1234F')
+        expect(decryptPan(encV2)).toBe('XYZPK9876G')
+      } finally {
+        process.env.PAN_ENCRYPTION_KEY_V1 = originalKeyV1
+        process.env.PAN_ENCRYPTION_KEY_V2 = originalKeyV2
+        process.env.PAN_KEY_VERSION = originalKeyVer
+      }
+    })
+
     it('never leaks the PAN plaintext in thrown error messages', () => {
       const badPan = 'ABCDE12345'
       try {
@@ -293,6 +325,17 @@ describe('CRM Utilities', () => {
       expect(queryToken('98765')).toBe('98765')
       expect(queryToken('')).toBe('')
       expect(queryToken(null)).toBe('')
+    })
+
+    it('strips spaces, dashes, and leading +91 or 0 from numeric queries', () => {
+      expect(queryToken('98765 43210')).toBe('9876543210')
+      expect(queryToken('+91 9876543210')).toBe('9876543210')
+      expect(queryToken('+91 98765 43210')).toBe('9876543210')
+      expect(queryToken('+91 98765')).toBe('98765')
+      expect(queryToken('09876543210')).toBe('9876543210')
+      expect(queryToken('098765 43210')).toBe('9876543210')
+      expect(queryToken('98765-43210')).toBe('9876543210')
+      expect(queryToken('+91-98765-43210')).toBe('9876543210')
     })
   })
 })

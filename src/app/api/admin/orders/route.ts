@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAuthenticatedCaller, hasModulePermission } from '@/lib/firebase/server-auth'
-import { createOrder, listOrders } from '@/lib/server/orders'
+import { createOrder, listOrders, ValidationError } from '@/lib/server/orders'
+import { getClosedFiscalCutoff, SystemLockedError } from '@/lib/server/system-lock'
+import { getTodayIST } from '@/lib/utils/date'
 
 const paymentSchema = z.object({
   mode: z.enum(['cash', 'upi', 'card', 'bank', 'old_metal']),
@@ -44,13 +46,50 @@ export async function POST(req: NextRequest) {
 
     const parsed = createOrderSchema.safeParse(body)
     if (!parsed.success) {
+      const issue = parsed.error.issues[0]
+      const errorMsg = issue ? `${issue.path.join('.') || 'body'}: ${issue.message}` : 'Validation failed'
       return NextResponse.json(
-        { error: 'Validation failed', details: parsed.error.format() },
+        { error: errorMsg, details: parsed.error.format() },
         { status: 400 }
       )
     }
 
-    const { type, customerId } = parsed.data
+    const { type, customerId, locationId, date } = parsed.data
+
+    // Check future date (IST)
+    const today = getTodayIST()
+    if (date > today) {
+      return NextResponse.json(
+        { error: `Order date cannot be in the future (${date}). Current date in IST is ${today}.` },
+        { status: 400 }
+      )
+    }
+
+    // Check closed fiscal cutoff
+    const closedCutoff = await getClosedFiscalCutoff()
+    if (closedCutoff && date <= closedCutoff) {
+      return NextResponse.json(
+        {
+          error: `Entries dated on or before ${closedCutoff} are blocked. The financial period up to ${closedCutoff} has been closed and archived.`
+        },
+        { status: 400 }
+      )
+    }
+
+    // Staff Assigned Location Enforcement
+    // Staff with assignedLocationId cannot transact at unauthorized stores
+    const isSuperAdmin = caller.isSuperAdmin
+    const userAssignedLoc = caller.callerData.assignedLocationId
+    if (!isSuperAdmin && userAssignedLoc) {
+      if (locationId !== userAssignedLoc) {
+        return NextResponse.json(
+          {
+            error: `Access Denied: You are assigned to ${caller.callerData.assignedLocationName || 'another store'} and cannot record ${type} transactions at a different location.`
+          },
+          { status: 403 }
+        )
+      }
+    }
 
     // Check module permissions
     if (type === 'sale' && !hasModulePermission(caller, 'sales', 'add')) {
@@ -74,10 +113,18 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, order }, { status: 201 })
   } catch (err: unknown) {
+    if (err instanceof ValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 })
+    }
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Validation failed', details: err.format() }, { status: 400 })
+    }
+    if (err instanceof SystemLockedError) {
+      return NextResponse.json({ error: err.message }, { status: 423 })
+    }
     console.error('POST /api/admin/orders error:', err)
     const msg = err instanceof Error ? err.message : 'Failed to create order'
-    const status = msg.includes('Insufficient stock') || msg.includes('Payment mismatch') || msg.includes('not found') ? 400 : 500
-    return NextResponse.json({ error: msg }, { status })
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
 
@@ -95,13 +142,21 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const customerId = searchParams.get('customerId') || undefined
-    const locationId = searchParams.get('locationId') || undefined
+    const locationIdParam = searchParams.get('locationId') || undefined
+    const startDate = searchParams.get('startDate') || undefined
+    const endDate = searchParams.get('endDate') || undefined
     const cursor = searchParams.get('cursor') || undefined
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : undefined
 
+    const userAssignedLoc = caller.callerData.assignedLocationId
+    // Force locationId to the caller's assignedLocationId when set
+    const effectiveLocationId = userAssignedLoc || locationIdParam
+
     const { orders, nextCursor } = await listOrders({
       customerId,
-      locationId,
+      locationId: effectiveLocationId,
+      startDate,
+      endDate,
       cursor,
       limit
     })
@@ -113,3 +168,4 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
+

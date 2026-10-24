@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 
 vi.mock('server-only', () => ({}))
 
@@ -13,8 +13,10 @@ import {
   OrderLineStockInput
 } from '@/lib/server/ledger'
 import { purgeCrmDataServer } from '@/lib/server/archive'
-import { Product, OrderPayment, Customer } from '@/lib/types'
+import { NextRequest } from 'next/server'
+import { Product, OrderPayment, Customer, Order } from '@/lib/types'
 import { adminDb } from '@/lib/firebase/admin'
+import { SUPER_ADMIN_PERMISSIONS } from '@/lib/constants/permissions'
 
 describe('Orders and Bills with Payments (Phase 4)', () => {
   afterEach(() => {
@@ -232,9 +234,13 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
     it('purges orders, visits, customers, customer_mobiles, customer_pans, and counters', async () => {
       // Mock Firestore collections and batch delete
       const deletedDocPaths: string[] = []
+      const updatedDocs: { path: string; data: unknown }[] = []
       const fakeBatch = {
         delete: vi.fn((ref: { path: string }) => {
           deletedDocPaths.push(ref.path)
+        }),
+        update: vi.fn((ref: { path: string }, data: unknown) => {
+          updatedDocs.push({ path: ref.path, data })
         }),
         commit: vi.fn(async () => {})
       }
@@ -246,15 +252,15 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
         empty: false,
         size: 2,
         docs: [
-          { ref: { path: 'orders/order_1', delete: vi.fn() } },
-          { ref: { path: 'orders/order_2', delete: vi.fn() } }
+          { ref: { path: 'orders/ord_1', delete: vi.fn() } },
+          { ref: { path: 'orders/ord_2', delete: vi.fn() } }
         ]
       }
 
       const mockVisitsSnap = {
         empty: false,
         size: 1,
-        docs: [{ ref: { path: 'visits/visit_1', delete: vi.fn() } }]
+        docs: [{ ref: { path: 'visits/vis_1', delete: vi.fn() } }]
       }
 
       const mockCustomersSnap = {
@@ -338,19 +344,19 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
 
       expect(stats.purgedOrders).toBe(2)
       expect(stats.purgedVisits).toBe(1)
-      expect(stats.purgedCustomers).toBe(1)
-      expect(stats.purgedMobiles).toBe(1)
-      expect(stats.purgedPans).toBe(1)
+      expect(stats.purgedCustomers).toBe(0)
+      expect(stats.purgedMobiles).toBe(0)
+      expect(stats.purgedPans).toBe(0)
       expect(stats.resetCounters).toBe(1)
 
-      // Verified that customer private subcollection doc was purged
-      expect(deletedDocPaths).toContain('customers/cust_1/private/pan')
-      // Verified that customer doc itself was deleted
-      expect(deletedDocPaths).toContain('customers/cust_1')
-      // Verified that indexes were purged
-      expect(deletedDocPaths).toContain('customer_mobiles/+919876543210')
-      expect(deletedDocPaths).toContain('customer_pans/hash_abc')
-      // Verified that counters were reset
+      // Verified that customer database and lookup indexes are PRESERVED
+      expect(deletedDocPaths).not.toContain('customers/cust_1/private/pan')
+      expect(deletedDocPaths).not.toContain('customers/cust_1')
+      expect(deletedDocPaths).not.toContain('customer_mobiles/+919876543210')
+      expect(deletedDocPaths).not.toContain('customer_pans/hash_abc')
+      // Verified that orders, visits and counters were purged/reset
+      expect(deletedDocPaths).toContain('orders/ord_1')
+      expect(deletedDocPaths).toContain('visits/vis_1')
       expect(deletedDocPaths).toContain('counters/2026')
     })
   })
@@ -453,6 +459,108 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
       expect(updatedCustomerStats?.orderCount).toBe(1)
       expect(updatedCustomerStats?.visitCount).toBe(1)
       expect(updatedCustomerStats?.lifetimeValuePaise).toBe(15000000)
+      expect(updatedCustomerStats?.firstVisitAt).toBe('2026-05-15')
+      expect(updatedCustomerStats?.lastVisitAt).toBe('2026-05-15')
+    })
+
+    it('sets firstVisitAt only if unset or earlier than bill date, and lastVisitAt = max(existing, bill date)', async () => {
+      const { createOrder } = await import('@/lib/server/orders')
+      const { adminDb } = await import('@/lib/firebase/admin')
+
+      const existingCustomer: Customer = {
+        id: 'cust_backdated',
+        firstName: 'Pooja',
+        lastName: 'Patel',
+        displayName: 'Pooja Patel',
+        mobile: { countryCode: '+91', number: '9876543211', e164: '+919876543211' },
+        hasPan: false,
+        source: 'walk_in',
+        inquiryIds: [],
+        searchTerms: [],
+        isArchived: false,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        createdBy: 'admin',
+        updatedAt: '2026-04-01T00:00:00.000Z',
+        updatedBy: 'admin',
+        stats: {
+          firstVisitAt: '2026-05-10',
+          lastVisitAt: '2026-05-20',
+          visitCount: 3,
+          orderCount: 2,
+          lifetimeValuePaise: 100000,
+          lifetimeWeightMg: { Gold: 20000, Silver: 0 },
+          openFollowUps: 0
+        }
+      }
+
+      const mockProduct = {
+        id: 'prod_gold_coin',
+        name: 'Gold Coin 20g',
+        sku: 'GC-20G',
+        metal: 'Gold',
+        category: 'coin',
+        stock: 10,
+        stockByLocation: { loc_vault: 10 },
+        weightGrams: 20,
+        weightMg: 20000,
+        purity: '999'
+      }
+
+      let updatedStats: any = null
+      const fakeTx = {
+        get: vi.fn(async (ref: { path: string }) => {
+          if (ref.path === 'system/zero_balance_lock') return { exists: false }
+          if (ref.path === 'locations/loc_vault') return { exists: true, data: () => ({ name: 'Main Vault' }) }
+          if (ref.path === 'customers/cust_backdated') return { exists: true, id: 'cust_backdated', data: () => existingCustomer }
+          if (ref.path === 'counters/2026') return { exists: true, data: () => ({ nextOrderNo: 2 }) }
+          if (ref.path === 'products/prod_gold_coin') return { exists: true, id: 'prod_gold_coin', data: () => mockProduct }
+          return { exists: false }
+        }),
+        set: vi.fn(),
+        update: vi.fn((ref: { path: string }, data: Record<string, unknown>) => {
+          if (ref.path === 'customers/cust_backdated') updatedStats = data.stats
+        })
+      }
+
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id?: string) => ({ id: id || 'mock_doc', path: `${colName}/${id || 'mock_doc'}` }),
+          add: vi.fn(async () => ({ id: 'mock_add_id' }))
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
+      vi.spyOn(adminDb, 'runTransaction').mockImplementation(async (cb: unknown) => {
+        return (cb as (t: unknown) => Promise<unknown>)(fakeTx)
+      })
+
+      // 1. Backdated order (e.g. 2026-05-01): moves firstVisitAt earlier, but does NOT move lastVisitAt backwards
+      await createOrder({
+        type: 'sale',
+        customerId: 'cust_backdated',
+        locationId: 'loc_vault',
+        date: '2026-05-01',
+        lines: [{ productId: 'prod_gold_coin', qty: 1, unitPricePaise: 7500000 }],
+        payments: [{ mode: 'cash', amountPaise: 7500000 }],
+        caller: { callerUid: 'admin_1', callerName: 'Admin', callerEmail: 'admin@a96.com' }
+      })
+
+      expect(updatedStats?.firstVisitAt).toBe('2026-05-01') // moved back because 2026-05-01 < 2026-05-10
+      expect(updatedStats?.lastVisitAt).toBe('2026-05-20') // preserved because max('2026-05-20', '2026-05-01')
+
+      // 2. Future/newer order (e.g. 2026-05-28): moves lastVisitAt forward, firstVisitAt untouched
+      existingCustomer.stats.firstVisitAt = '2026-05-01'
+      existingCustomer.stats.lastVisitAt = '2026-05-20'
+      await createOrder({
+        type: 'sale',
+        customerId: 'cust_backdated',
+        locationId: 'loc_vault',
+        date: '2026-05-28',
+        lines: [{ productId: 'prod_gold_coin', qty: 1, unitPricePaise: 7500000 }],
+        payments: [{ mode: 'cash', amountPaise: 7500000 }],
+        caller: { callerUid: 'admin_1', callerName: 'Admin', callerEmail: 'admin@a96.com' }
+      })
+
+      expect(updatedStats?.firstVisitAt).toBe('2026-05-01')
+      expect(updatedStats?.lastVisitAt).toBe('2026-05-28')
     })
 
     it('executes reverseOrder and restores customer stats and marks order reversed', async () => {
@@ -581,5 +689,661 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
       // Stock restored from 3 back to 5
       expect(restoredProductUpdates?.stock).toBe(5)
     })
+
+    it('refuses to reverse an order bill whose line was already reversed', async () => {
+      const mockExistingOrder = {
+        id: 'order_already_partially_reversed',
+        orderNo: 'A96-2026-000002',
+        type: 'sale',
+        date: '2026-04-10',
+        locationId: 'loc_vault',
+        locationName: 'Main Vault',
+        isReversed: false,
+        lines: [
+          {
+            transactionId: 'tx_already_reversed_1',
+            productId: 'prod_gold_coin',
+            productName: '10g Gold Coin',
+            metal: 'Gold',
+            category: 'Bullions',
+            qty: 1,
+            unitPricePaise: 7500000,
+            lineTotalPaise: 7500000
+          }
+        ],
+        totals: {
+          amountPaise: 7500000,
+          units: 1,
+          weightMg: { Gold: 10000, Silver: 0 }
+        }
+      }
+
+      const mockAlreadyReversedTx = {
+        id: 'tx_already_reversed_1',
+        type: 'sale',
+        orderId: 'order_already_partially_reversed',
+        orderNo: 'A96-2026-000002',
+        quantity: 1,
+        locationId: 'loc_vault',
+        isReversed: true
+      }
+
+      const fakeTransaction = {
+        get: vi.fn(async (ref: { path: string }) => {
+          if (ref.path === 'system/zero_balance_lock') {
+            return { exists: false, data: () => ({ isLocked: false }) }
+          }
+          if (ref.path === 'orders/order_already_partially_reversed') {
+            return { exists: true, id: 'order_already_partially_reversed', data: () => mockExistingOrder }
+          }
+          if (ref.path === 'transactions/tx_already_reversed_1') {
+            return { exists: true, id: 'tx_already_reversed_1', data: () => mockAlreadyReversedTx }
+          }
+          return { exists: false }
+        }),
+        set: vi.fn(),
+        update: vi.fn()
+      }
+
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id?: string) => ({ id: id || 'mock_doc', path: `${colName}/${id || 'mock_doc'}` }),
+          add: vi.fn(async () => ({ id: 'mock_add_id' }))
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
+
+      vi.spyOn(adminDb, 'runTransaction').mockImplementation(async (cb: unknown) => {
+        return (cb as (t: unknown) => Promise<unknown>)(fakeTransaction)
+      })
+
+      await expect(
+        reverseOrder({
+          orderId: 'order_already_partially_reversed',
+          caller: { callerUid: 'admin_1', callerName: 'Admin', callerEmail: 'admin@a96.com' }
+        })
+      ).rejects.toThrow(
+        'Cannot reverse order "A96-2026-000002": line item transaction "tx_already_reversed_1" has already been reversed.'
+      )
+    })
+
+    it('refuses to reverse an individual transaction line belonging to a bill via DELETE /api/admin/transactions', async () => {
+      const { DELETE } = await import('@/app/api/admin/transactions/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'super_admin_1',
+          callerName: 'Super Admin',
+          callerEmail: 'admin@a96.com',
+          callerData: { email: 'admin@a96.com', displayName: 'Super Admin', role: 'super_admin', status: 'active' },
+          isSuperAdmin: true,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {}
+        }
+      })
+
+      const mockBillLineTx = {
+        id: 'tx_bill_line_1',
+        type: 'sale',
+        orderId: 'order_100',
+        orderNo: 'A96-2026-000100',
+        productId: 'prod_gold_coin',
+        quantity: 1,
+        isReversed: false
+      }
+
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id?: string) => ({
+            id: id || 'mock_doc',
+            path: `${colName}/${id || 'mock_doc'}`,
+            get: vi.fn(async () => {
+              if (id === 'tx_bill_line_1') {
+                return { exists: true, id, data: () => mockBillLineTx }
+              }
+              return { exists: false }
+            })
+          })
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
+
+      const req = new NextRequest('http://localhost:3000/api/admin/transactions?id=tx_bill_line_1', {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer mock_token' }
+      })
+
+      const res = await DELETE(req)
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toBe('This line belongs to bill A96-2026-000100; reverse the whole bill')
+    })
+
+    it('refuses to edit an individual transaction line belonging to a bill via PATCH /api/admin/transactions', async () => {
+      const { PATCH } = await import('@/app/api/admin/transactions/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'super_admin_1',
+          callerName: 'Super Admin',
+          callerEmail: 'admin@a96.com',
+          callerData: { email: 'admin@a96.com', displayName: 'Super Admin', role: 'super_admin', status: 'active' },
+          isSuperAdmin: true,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {}
+        }
+      })
+
+      const mockBillLineTx = {
+        id: 'tx_bill_line_2',
+        type: 'sale',
+        orderId: 'order_200',
+        orderNo: 'A96-2026-000200',
+        productId: 'prod_gold_coin',
+        quantity: 1,
+        price: 5000,
+        isReversed: false
+      }
+
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id?: string) => ({
+            id: id || 'mock_doc',
+            path: `${colName}/${id || 'mock_doc'}`,
+            get: vi.fn(async () => {
+              if (id === 'tx_bill_line_2') {
+                return { exists: true, id, data: () => mockBillLineTx }
+              }
+              return { exists: false }
+            })
+          })
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
+
+      const req = new NextRequest('http://localhost:3000/api/admin/transactions', {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer mock_token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'tx_bill_line_2', price: 6000 })
+      })
+
+      const res = await PATCH(req)
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toBe('This line belongs to bill A96-2026-000200; reverse the whole bill')
+    })
+
+    it('prevents double-click reversal when latest transaction in runTransaction is already reversed', async () => {
+      const { DELETE } = await import('@/app/api/admin/transactions/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'super_admin_1',
+          callerName: 'Super Admin',
+          callerEmail: 'admin@a96.com',
+          callerData: { email: 'admin@a96.com', displayName: 'Super Admin', role: 'super_admin', status: 'active' },
+          isSuperAdmin: true,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {}
+        }
+      })
+
+      const initialTx = {
+        id: 'tx_double_click',
+        type: 'sale',
+        productId: 'prod_gold_coin',
+        quantity: 1,
+        isReversed: false
+      }
+
+      const concurrentReversedTx = {
+        ...initialTx,
+        isReversed: true
+      }
+
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id?: string) => ({
+            id: id || 'mock_doc',
+            path: `${colName}/${id || 'mock_doc'}`,
+            get: vi.fn(async () => ({ exists: true, id, data: () => initialTx }))
+          })
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
+
+      const fakeTransaction = {
+        get: vi.fn(async (ref: { path: string }) => {
+          if (ref.path === 'transactions/tx_double_click') {
+            return { exists: true, id: 'tx_double_click', data: () => concurrentReversedTx }
+          }
+          return { exists: false }
+        })
+      }
+
+      vi.spyOn(adminDb, 'runTransaction').mockImplementation(async (cb: unknown) => {
+        return (cb as (t: unknown) => Promise<unknown>)(fakeTransaction)
+      })
+
+      const req = new NextRequest('http://localhost:3000/api/admin/transactions?id=tx_double_click', {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer mock_token' }
+      })
+
+      const res = await DELETE(req)
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toBe('This transaction has already been reversed')
+    })
+  })
+
+  describe('Orders API Rules & Guards (Location, Fiscal Cutoff, Future Dates, GET Filters, Error Classes)', () => {
+    beforeEach(async () => {
+      const systemLock = await import('@/lib/server/system-lock')
+      vi.spyOn(systemLock, 'getClosedFiscalCutoff').mockResolvedValue(null)
+    })
+
+    it('Rule 1: Staff with assignedLocationId can only bill at their assigned location (POST /api/admin/orders)', async () => {
+      const { POST } = await import('@/app/api/admin/orders/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'staff_store_1',
+          callerName: 'Store 1 Staff',
+          callerEmail: 'staff1@a96.com',
+          callerData: {
+            email: 'staff1@a96.com',
+            displayName: 'Store 1 Staff',
+            role: 'sales_cashier',
+            status: 'active',
+            assignedLocationId: 'loc_store_1',
+            assignedLocationName: 'Store 1'
+          },
+          isSuperAdmin: false,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {}
+        }
+      })
+
+      const body = {
+        type: 'sale',
+        locationId: 'loc_store_2',
+        date: '2026-10-20',
+        lines: [
+          { productId: 'prod_gold_coin', qty: 1, unitPricePaise: 7500000 }
+        ],
+        payments: [
+          { mode: 'cash', amountPaise: 7500000 }
+        ]
+      }
+
+      const req = new NextRequest('http://localhost:3000/api/admin/orders', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer mock_token', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const res = await POST(req)
+      expect(res.status).toBe(403)
+      const data = await res.json()
+      expect(data.error).toContain('You are assigned to Store 1 and cannot record sale transactions at a different location.')
+    })
+
+    it('Rule 1: Staff with assignedLocationId can only reverse orders at their assigned location (POST /api/admin/orders/[id]/reverse)', async () => {
+      const { POST } = await import('@/app/api/admin/orders/[id]/reverse/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'staff_store_1',
+          callerName: 'Store 1 Staff',
+          callerEmail: 'staff1@a96.com',
+          callerData: {
+            email: 'staff1@a96.com',
+            displayName: 'Store 1 Staff',
+            role: 'sales_cashier',
+            status: 'active',
+            assignedLocationId: 'loc_store_1',
+            assignedLocationName: 'Store 1'
+          },
+          isSuperAdmin: false,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {}
+        }
+      })
+
+      const mockOrderAtStore2 = {
+        id: 'order_store_2_bill',
+        orderNo: 'A96-2026-000500',
+        type: 'sale',
+        locationId: 'loc_store_2',
+        date: '2026-10-20',
+        isReversed: false
+      }
+
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id?: string) => ({
+            id: id || 'mock_doc',
+            path: `${colName}/${id || 'mock_doc'}`,
+            get: vi.fn(async () => {
+              if (id === 'order_store_2_bill') {
+                return { exists: true, id, data: () => mockOrderAtStore2 }
+              }
+              return { exists: false }
+            })
+          })
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
+
+      const req = new NextRequest('http://localhost:3000/api/admin/orders/order_store_2_bill/reverse', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer mock_token' }
+      })
+
+      const res = await POST(req, { params: Promise.resolve({ id: 'order_store_2_bill' }) })
+      expect(res.status).toBe(403)
+      const data = await res.json()
+      expect(data.error).toContain('You are assigned to Store 1 and cannot reverse orders from a different location.')
+    })
+
+    it('Rule 2: Reject orders dated on or before getClosedFiscalCutoff() (POST /api/admin/orders)', async () => {
+      const { POST } = await import('@/app/api/admin/orders/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+      const systemLock = await import('@/lib/server/system-lock')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'super_admin_1',
+          callerName: 'Super Admin',
+          callerEmail: 'admin@a96.com',
+          callerData: { email: 'admin@a96.com', displayName: 'Super Admin', role: 'super_admin', status: 'active' },
+          isSuperAdmin: true,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {}
+        }
+      })
+
+      vi.spyOn(systemLock, 'getClosedFiscalCutoff').mockResolvedValue('2026-03-31')
+
+      const body = {
+        type: 'sale',
+        locationId: 'loc_main',
+        date: '2026-03-31',
+        lines: [
+          { productId: 'prod_gold_coin', qty: 1, unitPricePaise: 7500000 }
+        ],
+        payments: [
+          { mode: 'cash', amountPaise: 7500000 }
+        ]
+      }
+
+      const req = new NextRequest('http://localhost:3000/api/admin/orders', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer mock_token', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const res = await POST(req)
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('Entries dated on or before 2026-03-31 are blocked.')
+    })
+
+    it('Rule 2: Reject reversing orders dated on or before getClosedFiscalCutoff() (POST /api/admin/orders/[id]/reverse)', async () => {
+      const { POST } = await import('@/app/api/admin/orders/[id]/reverse/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+      const systemLock = await import('@/lib/server/system-lock')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'super_admin_1',
+          callerName: 'Super Admin',
+          callerEmail: 'admin@a96.com',
+          callerData: { email: 'admin@a96.com', displayName: 'Super Admin', role: 'super_admin', status: 'active' },
+          isSuperAdmin: true,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {}
+        }
+      })
+
+      vi.spyOn(systemLock, 'getClosedFiscalCutoff').mockResolvedValue('2026-03-31')
+
+      const mockClosedOrder = {
+        id: 'order_closed_fy',
+        orderNo: 'A96-2025-000100',
+        type: 'sale',
+        locationId: 'loc_main',
+        date: '2026-03-15',
+        isReversed: false
+      }
+
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id?: string) => ({
+            id: id || 'mock_doc',
+            path: `${colName}/${id || 'mock_doc'}`,
+            get: vi.fn(async () => {
+              if (id === 'order_closed_fy') {
+                return { exists: true, id, data: () => mockClosedOrder }
+              }
+              return { exists: false }
+            })
+          })
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
+
+      const req = new NextRequest('http://localhost:3000/api/admin/orders/order_closed_fy/reverse', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer mock_token' }
+      })
+
+      const res = await POST(req, { params: Promise.resolve({ id: 'order_closed_fy' }) })
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('Cannot reverse order: It is dated on or before 2026-03-31.')
+    })
+
+    it('Rule 3: Reject future dates in IST when creating orders (POST /api/admin/orders)', async () => {
+      const { POST } = await import('@/app/api/admin/orders/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'super_admin_1',
+          callerName: 'Super Admin',
+          callerEmail: 'admin@a96.com',
+          callerData: { email: 'admin@a96.com', displayName: 'Super Admin', role: 'super_admin', status: 'active' },
+          isSuperAdmin: true,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {}
+        }
+      })
+
+      const body = {
+        type: 'sale',
+        locationId: 'loc_main',
+        date: '2099-12-31',
+        lines: [
+          { productId: 'prod_gold_coin', qty: 1, unitPricePaise: 7500000 }
+        ],
+        payments: [
+          { mode: 'cash', amountPaise: 7500000 }
+        ]
+      }
+
+      const req = new NextRequest('http://localhost:3000/api/admin/orders', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer mock_token', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const res = await POST(req)
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('Order date cannot be in the future (2099-12-31)')
+    })
+
+    it('Rule 3: Reject reversing future-dated orders (POST /api/admin/orders/[id]/reverse)', async () => {
+      const { POST } = await import('@/app/api/admin/orders/[id]/reverse/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'super_admin_1',
+          callerName: 'Super Admin',
+          callerEmail: 'admin@a96.com',
+          callerData: { email: 'admin@a96.com', displayName: 'Super Admin', role: 'super_admin', status: 'active' },
+          isSuperAdmin: true,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {}
+        }
+      })
+
+      const mockFutureOrder = {
+        id: 'order_future',
+        orderNo: 'A96-2099-000001',
+        type: 'sale',
+        locationId: 'loc_main',
+        date: '2099-12-31',
+        isReversed: false
+      }
+
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id?: string) => ({
+            id: id || 'mock_doc',
+            path: `${colName}/${id || 'mock_doc'}`,
+            get: vi.fn(async () => {
+              if (id === 'order_future') {
+                return { exists: true, id, data: () => mockFutureOrder }
+              }
+              return { exists: false }
+            })
+          })
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
+
+      const req = new NextRequest('http://localhost:3000/api/admin/orders/order_future/reverse', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer mock_token' }
+      })
+
+      const res = await POST(req, { params: Promise.resolve({ id: 'order_future' }) })
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('Cannot reverse order: It is dated in the future (2099-12-31)')
+    })
+
+    it('GET /api/admin/orders forces locationId to caller assignedLocationId and accepts startDate/endDate', async () => {
+      const { GET } = await import('@/app/api/admin/orders/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+      const ordersModule = await import('@/lib/server/orders')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'staff_store_1',
+          callerName: 'Store 1 Staff',
+          callerEmail: 'staff1@a96.com',
+          callerData: {
+            email: 'staff1@a96.com',
+            displayName: 'Store 1 Staff',
+            role: 'sales_cashier',
+            status: 'active',
+            assignedLocationId: 'loc_store_1',
+            assignedLocationName: 'Store 1'
+          },
+          isSuperAdmin: false,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {}
+        }
+      })
+
+      const listSpy = vi.spyOn(ordersModule, 'listOrders').mockResolvedValue({
+        orders: [],
+        nextCursor: null
+      })
+
+      const req = new NextRequest(
+        'http://localhost:3000/api/admin/orders?locationId=loc_store_99&startDate=2026-10-01&endDate=2026-10-20',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer mock_token' }
+        }
+      )
+
+      const res = await GET(req)
+      expect(res.status).toBe(200)
+
+      // Verified: caller's assignedLocationId was forced ('loc_store_1' instead of query's 'loc_store_99'),
+      // and startDate / endDate were passed to listOrders
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          locationId: 'loc_store_1',
+          startDate: '2026-10-01',
+          endDate: '2026-10-20'
+        })
+      )
+    })
+
+    it('Maps validation errors to HTTP 400 by error class (ValidationError) without message text matching', async () => {
+      const { POST } = await import('@/app/api/admin/orders/route')
+      const serverAuth = await import('@/lib/firebase/server-auth')
+      const ordersModule = await import('@/lib/server/orders')
+      const systemLock = await import('@/lib/server/system-lock')
+
+      vi.spyOn(serverAuth, 'getAuthenticatedCaller').mockResolvedValue({
+        ok: true,
+        caller: {
+          callerUid: 'super_admin_1',
+          callerName: 'Super Admin',
+          callerEmail: 'admin@a96.com',
+          callerData: { email: 'admin@a96.com', displayName: 'Super Admin', role: 'super_admin', status: 'active' },
+          isSuperAdmin: true,
+          callerPermissions: { ...SUPER_ADMIN_PERMISSIONS },
+          decodedToken: {}
+        }
+      })
+
+      vi.spyOn(systemLock, 'getClosedFiscalCutoff').mockResolvedValue(null)
+
+      vi.spyOn(ordersModule, 'createOrder').mockRejectedValue(
+        new ordersModule.ValidationError('Custom business logic constraint violation')
+      )
+
+      const body = {
+        type: 'sale',
+        locationId: 'loc_main',
+        date: '2026-10-20',
+        lines: [
+          { productId: 'prod_gold_coin', qty: 1, unitPricePaise: 7500000 }
+        ],
+        payments: [
+          { mode: 'cash', amountPaise: 7500000 }
+        ]
+      }
+
+      const req = new NextRequest('http://localhost:3000/api/admin/orders', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer mock_token', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const res = await POST(req)
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toBe('Custom business logic constraint violation')
+    })
   })
 })
+

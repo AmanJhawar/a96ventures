@@ -9,6 +9,7 @@ import CustomSelect, { SelectOption } from '@/components/custom-select'
 import CustomDatePicker from '@/components/custom-date-picker'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/ui/form-error'
+import MoneyInput from '@/components/money-input'
 
 interface EditPurchaseModalProps {
   editingPurchase: Transaction | null
@@ -53,7 +54,7 @@ export function EditPurchaseModal({
   isValid,
   error
 }: EditPurchaseModalProps) {
-  const totalValue = (Number(quantity) || 0) * (Number(price) || 0)
+  const totalValue = (Number(quantity) || 0) * (Number(String(price || '').replace(/,/g, '')) || 0)
 
   return (
     <AnimatePresence>
@@ -158,15 +159,12 @@ export function EditPurchaseModal({
                 <label className="block text-xs font-medium text-gray-700 mb-1.5">
                   Unit Cost (₹) <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
+                <MoneyInput
                   required
                   value={price}
-                  onChange={(e) => setPrice(e.target.value)}
+                  onChange={setPrice}
                   placeholder="e.g. 12000"
-                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
+                  size="sm"
                 />
               </div>
             </div>
@@ -174,7 +172,7 @@ export function EditPurchaseModal({
             {/* Live total display */}
             <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-between text-xs">
               <span className="text-gray-500">Total Purchase Value:</span>
-              <span className="font-bold text-black text-sm">
+              <span className="font-bold text-black text-sm font-mono tabular-nums">
                 ₹{totalValue.toLocaleString('en-IN')}
               </span>
             </div>

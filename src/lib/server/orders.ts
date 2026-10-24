@@ -4,8 +4,11 @@ import { adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { sumPaise, paiseToRupees } from '@/lib/utils/money'
 import { mgToGrams } from '@/lib/utils/weight'
-import { getZeroBalanceLockRef, assertNotZeroBalanceLocked } from '@/lib/server/system-lock'
+import { getZeroBalanceLockRef, assertNotZeroBalanceLocked, getClosedFiscalCutoff } from '@/lib/server/system-lock'
 import { executeOrderLinesStockUpdate, applyReverseTransaction } from '@/lib/server/ledger'
+import { getTodayIST } from '@/lib/utils/date'
+import { ValidationError } from '@/lib/errors'
+export { ValidationError } from '@/lib/errors'
 import {
   Order,
   OrderLine,
@@ -69,33 +72,33 @@ export interface CreateOrderParams {
  */
 export function validateOrderPayments(payments: OrderPayment[], totalLinePaise: number): void {
   if (!Array.isArray(payments) || payments.length === 0) {
-    throw new Error('At least one payment entry is required')
+    throw new ValidationError('At least one payment entry is required')
   }
 
   const validModes: PaymentMode[] = ['cash', 'upi', 'card', 'bank', 'old_metal']
   for (const p of payments) {
     if (!validModes.includes(p.mode)) {
-      throw new Error(`Invalid payment mode: "${p.mode}"`)
+      throw new ValidationError(`Invalid payment mode: "${p.mode}"`)
     }
     if (typeof p.amountPaise !== 'number' || !Number.isInteger(p.amountPaise) || p.amountPaise <= 0) {
-      throw new Error(`Payment amount must be a positive integer in paise. Received: ${p.amountPaise}`)
+      throw new ValidationError(`Payment amount must be a positive integer in paise. Received: ${p.amountPaise}`)
     }
     if (p.mode === 'old_metal') {
       if (!p.metal || !['Gold', 'Silver'].includes(p.metal)) {
-        throw new Error('Old metal payment requires metal to be "Gold" or "Silver"')
+        throw new ValidationError('Old metal payment requires metal to be "Gold" or "Silver"')
       }
       if (typeof p.weightMg !== 'number' || !Number.isInteger(p.weightMg) || p.weightMg <= 0) {
-        throw new Error('Old metal payment requires weightMg as a positive integer in milligrams')
+        throw new ValidationError('Old metal payment requires weightMg as a positive integer in milligrams')
       }
       if (!p.purity || typeof p.purity !== 'string' || !p.purity.trim()) {
-        throw new Error('Old metal payment requires a non-empty purity string')
+        throw new ValidationError('Old metal payment requires a non-empty purity string')
       }
     }
   }
 
   const paymentsTotalPaise = sumPaise(payments.map((p) => p.amountPaise))
   if (paymentsTotalPaise !== totalLinePaise) {
-    throw new Error(
+    throw new ValidationError(
       `Payment mismatch: payments sum to ${paymentsTotalPaise} paise, but total bill is ${totalLinePaise} paise. Difference: ${paymentsTotalPaise - totalLinePaise} paise.`
     )
   }
@@ -115,16 +118,29 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
   const { type, customerId, locationId, date, lines, payments, notes, caller } = params
 
   if (type !== 'sale' && type !== 'return') {
-    throw new Error(`Invalid order type: "${type}". Expected "sale" or "return".`)
+    throw new ValidationError(`Invalid order type: "${type}". Expected "sale" or "return".`)
   }
   if (!locationId) {
-    throw new Error('Location ID is required')
+    throw new ValidationError('Location ID is required')
   }
   if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    throw new Error(`Invalid date: "${date}". Expected format YYYY-MM-DD.`)
+    throw new ValidationError(`Invalid date: "${date}". Expected format YYYY-MM-DD.`)
   }
+
+  const today = getTodayIST()
+  if (date > today) {
+    throw new ValidationError(`Order date cannot be in the future (${date}). Current date in IST is ${today}.`)
+  }
+
+  const closedCutoff = await getClosedFiscalCutoff()
+  if (closedCutoff && date <= closedCutoff) {
+    throw new ValidationError(
+      `Entries dated on or before ${closedCutoff} are blocked. The financial period up to ${closedCutoff} has been closed and archived.`
+    )
+  }
+
   if (!Array.isArray(lines) || lines.length === 0) {
-    throw new Error('Order must contain at least one line item')
+    throw new ValidationError('Order must contain at least one line item')
   }
 
   const fiscalYear = getIndianFiscalYear(date)
@@ -145,7 +161,7 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
 
     const locSnap = await t.get(locRef)
     if (!locSnap.exists) {
-      throw new Error(`Location not found: "${locationId}"`)
+      throw new ValidationError(`Location not found: "${locationId}"`)
     }
     const locationName = String(locSnap.data()?.name || 'Main Vault')
 
@@ -153,11 +169,11 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
     if (customerRef) {
       const custSnap = await t.get(customerRef)
       if (!custSnap.exists) {
-        throw new Error(`Customer not found: "${customerId}"`)
+        throw new ValidationError(`Customer not found: "${customerId}"`)
       }
       const data = custSnap.data() as Customer
       if (data.isArchived) {
-        throw new Error('Cannot create order for an archived customer')
+        throw new ValidationError('Cannot create order for an archived customer')
       }
       customerData = { ...data, id: custSnap.id }
     }
@@ -169,11 +185,11 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
     for (let i = 0; i < productSnaps.length; i++) {
       const pSnap = productSnaps[i]
       if (!pSnap.exists) {
-        throw new Error(`Product not found: "${uniqueProductIds[i]}"`)
+        throw new ValidationError(`Product not found: "${uniqueProductIds[i]}"`)
       }
       const pData = pSnap.data() as Product
       if (pData.isArchived) {
-        throw new Error(`Product is archived and cannot be ordered: "${pData.name}"`)
+        throw new ValidationError(`Product is archived and cannot be ordered: "${pData.name}"`)
       }
       productsMap.set(pSnap.id, { ...pData, id: pSnap.id })
     }
@@ -215,8 +231,8 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
         id: txRef.id,
         type,
         orderId: orderRef.id,
-        customerId: customerId || null,
-        customerName: customerData ? customerData.displayName : undefined,
+        orderNo,
+        invoiceNo: orderNo,
         productId: lineRes.productId,
         productName: lineRes.productName,
         category: lineRes.category,
@@ -236,6 +252,13 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
         operatorEmail: caller.callerEmail,
         isReversed: false,
         ...lineRes.txPiecePayload
+      }
+
+      if (customerId) {
+        txPayload.customerId = customerId
+        if (customerData?.displayName) {
+          txPayload.customerName = customerData.displayName
+        }
       }
 
       if (lineRes.weightMg !== undefined && lineRes.weightMg > 0) {
@@ -269,6 +292,34 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
     // Advance counter
     t.set(counterRef, { nextOrderNo: nextSeq + 1 }, { merge: true })
 
+    const orderDocData: Record<string, unknown> = {
+      id: orderRef.id,
+      orderNo,
+      type,
+      locationId,
+      locationName,
+      date,
+      createdAt: new Date().toISOString(),
+      createdBy: caller.callerUid,
+      lines: orderLines,
+      totals: execution.totals,
+      payments,
+      isReversed: false
+    }
+
+    if (customerId) orderDocData.customerId = customerId
+    if (customerData) {
+      orderDocData.customerSnapshot = {
+        displayName: customerData.displayName,
+        mobileE164: customerData.mobile?.e164 || ''
+      }
+    }
+    if (notes && notes.trim()) {
+      orderDocData.notes = notes.trim()
+    }
+
+    t.set(orderRef, orderDocData)
+
     const orderRecord: Order = {
       id: orderRef.id,
       orderNo,
@@ -283,7 +334,7 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
       locationId,
       locationName,
       date,
-      createdAt: new Date().toISOString(),
+      createdAt: orderDocData.createdAt as string,
       createdBy: caller.callerUid,
       lines: orderLines,
       totals: execution.totals,
@@ -291,8 +342,6 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
       notes: notes ? notes.trim() : undefined,
       isReversed: false
     }
-
-    t.set(orderRef, orderRecord)
 
     // Update customer stats and log visit if customer is linked
     if (customerData && customerRef) {
@@ -318,11 +367,18 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
         openFollowUps: 0
       }
 
+      const billDate = date.slice(0, 10)
+      const existingFirst = prevStats.firstVisitAt ? prevStats.firstVisitAt.slice(0, 10) : undefined
+      const existingLast = prevStats.lastVisitAt ? prevStats.lastVisitAt.slice(0, 10) : undefined
+
+      const firstVisitAt = !existingFirst || billDate < existingFirst ? billDate : existingFirst
+      const lastVisitAt = !existingLast || billDate > existingLast ? billDate : existingLast
+
       const isSale = type === 'sale'
       const updatedStats: CustomerStats = {
         ...prevStats,
-        firstVisitAt: prevStats.firstVisitAt || date,
-        lastVisitAt: date,
+        firstVisitAt,
+        lastVisitAt,
         visitCount: (prevStats.visitCount || 0) + 1,
         orderCount: (prevStats.orderCount || 0) + 1,
         lastOrderId: orderRef.id,
@@ -398,7 +454,7 @@ export interface ReverseOrderParams {
 export async function reverseOrder(params: ReverseOrderParams): Promise<Order> {
   const { orderId, caller } = params
   if (!orderId) {
-    throw new Error('Order ID is required')
+    throw new ValidationError('Order ID is required')
   }
 
   const lockRef = getZeroBalanceLockRef()
@@ -413,11 +469,25 @@ export async function reverseOrder(params: ReverseOrderParams): Promise<Order> {
 
     const orderSnap = await t.get(orderRef)
     if (!orderSnap.exists) {
-      throw new Error(`Order not found: "${orderId}"`)
+      throw new ValidationError(`Order not found: "${orderId}"`)
     }
     const orderData = orderSnap.data() as Order
     if (orderData.isReversed) {
-      throw new Error(`Order "${orderData.orderNo}" is already reversed.`)
+      throw new ValidationError(`Order "${orderData.orderNo}" is already reversed.`)
+    }
+
+    const closedCutoff = await getClosedFiscalCutoff()
+    if (closedCutoff && orderData.date <= closedCutoff) {
+      throw new ValidationError(
+        `Cannot reverse order: It is dated on or before ${closedCutoff}. The financial period up to ${closedCutoff} has been closed and archived.`
+      )
+    }
+
+    const today = getTodayIST()
+    if (orderData.date > today) {
+      throw new ValidationError(
+        `Cannot reverse order: It is dated in the future (${orderData.date}). Today is ${today}.`
+      )
     }
 
     const customerRef = orderData.customerId
@@ -434,9 +504,20 @@ export async function reverseOrder(params: ReverseOrderParams): Promise<Order> {
     for (let i = 0; i < txSnaps.length; i++) {
       const snap = txSnaps[i]
       if (!snap.exists) {
-        throw new Error(`Transaction record "${orderData.lines[i].transactionId}" not found for line ${i + 1}`)
+        throw new ValidationError(`Transaction record "${orderData.lines[i].transactionId}" not found for line ${i + 1}`)
       }
-      transactionsMap.set(snap.id, { ...snap.data(), id: snap.id } as Transaction)
+      const txData = { ...snap.data(), id: snap.id } as Transaction
+      if (txData.isReversed) {
+        throw new ValidationError(
+          `Cannot reverse order "${orderData.orderNo}": line item transaction "${snap.id}" has already been reversed.`
+        )
+      }
+      if (txData.reversalOf || txData.isReversal) {
+        throw new ValidationError(
+          `Cannot reverse order "${orderData.orderNo}": line item transaction "${snap.id}" is already a reversal entry.`
+        )
+      }
+      transactionsMap.set(snap.id, txData)
     }
 
     // Read all unique products
@@ -448,7 +529,7 @@ export async function reverseOrder(params: ReverseOrderParams): Promise<Order> {
     for (let i = 0; i < prodSnaps.length; i++) {
       const snap = prodSnaps[i]
       if (!snap.exists) {
-        throw new Error(`Product not found: "${uniqueProductIds[i]}"`)
+        throw new ValidationError(`Product not found: "${uniqueProductIds[i]}"`)
       }
       workingProducts.set(snap.id, { ...snap.data(), id: snap.id } as Product)
     }
@@ -575,7 +656,7 @@ export async function reverseOrder(params: ReverseOrderParams): Promise<Order> {
       userId: caller.callerUid,
       userName: caller.callerName,
       userEmail: caller.callerEmail,
-      action: 'reversal',
+      action: 'reverse',
       entityType: 'order',
       entityId: reversedOrder.id,
       entityName: `Bill ${reversedOrder.orderNo}`,
@@ -598,12 +679,14 @@ export async function reverseOrder(params: ReverseOrderParams): Promise<Order> {
 export interface ListOrdersOptions {
   customerId?: string
   locationId?: string
+  startDate?: string
+  endDate?: string
   limit?: number
   cursor?: string
 }
 
 /**
- * Lists orders with optional customerId or locationId filter and cursor pagination.
+ * Lists orders with optional customerId, locationId, startDate, endDate filter and cursor pagination.
  */
 export async function listOrders(options?: ListOrdersOptions): Promise<{ orders: Order[]; nextCursor: string | null }> {
   const limitCount = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 25
@@ -614,6 +697,13 @@ export async function listOrders(options?: ListOrdersOptions): Promise<{ orders:
   }
   if (options?.locationId) {
     query = query.where('locationId', '==', options.locationId)
+  }
+  if (options?.startDate && options?.endDate) {
+    query = query.where('date', '>=', options.startDate).where('date', '<=', options.endDate)
+  } else if (options?.startDate) {
+    query = query.where('date', '>=', options.startDate)
+  } else if (options?.endDate) {
+    query = query.where('date', '<=', options.endDate)
   }
 
   query = query.orderBy('date', 'desc').orderBy('createdAt', 'desc')

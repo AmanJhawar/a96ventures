@@ -1,5 +1,6 @@
 import { Product, TransactionType, Transaction } from '@/lib/types'
 import { gramsToMg, mgToGrams } from '@/lib/utils/weight'
+import { ValidationError } from '@/lib/errors'
 
 export interface NormalizedProductLedgerState {
   isIdol: boolean
@@ -153,20 +154,20 @@ export function applyRecordTransaction(params: RecordLedgerParams): RecordLedger
   } else if (type === 'sale') {
     const available = currentLocMap[locationId] || 0
     if (available < quantity) {
-      throw new Error(`Insufficient stock at ${locationName}. Available: ${available}, Requested: ${quantity}`)
+      throw new ValidationError(`Insufficient stock at ${locationName}. Available: ${available}, Requested: ${quantity}`)
     }
     currentLocMap[locationId] = available - quantity
     newTotal -= quantity
   } else if (type === 'transfer') {
     if (!toLocationId) {
-      throw new Error('Destination location is required for transfer')
+      throw new ValidationError('Destination location is required for transfer')
     }
     if (locationId === toLocationId) {
-      throw new Error('Source and destination locations cannot be identical')
+      throw new ValidationError('Source and destination locations cannot be identical')
     }
     const available = currentLocMap[locationId] || 0
     if (available < quantity) {
-      throw new Error(`Insufficient stock at ${locationName}. Available: ${available}, Requested: ${quantity}`)
+      throw new ValidationError(`Insufficient stock at ${locationName}. Available: ${available}, Requested: ${quantity}`)
     }
     currentLocMap[locationId] = available - quantity
     currentLocMap[toLocationId] = (currentLocMap[toLocationId] || 0) + quantity
@@ -176,7 +177,7 @@ export function applyRecordTransaction(params: RecordLedgerParams): RecordLedger
   } else if (type === 'melt') {
     const available = currentLocMap[locationId] || 0
     if (available < quantity) {
-      throw new Error(`Insufficient stock at ${locationName}. Available: ${available}, Requested: ${quantity}`)
+      throw new ValidationError(`Insufficient stock at ${locationName}. Available: ${available}, Requested: ${quantity}`)
     }
     currentLocMap[locationId] = available - quantity
     newTotal -= quantity
@@ -184,7 +185,7 @@ export function applyRecordTransaction(params: RecordLedgerParams): RecordLedger
     if (quantity < 0) {
       const available = currentLocMap[locationId] || 0
       if (available < Math.abs(quantity)) {
-        throw new Error(`Cannot reduce stock below zero. Current stock at ${locationName}: ${available}, Deficit adjustment: ${quantity}`)
+        throw new ValidationError(`Cannot reduce stock below zero. Current stock at ${locationName}: ${available}, Deficit adjustment: ${quantity}`)
       }
       currentLocMap[locationId] = available + quantity
       newTotal += quantity
@@ -227,7 +228,7 @@ export function applyRecordTransaction(params: RecordLedgerParams): RecordLedger
           sourceLocPiecesMg.splice(idx, 1)
           updatedPiecesByLocMg[locationId] = sourceLocPiecesMg
         } else {
-          throw new Error(`The specific piece (${selW}g) is not available at ${locationName} to sell.`)
+          throw new ValidationError(`The specific piece (${selW}g) is not available at ${locationName} to sell.`)
         }
         const allIdx = updatedPiecesMg.indexOf(selWMg)
         if (allIdx !== -1) updatedPiecesMg.splice(allIdx, 1)
@@ -245,7 +246,7 @@ export function applyRecordTransaction(params: RecordLedgerParams): RecordLedger
           updatedPiecesByLocMg[locationId] = sourceLocPiecesMg
           updatedPiecesByLocMg[toLocationId] = [...destLocPiecesMg, selWMg]
         } else {
-          throw new Error(`The specific piece (${selW}g) is not available at ${locationName} to transfer.`)
+          throw new ValidationError(`The specific piece (${selW}g) is not available at ${locationName} to transfer.`)
         }
       }
     } else if (type === 'melt') {
@@ -259,7 +260,7 @@ export function applyRecordTransaction(params: RecordLedgerParams): RecordLedger
           sourceLocPiecesMg.splice(idx, 1)
           updatedPiecesByLocMg[locationId] = sourceLocPiecesMg
         } else {
-          throw new Error(`The specific piece (${selW}g) is not available at ${locationName} to melt.`)
+          throw new ValidationError(`The specific piece (${selW}g) is not available at ${locationName} to melt.`)
         }
         const allIdx = updatedPiecesMg.indexOf(selWMg)
         if (allIdx !== -1) updatedPiecesMg.splice(allIdx, 1)
@@ -484,11 +485,11 @@ export function applyReverseTransaction(params: ReverseLedgerParams): ReverseLed
   for (const [locId, stock] of Object.entries(currentLocMap)) {
     if (stock < 0) {
       const locName = (locId === locationId ? locationName : locId === toLocationId ? toLocationName : undefined) || 'this location'
-      throw new Error(`Cannot reverse this transaction: stock at ${locName} would fall below zero (${stock}). Please reverse the later sale or transfer first.`)
+      throw new ValidationError(`Cannot reverse this transaction: stock at ${locName} would fall below zero (${stock}). Please reverse the later sale or transfer first.`)
     }
   }
   if (newTotal < 0) {
-    throw new Error(`Cannot reverse this transaction: total product stock would fall below zero (${newTotal}). Please reverse the later sale or transfer first.`)
+    throw new ValidationError(`Cannot reverse this transaction: total product stock would fall below zero (${newTotal}). Please reverse the later sale or transfer first.`)
   }
 
   // Idol piece reversal logic
@@ -511,7 +512,7 @@ export function applyReverseTransaction(params: ReverseLedgerParams): ReverseLed
         const destPiecesMg = updatedPiecesByLocMg[toLocationId] || []
         const idx = destPiecesMg.indexOf(pWMg)
         if (idx === -1) {
-          throw new Error(`Cannot reverse this transfer: the specific piece (${pWMg / 1000}g) is no longer at ${toLocationName}. Please reverse the later sale or transfer first.`)
+          throw new ValidationError(`Cannot reverse this transfer: the specific piece (${pWMg / 1000}g) is no longer at ${toLocationName}. Please reverse the later sale or transfer first.`)
         }
         destPiecesMg.splice(idx, 1)
         updatedPiecesByLocMg[toLocationId] = destPiecesMg
@@ -520,7 +521,7 @@ export function applyReverseTransaction(params: ReverseLedgerParams): ReverseLed
         // Reversing return or positive adjustment removes piece weight back from location and product
         const idx = txLocPiecesMg.indexOf(pWMg)
         if (idx === -1) {
-          throw new Error(`Cannot reverse this ${txType}: the specific piece (${pWMg / 1000}g) is no longer at ${locationName}. Please reverse the later sale or transfer first.`)
+          throw new ValidationError(`Cannot reverse this ${txType}: the specific piece (${pWMg / 1000}g) is no longer at ${locationName}. Please reverse the later sale or transfer first.`)
         }
         txLocPiecesMg.splice(idx, 1)
         updatedPiecesByLocMg[locationId] = txLocPiecesMg
@@ -845,7 +846,7 @@ export function executeOrderLinesStockUpdate(params: ExecuteOrderLinesStockParam
   const { lines, productsMap, locationId, locationName, type } = params
 
   if (!lines || lines.length === 0) {
-    throw new Error('Order must contain at least one line item')
+    throw new ValidationError('Order must contain at least one line item')
   }
 
   // Working copy of product states
@@ -868,15 +869,15 @@ export function executeOrderLinesStockUpdate(params: ExecuteOrderLinesStockParam
   for (const line of lines) {
     const workingProd = workingProducts.get(line.productId)
     if (!workingProd) {
-      throw new Error(`Product not found in database: "${line.productId}"`)
+      throw new ValidationError(`Product not found in database: "${line.productId}"`)
     }
 
     if (!line.qty || line.qty <= 0 || !Number.isInteger(line.qty)) {
-      throw new Error(`Invalid quantity (${line.qty}) for product "${workingProd.name}". Quantity must be a positive integer.`)
+      throw new ValidationError(`Invalid quantity (${line.qty}) for product "${workingProd.name}". Quantity must be a positive integer.`)
     }
 
     if (line.unitPricePaise === undefined || line.unitPricePaise < 0 || !Number.isInteger(line.unitPricePaise)) {
-      throw new Error(`Invalid unit price (${line.unitPricePaise}) for product "${workingProd.name}". Price must be non-negative integer paise.`)
+      throw new ValidationError(`Invalid unit price (${line.unitPricePaise}) for product "${workingProd.name}". Price must be non-negative integer paise.`)
     }
 
     const lineTotalPaise = line.qty * line.unitPricePaise

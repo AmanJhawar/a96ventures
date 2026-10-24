@@ -34,8 +34,8 @@ function cleanUndefined<T>(value: T): T {
       .map((item) => cleanUndefined(item)) as unknown as T
   }
   if (typeof value === 'object' && !(value instanceof Date)) {
-    const res: Record<string, any> = {}
-    for (const [k, v] of Object.entries(value as Record<string, any>)) {
+    const res: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       if (v !== undefined) {
         res[k] = cleanUndefined(v)
       }
@@ -229,8 +229,9 @@ export async function updateAdminUser(
       const errData = await res.json().catch(() => ({}))
       throw new Error(errData.error || `Failed to update user (${res.status})`)
     }
-  } catch (apiErr: any) {
-    if (apiErr?.message && !apiErr.message.includes('(500)') && !apiErr.message.includes('(502)') && !apiErr.message.includes('fetch')) {
+  } catch (apiErr: unknown) {
+    const errMessage = apiErr instanceof Error ? apiErr.message : String(apiErr)
+    if (errMessage && !errMessage.includes('(500)') && !errMessage.includes('(502)') && !errMessage.includes('fetch')) {
       throw apiErr
     }
     console.warn('Update user API failed, falling back to direct Firestore:', apiErr)
@@ -262,8 +263,9 @@ export async function deleteAdminUser(id: string): Promise<void> {
       const errData = await res.json().catch(() => ({}))
       throw new Error(errData.error || `Failed to delete user (${res.status})`)
     }
-  } catch (apiErr: any) {
-    if (apiErr?.message && !apiErr.message.includes('(500)') && !apiErr.message.includes('(502)') && !apiErr.message.includes('fetch')) {
+  } catch (apiErr: unknown) {
+    const errMessage = apiErr instanceof Error ? apiErr.message : String(apiErr)
+    if (errMessage && !errMessage.includes('(500)') && !errMessage.includes('(502)') && !errMessage.includes('fetch')) {
       throw apiErr
     }
     console.warn('Delete user API failed, falling back to direct Firestore:', apiErr)

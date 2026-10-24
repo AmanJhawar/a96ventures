@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { getAuthenticatedCaller, hasModulePermission } from '@/lib/firebase/server-auth'
 import { createVisit, listVisits, MANUAL_VISIT_KINDS } from '@/lib/server/visits'
 
-const createVisitSchema = z.object({
+export const createVisitSchema = z.object({
   customerId: z.string().min(1, 'customerId is required'),
   locationId: z.string().min(1, 'locationId is required'),
   kind: z.enum(MANUAL_VISIT_KINDS, {
@@ -15,6 +15,8 @@ const createVisitSchema = z.object({
   followUpOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'followUpOn must be YYYY-MM-DD').optional(),
   followUpOf: z.string().optional()
 })
+
+export type CreateVisitInput = z.infer<typeof createVisitSchema>
 
 export async function POST(req: NextRequest) {
   try {

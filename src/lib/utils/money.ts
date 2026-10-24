@@ -15,7 +15,7 @@ export function rupeesToPaise(input: string | number): number {
   }
 
   if (typeof input === 'string') {
-    const trimmed = input.trim()
+    const trimmed = input.trim().replace(/,/g, '')
     if (!/^-?\d+(\.\d+)?$/.test(trimmed)) {
       throw new Error(`Invalid rupee amount string: "${input}"`)
     }
@@ -94,3 +94,60 @@ export function sumPaise(amounts: number[]): number {
     return total + amt
   }, 0)
 }
+
+/**
+ * Strips commas and non-numeric characters from a rupee string while preserving a single decimal point.
+ * Useful for normalizing user input before storing or converting to paise.
+ */
+export function parseIndianNumberString(val: string | number | null | undefined, maxDecimals = 2): string {
+  if (val === null || val === undefined) return ''
+  const str = String(val)
+  let clean = ''
+  let hasDot = false
+  let decCount = 0
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i]
+    if (ch >= '0' && ch <= '9') {
+      if (!hasDot) {
+        clean += ch
+      } else if (decCount < maxDecimals) {
+        clean += ch
+        decCount++
+      }
+    } else if (ch === '.' && !hasDot) {
+      hasDot = true
+      clean += '.'
+    }
+  }
+  return clean
+}
+
+/**
+ * Formats a numeric string or number with Indian numbering grouping (e.g. 15,09,000.50).
+ * Preserves trailing dots during user typing (e.g. '150900.' -> '1,50,900.').
+ */
+export function formatIndianNumberString(
+  val: string | number | null | undefined,
+  maxDecimals = 2
+): string {
+  if (val === null || val === undefined || val === '') return ''
+  const clean = parseIndianNumberString(val, maxDecimals)
+  if (!clean) return ''
+
+  const hasDot = clean.includes('.')
+  const parts = clean.split('.')
+  const intPart = parts[0]
+  const decPart = hasDot ? '.' + (parts[1] || '') : ''
+
+  if (!intPart && hasDot) return '0' + decPart
+  if (!intPart) return ''
+
+  const lastThree = intPart.slice(-3)
+  const rest = intPart.slice(0, -3)
+  if (rest !== '') {
+    const formattedRest = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',')
+    return formattedRest + ',' + lastThree + decPart
+  }
+  return lastThree + decPart
+}
+

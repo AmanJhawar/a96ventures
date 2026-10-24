@@ -18,8 +18,10 @@ export async function GET(req: NextRequest) {
     const q = searchParams.get('q') || undefined
     const cursor = searchParams.get('cursor') || undefined
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : undefined
+    const lastVisit = searchParams.get('lastVisit') || undefined
+    const hasFollowUp = searchParams.get('hasFollowUp') === 'true' ? true : undefined
 
-    const result = await getCustomersServer(authResult.caller, { q, cursor, limit })
+    const result = await getCustomersServer(authResult.caller, { q, cursor, limit, lastVisit, hasFollowUp })
     return NextResponse.json({ success: true, ...result })
   } catch (err: unknown) {
     console.error('GET /api/admin/customers error:', err)
@@ -46,7 +48,9 @@ export async function POST(req: NextRequest) {
         {
           error: err.message,
           field: err.field,
-          existingCustomerId: err.existingCustomerId
+          existingCustomerId: err.existingCustomerId,
+          existingCustomerName: err.existingCustomerName,
+          isArchived: err.isArchived
         },
         { status: 409 }
       )
