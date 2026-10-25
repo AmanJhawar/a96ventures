@@ -16,6 +16,101 @@ const ALLOWED_PURITIES_BY_METAL: Record<MetalType, string[]> = {
   Silver: ['999.9', '999', '925']
 }
 
+/**
+ * GET /api/admin/products
+ * Fetches all inventory products.
+ * Requires: products.view permission.
+ */
+export async function GET(req: NextRequest) {
+  try {
+    const authResult = await getAuthenticatedCaller(req)
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status })
+    }
+    const { caller } = authResult
+
+    if (!hasModulePermission(caller, 'products', 'view')) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to view products' }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const includeArchived = searchParams.get('includeArchived') === 'true'
+
+    const snap = await adminDb.collection('products').get()
+    const items: Product[] = []
+
+    snap.forEach((docSnap) => {
+      const data = docSnap.data()
+      if (!includeArchived && data.isArchived) return
+
+      let normalizedCategory: ProductCategory = 'Bullions'
+      let brand = data.brand ? String(data.brand).trim() : ''
+
+      if (data.category === 'MMTC PAMP') {
+        normalizedCategory = 'Bullions'
+        if (!brand) brand = 'MMTC PAMP'
+      } else if (data.category === 'Silver Idols' || data.category === 'Idols') {
+        normalizedCategory = 'Idols'
+        if (!brand) brand = 'Local'
+      } else if (data.category === 'Bullions') {
+        normalizedCategory = 'Bullions'
+        if (!brand) brand = 'Local'
+      }
+
+      const finalStock = Number(data.stock || 0)
+      const finalStockByLoc = (data.stockByLocation || {}) as Record<string, number>
+
+      const wMg = data.weightMg !== undefined ? Number(data.weightMg) : Math.round(Number(data.weight || 0) * 1000)
+      const pieceWs = Array.isArray(data.pieceWeightsMg)
+        ? data.pieceWeightsMg.map((mg: number) => mg / 1000)
+        : Array.isArray(data.pieceWeights)
+          ? data.pieceWeights.map((w: number) => Math.round(Number(w) * 1000) / 1000)
+          : undefined
+      const pieceWsMg = Array.isArray(data.pieceWeightsMg)
+        ? data.pieceWeightsMg
+        : Array.isArray(data.pieceWeights)
+          ? data.pieceWeights.map((w: number) => Math.round(Number(w) * 1000))
+          : undefined
+
+      items.push({
+        id: docSnap.id,
+        name: data.name || '',
+        category: normalizedCategory,
+        brand,
+        metal: (data.metal || (normalizedCategory === 'Idols' ? 'Silver' : 'Gold')) as MetalType,
+        sku: data.sku || '',
+        stock: finalStock,
+        stockByLocation: finalStockByLoc,
+        weight: wMg / 1000,
+        weightMg: wMg,
+        pieceWeights: pieceWs,
+        pieceWeightsMg: pieceWsMg,
+        pieceWeightsByLocation: data.pieceWeightsByLocation || undefined,
+        pieceWeightsByLocationMg: data.pieceWeightsByLocationMg || undefined,
+        purity: data.purity || '',
+        isArchived: Boolean(data.isArchived),
+        archivedAt: data.archivedAt,
+        archivedBy: data.archivedBy,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt
+      })
+    })
+
+    items.sort((a, b) => {
+      const timeA = typeof a.updatedAt === 'string' ? new Date(a.updatedAt).getTime() : 0
+      const timeB = typeof b.updatedAt === 'string' ? new Date(b.updatedAt).getTime() : 0
+      if (timeB !== timeA) return timeB - timeA
+      return String(a.name || '').localeCompare(String(b.name || ''))
+    })
+
+    return NextResponse.json({ success: true, products: items })
+  } catch (err: unknown) {
+    console.error('GET /api/admin/products error:', err)
+    const msg = err instanceof Error ? err.message : 'Failed to fetch products'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const authResult = await getAuthenticatedCaller(req)

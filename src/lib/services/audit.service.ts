@@ -1,14 +1,5 @@
-import { app } from '@/lib/firebase/config'
-import { auth } from '@/lib/firebase/auth'
-import {
-  getFirestore,
-  collection,
-  getDocs,
-  addDoc
-} from 'firebase/firestore/lite'
+import { apiClient, getAuthHeaders } from '@/lib/api-client'
 import { AuditLogEntry, AuditActionType } from '@/lib/types'
-
-const db = getFirestore(app)
 
 export interface RecordAuditParams {
   userId?: string
@@ -56,8 +47,7 @@ export function redactAuditDiffs(diffs?: AuditLogEntry['diffs']): AuditLogEntry[
 }
 
 /**
- * Record an immutable audit log entry via server code (or client fallback).
- * Server route uses Firebase Admin SDK with elevated privileges.
+ * Record an immutable audit log entry via the server Admin API.
  */
 export async function recordAuditLog(params: RecordAuditParams): Promise<string> {
   const sanitizedParams = {
@@ -66,49 +56,12 @@ export async function recordAuditLog(params: RecordAuditParams): Promise<string>
   }
 
   try {
-    const currentUser = auth.currentUser
-    if (currentUser) {
-      const token = await currentUser.getIdToken()
-      const res = await fetch('/api/admin/audit', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(sanitizedParams)
-      })
-      if (res.ok) {
-        const data = await res.json()
-        return data.id || ''
-      }
-    }
+    const data = await apiClient.post<{ id?: string }>('/api/admin/audit', sanitizedParams, {
+      actionName: 'record audit log'
+    })
+    return data.id || ''
   } catch (err) {
-    console.warn('Failed to write audit log via server, falling back to client:', err)
-  }
-
-  // Client Firestore fallback
-  try {
-    const currentUser = auth.currentUser
-    const now = new Date().toISOString()
-    const docRef = await addDoc(collection(db, 'audit_logs'), cleanUndefined({
-      timestamp: now,
-      createdAt: now,
-      userId: sanitizedParams.userId || currentUser?.uid || '',
-      userEmail: sanitizedParams.userEmail || currentUser?.email || '',
-      userName: sanitizedParams.userName || currentUser?.displayName || 'Admin',
-      action: sanitizedParams.action,
-      entityType: sanitizedParams.entityType,
-      entityId: sanitizedParams.entityId,
-      entityName: sanitizedParams.entityName || '',
-      locationId: sanitizedParams.locationId || '',
-      locationName: sanitizedParams.locationName || '',
-      description: sanitizedParams.description,
-      diffs: sanitizedParams.diffs || [],
-      metadata: sanitizedParams.metadata || {}
-    }))
-    return docRef.id
-  } catch (clientErr) {
-    console.warn('Client audit log write failed:', clientErr)
+    console.warn('Failed to write audit log via server:', err)
     return ''
   }
 }
@@ -130,16 +83,13 @@ export async function exportFullAuditTrail(options?: {
   entityType?: string
   action?: string
 }): Promise<{ count: number }> {
-  const currentUser = auth.currentUser
-  const token = currentUser ? await currentUser.getIdToken() : ''
+  const headers = await getAuthHeaders().catch(() => ({} as Record<string, string>))
   const format = options?.format || 'csv'
   const params = new URLSearchParams({ format })
   if (options?.entityType && options.entityType !== 'all') params.set('entityType', options.entityType)
   if (options?.action && options.action !== 'all') params.set('action', options.action)
 
-  const res = await fetch(`/api/admin/audit/export?${params.toString()}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {}
-  })
+  const res = await fetch(`/api/admin/audit/export?${params.toString()}`, { headers })
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -163,130 +113,22 @@ export async function exportFullAuditTrail(options?: {
   return { count }
 }
 
-function cleanUndefined<T>(value: T): T {
-  if (value === null || value === undefined) {
-    return value
-  }
-  if (Array.isArray(value)) {
-    return value
-      .filter((item) => item !== undefined)
-      .map((item) => cleanUndefined(item)) as unknown as T
-  }
-  if (typeof value === 'object' && !(value instanceof Date)) {
-    const res: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (v !== undefined) {
-        res[k] = cleanUndefined(v)
-      }
-    }
-    return res as T
-  }
-  return value
-}
-
-function toIsoString(val: unknown): string {
-  if (!val) return ''
-  if (typeof val === 'string') return val
-  if (typeof val === 'number') {
-    const d = new Date(val)
-    return isNaN(d.getTime()) ? '' : d.toISOString()
-  }
-  if (val instanceof Date) {
-    return isNaN(val.getTime()) ? '' : val.toISOString()
-  }
-  if (typeof val === 'object' && val !== null) {
-    if ('toDate' in val && typeof (val as { toDate: () => Date }).toDate === 'function') {
-      try {
-        const d = (val as { toDate: () => Date }).toDate()
-        return isNaN(d.getTime()) ? '' : d.toISOString()
-      } catch {
-        // ignore
-      }
-    }
-    if ('toMillis' in val && typeof (val as { toMillis: () => number }).toMillis === 'function') {
-      try {
-        const d = new Date((val as { toMillis: () => number }).toMillis())
-        return isNaN(d.getTime()) ? '' : d.toISOString()
-      } catch {
-        // ignore
-      }
-    }
-    if ('seconds' in val && typeof (val as { seconds: number }).seconds === 'number') {
-      const d = new Date((val as { seconds: number }).seconds * 1000)
-      return isNaN(d.getTime()) ? '' : d.toISOString()
-    }
-    if ('_seconds' in val && typeof (val as { _seconds: number })._seconds === 'number') {
-      const d = new Date((val as { _seconds: number })._seconds * 1000)
-      return isNaN(d.getTime()) ? '' : d.toISOString()
-    }
-  }
-  return String(val || '')
-}
-
 /**
- * Fetch audit logs via server code or client query.
+ * Fetch audit logs via server API.
  */
 export async function getAuditLogs(filters?: GetAuditLogsFilter): Promise<AuditLogEntry[]> {
-  try {
-    const currentUser = auth.currentUser
-    if (currentUser) {
-      const token = await currentUser.getIdToken()
-      const params = new URLSearchParams()
-      if (filters?.isExport) params.set('export', 'true')
-      if (filters?.limitCount) params.set('limit', String(filters.limitCount))
-      if (filters?.page) params.set('page', String(filters.page))
-      if (filters?.userId && filters.userId !== 'all') params.set('userId', filters.userId)
-      if (filters?.entityType && filters.entityType !== 'all') params.set('entityType', filters.entityType)
-      if (filters?.action && filters.action !== 'all') params.set('action', filters.action)
-
-      const res = await fetch(`/api/admin/audit?${params.toString()}`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      })
-
-      if (res.ok) {
-        const data = await res.json()
-        const rawLogs: AuditLogEntry[] = data.logs || []
-        return rawLogs.map((log) => ({
-          ...log,
-          timestamp: toIsoString(log.timestamp) || new Date().toISOString()
-        }))
-      }
-    }
-  } catch (apiErr) {
-    console.warn('Audit logs API failed, falling back to direct Firestore:', apiErr)
+  const params: Record<string, string | number | boolean | undefined> = {
+    export: filters?.isExport ? true : undefined,
+    limit: filters?.limitCount ? Number(filters.limitCount) : undefined,
+    page: filters?.page ? Number(filters.page) : undefined,
+    userId: filters?.userId && filters.userId !== 'all' ? filters.userId : undefined,
+    entityType: filters?.entityType && filters.entityType !== 'all' ? filters.entityType : undefined,
+    action: filters?.action && filters.action !== 'all' ? filters.action : undefined
   }
 
-  // Client Firestore fallback
-  const snap = await getDocs(collection(db, 'audit_logs'))
-  const logs: AuditLogEntry[] = []
-  snap.forEach((d) => {
-    const data = d.data()
-    if (filters?.userId && filters.userId !== 'all' && data.userId !== filters.userId) return
-    if (filters?.entityType && filters.entityType !== 'all' && data.entityType !== filters.entityType) return
-    if (filters?.action && filters.action !== 'all' && data.action !== filters.action) return
-
-    logs.push({
-      id: d.id,
-      timestamp: toIsoString(data.timestamp || data.createdAt) || new Date().toISOString(),
-      userId: data.userId || '',
-      userName: data.userName || '',
-      userEmail: data.userEmail || '',
-      action: data.action,
-      entityType: data.entityType,
-      entityId: data.entityId,
-      entityName: data.entityName,
-      locationId: data.locationId,
-      locationName: data.locationName,
-      description: data.description || '',
-      diffs: data.diffs,
-      metadata: data.metadata
-    })
+  const data = await apiClient.get<{ logs: AuditLogEntry[] }>('/api/admin/audit', params, {
+    actionName: 'fetch audit logs'
   })
 
-  logs.sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))
-  const limit = filters?.limitCount || 50
-  return logs.slice(0, limit)
+  return data.logs || []
 }

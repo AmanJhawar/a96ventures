@@ -257,20 +257,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // Enforce 15-minute idle expiration even after browser refresh, sleeping laptop, or background tab
+        // Enforce 30-minute idle expiration even after browser refresh, sleeping laptop, or background tab
         if (typeof window !== 'undefined') {
+          const isLoginPage = window.location.pathname === '/admin/login'
           const storedLast = localStorage.getItem(ADMIN_LAST_ACTIVITY_KEY)
           let isExpired = false
 
           if (storedLast) {
             const lastTime = Number(storedLast)
             if (!isNaN(lastTime) && Date.now() - lastTime > IDLE_TIMEOUT_MS) {
-              isExpired = true
-            }
-          } else if (currentUser.metadata?.lastSignInTime) {
-            // Fallback for initial migration or cleared cache: compare against Firebase lastSignInTime
-            const lastSignIn = new Date(currentUser.metadata.lastSignInTime).getTime()
-            if (!isNaN(lastSignIn) && Date.now() - lastSignIn > IDLE_TIMEOUT_MS) {
               isExpired = true
             }
           }
@@ -285,7 +280,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             setUser(null)
             setAdminUser(null)
             setLoading(false)
-            router.push('/admin/login?reason=idle')
+            if (!isLoginPage) {
+              router.push('/admin/login?reason=idle')
+            }
             return
           }
 
@@ -412,7 +409,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   // Idle session timeout (30 minutes of inactivity for staff handling cash/stock)
   useEffect(() => {
-    if (!user) return
+    if (!user || pathname === '/admin/login') return
 
     let timeoutId: NodeJS.Timeout
     let lastWriteTime = Date.now()
@@ -428,7 +425,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       }
       setUser(null)
       setAdminUser(null)
-      router.push('/admin/login?reason=idle')
+      if (typeof window !== 'undefined' && window.location.pathname !== '/admin/login') {
+        router.push('/admin/login?reason=idle')
+      }
     }
 
     const checkIdle = (): boolean => {
@@ -521,7 +520,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       window.removeEventListener('focus', onVisibilityOrFocus)
       window.removeEventListener('storage', onStorageChange)
     }
-  }, [user, router])
+  }, [user, router, pathname])
 
   // Close mobile menu on route change
   const [prevPathname, setPrevPathname] = useState(pathname)

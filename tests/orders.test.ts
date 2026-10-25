@@ -479,11 +479,12 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
         category: 'Bullions',
         brand: 'Local',
         metal: 'Gold',
+        sku: 'BULL-PEA-10',
+        purity: '999',
         stock: 10,
         stockByLocation: { loc_alipore: 10 },
         weight: 10,
         weightMg: 10000,
-        price: 150900,
         isArchived: false,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z'
@@ -543,11 +544,11 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
       expect(order.totals.amountPaise).toBe(150900000)
       expect(order.totals.units).toBe(10)
       expect(order.totals.weightMg.Gold).toBe(100000)
-      expect(writtenOrder).toBeDefined()
-      expect(writtenOrder?.customerId).toBeUndefined()
-      expect(writtenTx).toBeDefined()
-      expect(writtenTx?.productName).toBe('10g Peacock')
-      expect(writtenTx?.totalAmount).toBe(1509000)
+      expect(writtenOrder).not.toBeNull()
+      expect((writtenOrder as Record<string, unknown> | null)?.customerId).toBeUndefined()
+      expect(writtenTx).not.toBeNull()
+      expect((writtenTx as Record<string, unknown> | null)?.productName).toBe('10g Peacock')
+      expect((writtenTx as Record<string, unknown> | null)?.totalAmount).toBe(1509000)
       expect(writtenVisit).toBeNull() // No visit created for walk-in customer
     })
 

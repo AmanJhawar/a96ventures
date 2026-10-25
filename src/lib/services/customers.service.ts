@@ -1,17 +1,5 @@
-import { auth } from '@/lib/firebase/auth'
+import { apiClient, getAuthHeaders } from '@/lib/api-client'
 import { Customer } from '@/lib/types'
-
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const currentUser = auth.currentUser
-  if (!currentUser) {
-    throw new Error('Authentication required')
-  }
-  const token = await currentUser.getIdToken()
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`
-  }
-}
 
 export interface GetCustomersParams {
   q?: string
@@ -39,23 +27,12 @@ export interface CustomerDetailResponse {
  * Fetches paginated customers with optional keyword/mobile search query, lastVisit, and hasFollowUp filters.
  */
 export async function getCustomers(params?: GetCustomersParams): Promise<GetCustomersResponse> {
-  const headers = await getAuthHeaders()
-  const search = new URLSearchParams()
-  if (params?.q) search.set('q', params.q)
-  if (params?.cursor) search.set('cursor', params.cursor)
-  if (params?.limit) search.set('limit', String(params.limit))
-  if (params?.lastVisit && params.lastVisit !== 'all') search.set('lastVisit', params.lastVisit)
-  if (params?.hasFollowUp) search.set('hasFollowUp', 'true')
-
-  const qs = search.toString()
-  const res = await fetch(`/api/admin/customers${qs ? `?${qs}` : ''}`, { headers })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `Failed to fetch customers (${res.status})`)
+  const queryParams = {
+    ...params,
+    lastVisit: params?.lastVisit && params.lastVisit !== 'all' ? params.lastVisit : undefined,
+    hasFollowUp: params?.hasFollowUp ? 'true' : undefined
   }
-
-  return res.json()
+  return apiClient.get<GetCustomersResponse>('/api/admin/customers', queryParams, { actionName: 'fetch customers' })
 }
 
 /**
@@ -65,18 +42,10 @@ export async function getCustomerById(
   id: string,
   options?: { allowArchived?: boolean }
 ): Promise<CustomerDetailResponse> {
-  const headers = await getAuthHeaders()
-  const url = options?.allowArchived
-    ? `/api/admin/customers/${id}?allowArchived=true`
-    : `/api/admin/customers/${id}`
-  const res = await fetch(url, { headers })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `Failed to fetch customer profile (${res.status})`)
-  }
-
-  return res.json()
+  const queryParams = options?.allowArchived ? { allowArchived: 'true' } : undefined
+  return apiClient.get<CustomerDetailResponse>(`/api/admin/customers/${encodeURIComponent(id)}`, queryParams, {
+    actionName: 'fetch customer profile'
+  })
 }
 
 /**
@@ -102,29 +71,9 @@ export async function createCustomer(data: {
   source?: 'walk_in' | 'inquiry' | 'referral' | 'import'
   inquiryId?: string
 }): Promise<{ success: boolean; customer: Customer }> {
-  const headers = await getAuthHeaders()
-  const res = await fetch('/api/admin/customers', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(data)
+  return apiClient.post<{ success: boolean; customer: Customer }>('/api/admin/customers', data, {
+    actionName: 'create customer'
   })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    const errorObj = new Error(err.error || `Failed to create customer (${res.status})`) as Error & {
-      field?: string
-      existingCustomerId?: string
-      existingCustomerName?: string
-      isArchived?: boolean
-    }
-    errorObj.field = err.field
-    errorObj.existingCustomerId = err.existingCustomerId
-    errorObj.existingCustomerName = err.existingCustomerName
-    errorObj.isArchived = err.isArchived
-    throw errorObj
-  }
-
-  return res.json()
 }
 
 /**
@@ -144,75 +93,29 @@ export async function updateCustomer(
     source?: 'walk_in' | 'inquiry' | 'referral' | 'import'
   }
 ): Promise<{ success: boolean; customer: Customer }> {
-  const headers = await getAuthHeaders()
-  const res = await fetch(`/api/admin/customers/${id}`, {
-    method: 'PATCH',
-    headers,
-    body: JSON.stringify(data)
+  return apiClient.patch<{ success: boolean; customer: Customer }>(`/api/admin/customers/${encodeURIComponent(id)}`, data, {
+    actionName: 'update customer'
   })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    const errorObj = new Error(err.error || `Failed to update customer (${res.status})`) as Error & {
-      field?: string
-      existingCustomerId?: string
-      existingCustomerName?: string
-      isArchived?: boolean
-    }
-    errorObj.field = err.field
-    errorObj.existingCustomerId = err.existingCustomerId
-    errorObj.existingCustomerName = err.existingCustomerName
-    errorObj.isArchived = err.isArchived
-    throw errorObj
-  }
-
-  return res.json()
 }
 
 /**
  * Soft archives a customer profile.
  */
 export async function archiveCustomer(id: string): Promise<{ success: boolean }> {
-  const headers = await getAuthHeaders()
-  const res = await fetch(`/api/admin/customers/${id}`, {
-    method: 'DELETE',
-    headers
+  return apiClient.delete<{ success: boolean }>(`/api/admin/customers/${encodeURIComponent(id)}`, undefined, {
+    actionName: 'archive customer'
   })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `Failed to archive customer (${res.status})`)
-  }
-
-  return res.json()
 }
 
 /**
  * Restores an archived customer profile and re-reserves their mobile number.
  */
 export async function restoreCustomer(id: string): Promise<{ success: boolean; customer: Customer }> {
-  const headers = await getAuthHeaders()
-  const res = await fetch(`/api/admin/customers/${id}/restore`, {
-    method: 'POST',
-    headers
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    const errorObj = new Error(err.error || `Failed to restore customer (${res.status})`) as Error & {
-      field?: string
-      existingCustomerId?: string
-      existingCustomerName?: string
-      isArchived?: boolean
-    }
-    errorObj.field = err.field
-    errorObj.existingCustomerId = err.existingCustomerId
-    errorObj.existingCustomerName = err.existingCustomerName
-    errorObj.isArchived = err.isArchived
-    throw errorObj
-  }
-
-  return res.json()
+  return apiClient.post<{ success: boolean; customer: Customer }>(
+    `/api/admin/customers/${encodeURIComponent(id)}/restore`,
+    undefined,
+    { actionName: 'restore customer' }
+  )
 }
 
 /**
@@ -222,43 +125,20 @@ export async function updateCustomerPan(
   id: string,
   pan: string
 ): Promise<{ success: boolean; customer: Customer }> {
-  const headers = await getAuthHeaders()
-  const res = await fetch(`/api/admin/customers/${id}/pan`, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify({ pan })
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    const errorObj = new Error(err.error || `Failed to update PAN (${res.status})`) as Error & {
-      field?: string
-      existingCustomerId?: string
-    }
-    errorObj.field = err.field
-    errorObj.existingCustomerId = err.existingCustomerId
-    throw errorObj
-  }
-
-  return res.json()
+  return apiClient.put<{ success: boolean; customer: Customer }>(
+    `/api/admin/customers/${encodeURIComponent(id)}/pan`,
+    { pan },
+    { actionName: 'update PAN' }
+  )
 }
 
 /**
  * Removes a customer's encrypted PAN.
  */
 export async function removeCustomerPan(id: string): Promise<{ success: boolean }> {
-  const headers = await getAuthHeaders()
-  const res = await fetch(`/api/admin/customers/${id}/pan`, {
-    method: 'DELETE',
-    headers
+  return apiClient.delete<{ success: boolean }>(`/api/admin/customers/${encodeURIComponent(id)}/pan`, undefined, {
+    actionName: 'remove PAN'
   })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `Failed to remove PAN (${res.status})`)
-  }
-
-  return res.json()
 }
 
 /**
@@ -266,18 +146,11 @@ export async function removeCustomerPan(id: string): Promise<{ success: boolean 
  * Audited and rate-limited to 10 reveals per user per hour.
  */
 export async function revealCustomerPan(id: string): Promise<{ fullPan: string }> {
-  const headers = await getAuthHeaders()
-  const res = await fetch(`/api/admin/customers/${id}/pan/reveal`, {
-    method: 'POST',
-    headers
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `Failed to reveal PAN (${res.status})`)
-  }
-
-  const data = await res.json()
+  const data = await apiClient.post<{ fullPan: string }>(
+    `/api/admin/customers/${encodeURIComponent(id)}/pan/reveal`,
+    undefined,
+    { actionName: 'reveal PAN' }
+  )
   return { fullPan: data.fullPan }
 }
 
@@ -286,12 +159,8 @@ export async function revealCustomerPan(id: string): Promise<{ fullPan: string }
  * Super Admin only. Contains masked PANs only.
  */
 export async function exportCustomersCSV(): Promise<{ count: number }> {
-  const currentUser = auth.currentUser
-  const token = currentUser ? await currentUser.getIdToken() : ''
-
-  const res = await fetch('/api/admin/customers/export', {
-    headers: token ? { Authorization: `Bearer ${token}` } : {}
-  })
+  const headers = await getAuthHeaders().catch(() => ({} as Record<string, string>))
+  const res = await fetch('/api/admin/customers/export', { headers })
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

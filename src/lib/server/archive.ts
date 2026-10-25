@@ -1,8 +1,16 @@
 import { adminDb } from '@/lib/firebase/admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { createHmac } from 'crypto'
-import { getNextDayIST } from '@/lib/utils/date'
+import { getNextDayIST, validateFiscalCutoffDate } from '@/lib/utils/date'
 import { computeArchiveChecksum } from '@/lib/utils/archive-checksum'
+import {
+  acquireZeroBalanceLock,
+  releaseZeroBalanceLock,
+  getClosedFiscalCutoff,
+  setClosedFiscalCutoff
+} from '@/lib/server/system-lock'
+import { calculateNetTransactionsEffect, calculateOpeningBalances } from '@/lib/server/ledger'
+import { ValidationError } from '@/lib/errors'
 
 export interface MasterArchivePayload {
   system: string
@@ -684,5 +692,341 @@ export async function verifyArchiveAgainstServer(params: {
     verified: false,
     status: 'unverified',
     message: 'Unverified archive: Checksum is not registered in system_archives and lacks a valid server signature.'
+  }
+}
+
+export interface ExecuteZeroBalanceCutoffParams {
+  caller: {
+    callerUid: string
+    callerName: string
+    callerEmail: string
+    decodedToken: { auth_time?: number; [key: string]: unknown }
+  }
+  cutoffDate?: string
+  expectedTransactionCount?: number
+  expectedAuditCount?: number
+  confirmationPhrase?: string
+}
+
+export interface ZeroBalanceExecutionResult {
+  success: boolean
+  resumed: boolean
+  archiveId: string
+  checksum: string
+  count: number
+  auditCount: number
+  cutoffDate: string
+  openingDate: string
+}
+
+/**
+ * Executes or resumes a Master Zero-Balance fiscal cutoff.
+ * Handles lock acquisition, archive verification, database purging, opening entries creation,
+ * and immutable audit trail scrubbing within a secure transactional envelope.
+ */
+export async function executeZeroBalanceCutoffServer(
+  params: ExecuteZeroBalanceCutoffParams
+): Promise<ZeroBalanceExecutionResult> {
+  const { caller, confirmationPhrase, cutoffDate: rawRequestedCutoff, expectedTransactionCount, expectedAuditCount } = params
+
+  const callerInfo = {
+    callerUid: caller.callerUid,
+    callerName: caller.callerName,
+    callerEmail: caller.callerEmail
+  }
+
+  // 1. Security & Fresh Re-Authentication Check
+  const authTime = Number(caller.decodedToken.auth_time)
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const RECENT_LOGIN_MAX_AGE_SECONDS = 300 // 5 minutes
+  if (!authTime || nowSeconds - authTime > RECENT_LOGIN_MAX_AGE_SECONDS) {
+    const err = new Error(
+      'Fresh authentication required: This irreversible action requires sign-in or re-authentication within the last 5 minutes. Please re-enter your password to proceed.'
+    ) as Error & { code?: string }
+    err.code = 'auth/requires-recent-login'
+    throw err
+  }
+
+  // 2. Exact Confirmation Phrase Verification
+  if ((confirmationPhrase || '').trim() !== 'CONFIRM ZERO BALANCE') {
+    throw new ValidationError(
+      'Confirmation phrase mismatch. You must type "CONFIRM ZERO BALANCE" exactly to execute this irreversible operation.'
+    )
+  }
+
+  // 3. Cutoff Date Validation & Incomplete Archive Check
+  const lastClosedCutoff = await getClosedFiscalCutoff()
+  const trimmedRequestedCutoff = rawRequestedCutoff?.trim()
+  const incompleteArchive = trimmedRequestedCutoff ? await findIncompleteArchiveForCutoff(trimmedRequestedCutoff) : null
+
+  let cutoffDate: string
+  let openingDate: string
+
+  if (incompleteArchive) {
+    cutoffDate = incompleteArchive.cutoffDate!
+    openingDate = incompleteArchive.openingDate || getNextDayIST(cutoffDate)
+  } else {
+    const cutoffValidation = validateFiscalCutoffDate(trimmedRequestedCutoff, lastClosedCutoff)
+    if (!cutoffValidation.isValid) {
+      throw new ValidationError(cutoffValidation.error || 'Invalid fiscal cutoff date')
+    }
+    cutoffDate = cutoffValidation.cutoffDate!
+    openingDate = getNextDayIST(cutoffDate)
+  }
+
+  // 4. Acquire Server-Side Lock
+  let lockAcquired = false
+  try {
+    await acquireZeroBalanceLock(callerInfo)
+    lockAcquired = true
+
+    let archivePayload: Record<string, unknown>
+    let archiveId: string
+    let checksum: string
+    let verifiedTxCount: number
+    let verifiedAuditCount: number
+    let currentStage = 'archive_saved'
+    let progress: { purgedTransactions?: number; openingsPosted?: boolean; openingTransactionCount?: number; scrubbedAuditLogs?: number } = {}
+
+    if (incompleteArchive) {
+      const saved = await getSavedArchiveServer(incompleteArchive.archiveId)
+      archivePayload = saved as unknown as Record<string, unknown>
+      archiveId = incompleteArchive.archiveId
+      checksum = incompleteArchive.checksum
+      verifiedTxCount = incompleteArchive.count
+      verifiedAuditCount = incompleteArchive.auditCount
+      currentStage = incompleteArchive.stage || 'archive_saved'
+      progress = incompleteArchive.progress || {}
+    } else {
+      const archiveResult = await buildMasterArchiveServer({ cutoffDate })
+      verifiedTxCount = archiveResult.count
+      verifiedAuditCount = archiveResult.auditCount
+
+      if (typeof expectedTransactionCount === 'number' && verifiedTxCount !== expectedTransactionCount) {
+        const err = new Error(
+          `Transaction count mismatch: archive was built with ${expectedTransactionCount} transaction(s) up to ${cutoffDate}, but database currently contains ${verifiedTxCount}. Zero-balance aborted to prevent unarchived data loss.`
+        ) as Error & { code?: string }
+        err.code = 'COUNT_MISMATCH'
+        throw err
+      }
+
+      if (typeof expectedAuditCount === 'number' && verifiedAuditCount !== expectedAuditCount) {
+        const err = new Error(
+          `Audit log count mismatch: archive was built with ${expectedAuditCount} audit log(s) up to ${cutoffDate}, but database currently contains ${verifiedAuditCount}. Zero-balance aborted to prevent unarchived data loss.`
+        ) as Error & { code?: string }
+        err.code = 'COUNT_MISMATCH'
+        throw err
+      }
+
+      const savedArchive = await saveArchiveServerSide(archiveResult, callerInfo)
+      archivePayload = archiveResult.archive as unknown as Record<string, unknown>
+      archiveId = savedArchive.archiveId
+      checksum = savedArchive.checksum
+      currentStage = 'archive_saved'
+      progress = savedArchive.progress || {}
+    }
+
+    // 5. Seal Closed-Period Lock
+    await setClosedFiscalCutoff(cutoffDate, openingDate, callerInfo)
+
+    // 6. Extract Identifiers to Purge
+    const archivedTxIds = (Array.isArray(archivePayload.transactions) ? archivePayload.transactions : [])
+      .map((t: Record<string, unknown>) => String(t.id || ''))
+      .filter(Boolean)
+    const count = archivedTxIds.length
+
+    const archivedAuditIds = (Array.isArray(archivePayload.auditLogs) ? archivePayload.auditLogs : [])
+      .map((l: Record<string, unknown>) => String(l.id || ''))
+      .filter(Boolean)
+    const auditCount = archivedAuditIds.length
+
+    const archivedOrderIds = (Array.isArray(archivePayload.ordersSnapshot) ? archivePayload.ordersSnapshot : [])
+      .map((o: Record<string, unknown>) => String(o.id || ''))
+      .filter(Boolean)
+
+    // Stage 1: Purge Historical Transactions in Batches of 400
+    if (currentStage === 'archive_saved' || currentStage === 'purging_transactions') {
+      await updateArchiveProgress(archiveId, { stage: 'purging_transactions' })
+      if (count > 0) {
+        const chunkSize = 400
+        for (let i = 0; i < archivedTxIds.length; i += chunkSize) {
+          const chunk = archivedTxIds.slice(i, i + chunkSize)
+          const batch = adminDb.batch()
+          chunk.forEach((id) => batch.delete(adminDb.collection('transactions').doc(id)))
+          await batch.commit()
+        }
+      }
+      currentStage = 'transactions_purged'
+      await updateArchiveProgress(archiveId, {
+        stage: 'transactions_purged',
+        progress: { purgedTransactions: count }
+      })
+    }
+
+    // Stage 2: Post Consolidated Opening Balances
+    if (!progress.openingsPosted && currentStage !== 'openings_posted' && currentStage !== 'audit_scrubbed' && currentStage !== 'completed') {
+      const postCutoffSnap = await adminDb.collection('transactions').where('date', '>', cutoffDate).get()
+      const postCutoffTransactions = postCutoffSnap.docs.map((d) => {
+        const data = d.data() as Record<string, unknown>
+        return {
+          ...data,
+          id: d.id,
+          productId: typeof data.productId === 'string' ? data.productId : undefined,
+          locationId: typeof data.locationId === 'string' ? data.locationId : undefined,
+          toLocationId: typeof data.toLocationId === 'string' ? data.toLocationId : undefined,
+          quantity: Number(data.quantity || 0),
+          type: typeof data.type === 'string' ? data.type : undefined,
+          isReversed: Boolean(data.isReversed),
+          isReversal: Boolean(data.isReversal),
+          reversalOf: typeof data.reversalOf === 'string' ? data.reversalOf : undefined
+        }
+      })
+      const netEffects = calculateNetTransactionsEffect(postCutoffTransactions)
+
+      const [prodsSnap, locsSnap] = await Promise.all([
+        adminDb.collection('products').get(),
+        adminDb.collection('locations').get()
+      ])
+
+      const locMap: Record<string, string> = {}
+      locsSnap.docs.forEach((doc) => {
+        const data = doc.data()
+        locMap[doc.id] = String(data.name || '')
+      })
+
+      const products = prodsSnap.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+
+      const openingBalances = calculateOpeningBalances(products, netEffects)
+
+      if (openingBalances.length > 0) {
+        const openingDocs: { ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown> }[] = []
+        for (const item of openingBalances) {
+          const newTxRef = adminDb.collection('transactions').doc()
+          const locationName =
+            locMap[item.locationId] ||
+            (item.locationId === 'loc_main' ? 'Main Vault' :
+             item.locationId === 'loc_vault' ? 'Main Vault' :
+             item.locationId === 'loc_showroom' ? 'Showroom' :
+             item.locationId.replace(/^loc_/, '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Main Vault')
+
+          const openingDoc: Record<string, unknown> = {
+            type: 'opening',
+            productId: item.productId,
+            productName: item.productName,
+            category: item.category,
+            metal: item.metal || 'Gold',
+            quantity: item.quantity,
+            locationId: item.locationId,
+            locationName,
+            date: openingDate,
+            notes: `Opening balance as of ${openingDate} following cutoff ${cutoffDate}`,
+            isOpeningBalance: true,
+            isOpeningEntry: true,
+            createdAt: FieldValue.serverTimestamp(),
+            timestamp: FieldValue.serverTimestamp(),
+            operatorId: caller.callerUid,
+            operatorName: caller.callerName,
+            operatorEmail: caller.callerEmail
+          }
+
+          if (item.weight !== undefined) openingDoc.weight = item.weight
+          if (item.weightMg !== undefined) openingDoc.weightMg = item.weightMg
+          if (item.pieceWeight !== undefined) openingDoc.pieceWeight = item.pieceWeight
+          if (item.pieceWeightMg !== undefined) openingDoc.pieceWeightMg = item.pieceWeightMg
+          if (item.pieceWeights && item.pieceWeights.length > 0) {
+            openingDoc.pieceWeights = item.pieceWeights
+          }
+          if (item.pieceWeightsMg && item.pieceWeightsMg.length > 0) {
+            openingDoc.pieceWeightsMg = item.pieceWeightsMg
+          }
+
+          openingDocs.push({
+            ref: newTxRef,
+            data: openingDoc
+          })
+        }
+
+        const chunkSize = 400
+        for (let i = 0; i < openingDocs.length; i += chunkSize) {
+          const chunk = openingDocs.slice(i, i + chunkSize)
+          const batch = adminDb.batch()
+          chunk.forEach((item) => batch.set(item.ref, item.data))
+          await batch.commit()
+        }
+      }
+
+      currentStage = 'openings_posted'
+      await updateArchiveProgress(archiveId, {
+        stage: 'openings_posted',
+        progress: { openingsPosted: true, openingTransactionCount: openingBalances.length }
+      })
+    }
+
+    // Stage 3: Purge Archived Orders by Exact IDs
+    const purgedOrdersCount = await purgeArchivedOrdersServer(archivedOrderIds)
+
+    // Stage 4: Scrub Audit Trail
+    if (currentStage !== 'audit_scrubbed' && currentStage !== 'completed') {
+      if (auditCount > 0) {
+        const chunkSize = 400
+        for (let i = 0; i < archivedAuditIds.length; i += chunkSize) {
+          const chunk = archivedAuditIds.slice(i, i + chunkSize)
+          const batch = adminDb.batch()
+          chunk.forEach((id) => batch.delete(adminDb.collection('audit_logs').doc(id)))
+          await batch.commit()
+        }
+      }
+      currentStage = 'audit_scrubbed'
+      await updateArchiveProgress(archiveId, {
+        stage: 'audit_scrubbed',
+        progress: { scrubbedAuditLogs: auditCount }
+      })
+    }
+
+    // Stage 5: Record Baseline Audit Entry & Complete Archive
+    await adminDb.collection('audit_logs').add({
+      userId: caller.callerUid,
+      userName: caller.callerName,
+      userEmail: caller.callerEmail,
+      action: 'zero_balance',
+      entityType: 'archive',
+      entityId: archiveId,
+      entityName: 'System Reset',
+      description: `Master Zero-Balance executed up to cutoff ${cutoffDate}: verified and purged ${count} transaction(s) and scrubbed ${auditCount} audit log(s). Opening balances established on ${openingDate} with real locations and weights. All future entries on or before ${cutoffDate} blocked.${incompleteArchive ? ' (Resumed and completed from interrupted archive run)' : ''}`,
+      metadata: {
+        archiveId,
+        cutoffDate,
+        openingDate,
+        purgedTransactions: count,
+        scrubbedAuditLogs: auditCount,
+        purgedOrders: purgedOrdersCount,
+        resumed: Boolean(incompleteArchive)
+      },
+      timestamp: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp()
+    })
+
+    await updateArchiveProgress(archiveId, {
+      stage: 'completed',
+      status: 'completed'
+    })
+
+    return {
+      success: true,
+      resumed: Boolean(incompleteArchive),
+      archiveId,
+      checksum,
+      count: verifiedTxCount,
+      auditCount: verifiedAuditCount,
+      cutoffDate,
+      openingDate
+    }
+  } finally {
+    if (lockAcquired) {
+      await releaseZeroBalanceLock()
+    }
   }
 }

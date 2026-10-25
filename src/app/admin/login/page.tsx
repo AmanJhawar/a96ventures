@@ -58,7 +58,8 @@ function LoginForm() {
 
   const router = useRouter()
   const searchParams = useSearchParams()
-  const isIdle = searchParams?.get('reason') === 'idle'
+  const [isDismissed, setIsDismissed] = useState(false)
+  const showIdleBanner = !isDismissed && searchParams?.get('reason') === 'idle'
 
   const {
     register,
@@ -71,8 +72,12 @@ function LoginForm() {
   })
 
   useEffect(() => {
-    if (isIdle && typeof window !== 'undefined') {
-      localStorage.removeItem('admin_last_activity')
+    if (searchParams?.get('reason') === 'idle') {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('admin_last_activity')
+        // Clean up URL so reloads or subsequent interactions do not retain the expired banner
+        window.history.replaceState({}, '', window.location.pathname)
+      }
     }
     return () => {
       if (recaptchaVerifierRef.current) {
@@ -83,7 +88,7 @@ function LoginForm() {
         }
       }
     }
-  }, [isIdle])
+  }, [searchParams])
 
   const verifyAndRedirect = async (user: User) => {
     // TREAT MISSING PROFILE AS AN ERROR: Never fail open or grant access without profile document
@@ -129,6 +134,10 @@ function LoginForm() {
   const onSubmit = async (data: LoginValues) => {
     setError('')
     setSuccessMsg('')
+    setIsDismissed(true)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('admin_last_activity', Date.now().toString())
+    }
     const targetEmail = resolveAdminEmail(data.identifier)
 
     try {
@@ -180,6 +189,10 @@ function LoginForm() {
 
     setMfaSubmitting(true)
     setError('')
+    setIsDismissed(true)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('admin_last_activity', Date.now().toString())
+    }
 
     try {
       const cred = PhoneAuthProvider.credential(verificationId, mfaCode.trim())
@@ -225,7 +238,7 @@ function LoginForm() {
       <div className="max-w-md w-full bg-white p-10 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.06)] border border-gray-100">
 
         {/* Idle session timeout warning banner */}
-        {isIdle && step === 'login' && (
+        {showIdleBanner && step === 'login' && (
           <div className="mb-6 p-4 bg-gray-100 border border-gray-300 rounded-lg text-xs text-gray-800 flex items-start gap-2.5">
             <Clock size={16} className="text-gray-700 shrink-0 mt-0.5" />
             <div>

@@ -2,99 +2,41 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
+import { ShoppingCart, Plus, RotateCcw, Lock } from 'lucide-react'
+import { toast } from 'sonner'
 import {
-  ShoppingCart,
-  Plus,
-  AlertCircle,
-  X,
-  RotateCcw,
-  IndianRupee,
-  TrendingUp,
-  PackageCheck,
-  Lock,
-  Calendar,
-  Trash2,
-  Pencil,
-  ChevronDown,
-  ChevronRight,
-  ExternalLink
-} from 'lucide-react'
-
-export interface SaleLineItem {
-  id: string
-  productId: string
-  quantity: string
-  price: string
-  pieceWeight?: string
-}
-
-export interface SaleBill {
-  billKey: string
-  invoiceNo: string
-  orderId?: string
-  date: string
-  customerName: string
-  customerId?: string
-  locationName: string
-  locationId: string
-  items: Transaction[]
-  totalQuantity: number
-  totalAmount: number
-  paymentModes?: string[]
-  hasReversed: boolean
-  hasActive: boolean
-}
-
-function formatDateDisplay(rawDate?: string) {
-  if (!rawDate) return '—'
-  const parts = rawDate.split('-')
-  if (parts.length === 3) {
-    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-    }
-  }
-  return rawDate
-}
-
-import { Product, Location, Transaction, ProductCategory, MetalType, TransactionStats, Customer, Order, OrderPayment } from '@/lib/types'
-import CustomerPicker from '@/components/customer-picker'
-import PaymentSplit from '@/components/payment-split'
-import MoneyInput from '@/components/money-input'
-import { rupeesToPaise } from '@/lib/utils/money'
-import { gramsToMg } from '@/lib/utils/weight'
+  Product,
+  Location,
+  Transaction,
+  ProductCategory,
+  MetalType,
+  TransactionStats,
+  Order
+} from '@/lib/types'
 import {
   getProducts,
   getLocations,
   getTransactionsPage,
   getTransactionStats,
-  recordTransaction,
-  deleteTransaction,
-  updateTransaction
+  deleteTransaction
 } from '@/lib/services/inventory.service'
-import {
-  getOrders,
-  createOrder,
-  reverseOrder
-} from '@/lib/services/orders.service'
+import { getOrders, reverseOrder } from '@/lib/services/orders.service'
 import { ConfirmModal } from '@/components/confirm-modal'
-import { EmptyState } from '@/components/empty-state'
-import CustomSelect, { SelectOption } from '@/components/custom-select'
-import CustomDatePicker from '@/components/custom-date-picker'
-import { toast } from 'sonner'
-import { motion, AnimatePresence } from 'framer-motion'
-import { EASE_OUT } from '@/components/motion-transitions'
+import { SkeletonTable } from '@/components/ui/skeleton'
+import { SelectOption } from '@/components/custom-select'
 import { usePermissions } from '@/lib/context/PermissionsContext'
 import { formatWeight } from '@/lib/utils/weight'
 import { getTodayIST, getDaysAgoIST } from '@/lib/utils/date'
-import { SkeletonTable } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
-import { FormError } from '@/components/ui/form-error'
 
-const CATEGORIES: ProductCategory[] = ['Bullions', 'Idols']
-
-type SalesTab = 'sales' | 'returns'
+// Extracted Sales Components
+import { SaleBill, SalesTab } from './components/types'
+import { RecordSaleModal, ValidatedSaleItem } from './components/RecordSaleModal'
+import { RecordReturnModal } from './components/RecordReturnModal'
+import { SalesBillsTable } from './components/SalesBillsTable'
+import { ReturnsTable } from './components/ReturnsTable'
+import { EditSaleModal } from './components/EditSaleModal'
+import { SalesMetricsStrip } from './components/SalesMetricsStrip'
+import { SalesFilterBar } from './components/SalesFilterBar'
 
 export default function AdminSales() {
   const router = useRouter()
@@ -136,6 +78,7 @@ export default function AdminSales() {
     })
   }
 
+  // Filter state
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All')
   const [selectedMetal, setSelectedMetal] = useState<MetalType | 'All'>('All')
 
@@ -152,6 +95,10 @@ export default function AdminSales() {
   const [returnsHasMore, setReturnsHasMore] = useState(false)
   const [loadingMoreReturns, setLoadingMoreReturns] = useState(false)
 
+  const [ordersList, setOrdersList] = useState<Order[]>([])
+  const [reverseOrderTarget, setReverseOrderTarget] = useState<SaleBill | null>(null)
+  const [reversingOrder, setReversingOrder] = useState(false)
+
   const [stats, setStats] = useState<TransactionStats>({
     salesCount: 0,
     salesUnits: 0,
@@ -164,50 +111,11 @@ export default function AdminSales() {
   })
   const [loading, setLoading] = useState(true)
 
-  // Sale form state (multi-item)
+  // Modals state
   const [isSaleFormOpen, setIsSaleFormOpen] = useState(false)
-  const [saleLocationId, setSaleLocationId] = useState('')
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  const [isWalkInCustomer, setIsWalkInCustomer] = useState(false)
-  const [salePayments, setSalePayments] = useState<OrderPayment[]>([])
-  const [isPaymentBalanced, setIsPaymentBalanced] = useState(false)
-  const [ordersList, setOrdersList] = useState<Order[]>([])
-  const [reverseOrderTarget, setReverseOrderTarget] = useState<SaleBill | null>(null)
-  const [reversingOrder, setReversingOrder] = useState(false)
-  const [saleDate, setSaleDate] = useState('')
-  const [saleNotes, setSaleNotes] = useState('')
-  const [saleItems, setSaleItems] = useState<SaleLineItem[]>([
-    { id: '1', productId: '', quantity: '', price: '', pieceWeight: '' }
-  ])
-  const [saleSubmitting, setSaleSubmitting] = useState(false)
-  const [saleError, setSaleError] = useState<string | null>(null)
-
-  // Return form state
   const [isReturnFormOpen, setIsReturnFormOpen] = useState(false)
-  const [returnProductId, setReturnProductId] = useState('')
-  const [returnLocationId, setReturnLocationId] = useState('')
-  const [returnQty, setReturnQty] = useState('')
-  const [returnPieceWeight, setReturnPieceWeight] = useState('')
-  const [returnPrice, setReturnPrice] = useState('')
-  const [returnCustomerName, setReturnCustomerName] = useState('')
-  const [returnDate, setReturnDate] = useState('')
-  const [returnNotes, setReturnNotes] = useState('')
-  const [returnSubmitting, setReturnSubmitting] = useState(false)
-  const [returnError, setReturnError] = useState<string | null>(null)
-
-  // Delete modal state
   const [deleteTxTarget, setDeleteTxTarget] = useState<Transaction | null>(null)
-
-  // Edit Sale modal state (Super Admin only)
   const [editingSale, setEditingSale] = useState<Transaction | null>(null)
-  const [editSaleDate, setEditSaleDate] = useState('')
-  const [editSaleLocationId, setEditSaleLocationId] = useState('')
-  const [editSaleQuantity, setEditSaleQuantity] = useState('')
-  const [editSalePrice, setEditSalePrice] = useState('')
-  const [editSaleCustomerName, setEditSaleCustomerName] = useState('')
-  const [editSaleNotes, setEditSaleNotes] = useState('')
-  const [editSaleSubmitting, setEditSaleSubmitting] = useState(false)
-  const [editSaleError, setEditSaleError] = useState<string | null>(null)
 
   // Date Range State
   const [dateRangePreset, setDateRangePreset] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all')
@@ -389,14 +297,34 @@ export default function AdminSales() {
     }
   }
 
-  // Helper map for locations
+  // Location lookups and options
   const locationMap = useMemo(() => {
     const map = new Map<string, string>()
     locations.forEach((l) => map.set(l.id, l.name))
     return map
   }, [locations])
 
-  // Filtered sales
+  const saleLocationOptions: SelectOption[] = useMemo(() => {
+    return locations
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
+      .map((l) => ({
+        value: l.id,
+        label: l.name
+      }))
+  }, [locations])
+
+  const returnLocationOptions: SelectOption[] = useMemo(() => {
+    return locations
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
+      .map((l) => ({
+        value: l.id,
+        label: l.name
+      }))
+  }, [locations])
+
+  // Filtered lists
   const filteredSales = useMemo(() => {
     return salesList.filter(
       (tx) =>
@@ -405,7 +333,15 @@ export default function AdminSales() {
     )
   }, [salesList, selectedCategory, selectedMetal])
 
-  // Orders map for fast lookup
+  const filteredReturns = useMemo(() => {
+    return returnsList.filter(
+      (tx) =>
+        (selectedCategory === 'All' || tx.category === selectedCategory) &&
+        (selectedMetal === 'All' || tx.metal === selectedMetal)
+    )
+  }, [returnsList, selectedCategory, selectedMetal])
+
+  // Orders map for invoice grouping
   const ordersMap = useMemo(() => {
     const map = new Map<string, Order>()
     for (const o of ordersList) {
@@ -460,15 +396,7 @@ export default function AdminSales() {
     return Array.from(billMap.values())
   }, [filteredSales, ordersMap])
 
-  // Filtered returns
-  const filteredReturns = useMemo(() => {
-    return returnsList.filter(
-      (tx) =>
-        (selectedCategory === 'All' || tx.category === selectedCategory) &&
-        (selectedMetal === 'All' || tx.metal === selectedMetal)
-    )
-  }, [returnsList, selectedCategory, selectedMetal])
-
+  // Product options formatted for CustomSelect
   const saleProductOptions: SelectOption[] = useMemo(() => {
     const metalOrder = (m?: string) => {
       const lower = (m || '').toLowerCase()
@@ -487,7 +415,8 @@ export default function AdminSales() {
         return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
       })
       .map((p) => {
-        const weightLabel = p.category === 'Idols' && p.weight && p.weight > 0 ? `~${formatWeight(p.weight)} avg` : formatWeight(p.weight)
+        const weightLabel =
+          p.category === 'Idols' && p.weight && p.weight > 0 ? `~${formatWeight(p.weight)} avg` : formatWeight(p.weight)
         const brandLabel = p.brand ? ` · ${p.brand}` : ''
         return {
           value: p.id,
@@ -499,418 +428,184 @@ export default function AdminSales() {
       })
   }, [products])
 
-  const saleTotals = useMemo(() => {
-    let totalUnits = 0
-    let totalWeightGrams = 0
-    let grandTotal = 0
+  // Callbacks from extracted modals
+  const handleSaleRecorded = (createdOrder: Order, validatedItems: ValidatedSaleItem[]) => {
+    setOrdersList((prev) => [createdOrder, ...prev])
 
-    saleItems.forEach((item) => {
-      const prod = products.find((p) => p.id === item.productId)
-      const qty = Number(item.quantity) || 0
-      const price = Number(String(item.price || '').replace(/,/g, '')) || 0
-      totalUnits += qty
-      grandTotal += qty * price
-
-      if (prod) {
-        if (prod.category === 'Idols' && item.pieceWeight) {
-          totalWeightGrams += Number(item.pieceWeight) || 0
-        } else if (prod.weight) {
-          totalWeightGrams += prod.weight * qty
-        }
+    const newTransactions: Transaction[] = createdOrder.lines.map((l) => {
+      const prod = products.find((p) => p.id === l.productId)
+      return {
+        id: l.transactionId,
+        orderId: createdOrder.id,
+        type: 'sale' as const,
+        productId: l.productId,
+        productName: l.productName,
+        category: l.category as ProductCategory,
+        brand: prod?.brand,
+        metal: l.metal as MetalType,
+        quantity: l.qty,
+        pieceWeight: l.pieceWeightMg ? l.pieceWeightMg / 1000 : undefined,
+        price: l.unitPricePaise / 100,
+        locationId: createdOrder.locationId,
+        locationName: createdOrder.locationName,
+        customerId: createdOrder.customerId,
+        customerName: createdOrder.customerSnapshot?.displayName || undefined,
+        date: createdOrder.date,
+        notes: createdOrder.orderNo,
+        createdAt: createdOrder.createdAt
       }
     })
 
-    return { totalUnits, totalWeightGrams, grandTotal }
-  }, [saleItems, products])
+    setSalesList((prev) => [...newTransactions, ...prev])
+    const totalSaleAmt = createdOrder.totals.amountPaise / 100
+    const totalUnits = createdOrder.totals.units
 
-  const saleTotalsPaise = useMemo(() => {
-    return rupeesToPaise(saleTotals.grandTotal)
-  }, [saleTotals.grandTotal])
-
-  const selectedReturnProduct = useMemo(() => {
-    return products.find((p) => p.id === returnProductId)
-  }, [products, returnProductId])
-
-  const isReturnProductAnIdol = useMemo(() => {
-    return selectedReturnProduct?.category === 'Idols'
-  }, [selectedReturnProduct])
-
-  // Form completion validation states
-  const isSaleFormValid = useMemo(() => {
-    const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : saleLocationId
-    if (!effectiveLocId || !saleDate.trim() || saleItems.length === 0) return false
-    if (!selectedCustomer && !isWalkInCustomer) return false
-    if (!isPaymentBalanced || salePayments.length === 0) return false
-
-    const requiredStockPerProduct: Record<string, number> = {}
-    const chosenPiecesPerProduct: Record<string, Set<number>> = {}
-
-    for (const item of saleItems) {
-      if (!item.productId.trim()) return false
-      const prod = products.find((p) => p.id === item.productId)
-      if (!prod) return false
-
-      const isIdol = prod.category === 'Idols'
-      if (isIdol && !item.pieceWeight) return false
-
-      const qty = isIdol ? 1 : Number(item.quantity)
-      if (isNaN(qty) || qty <= 0) return false
-
-      const unitPrice = Number(String(item.price || '').replace(/,/g, ''))
-      if (isNaN(unitPrice) || unitPrice <= 0) return false
-
-      if (isIdol && item.pieceWeight) {
-        const pw = Number(item.pieceWeight)
-        if (!chosenPiecesPerProduct[prod.id]) {
-          chosenPiecesPerProduct[prod.id] = new Set()
-        }
-        if (chosenPiecesPerProduct[prod.id].has(pw)) return false
-        chosenPiecesPerProduct[prod.id].add(pw)
-      }
-
-      requiredStockPerProduct[prod.id] = (requiredStockPerProduct[prod.id] || 0) + qty
-      const available = prod.stockByLocation?.[effectiveLocId] || 0
-      if (requiredStockPerProduct[prod.id] > available) return false
-    }
-
-    return true
-  }, [
-    isLocationLocked,
-    userAssignedLocationId,
-    saleLocationId,
-    saleDate,
-    saleItems,
-    products,
-    selectedCustomer,
-    isWalkInCustomer,
-    isPaymentBalanced,
-    salePayments
-  ])
-
-  const isReturnFormValid = useMemo(() => {
-    const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : returnLocationId
-    if (!effectiveLocId || !returnProductId.trim() || !returnDate.trim()) return false
-    const prod = products.find((p) => p.id === returnProductId)
-    if (!prod) return false
-    const isIdol = prod.category === 'Idols'
-    if (isIdol) {
-      const numW = Number(returnPieceWeight)
-      if (isNaN(numW) || numW <= 0) return false
-    } else {
-      const q = Number(returnQty)
-      if (isNaN(q) || q <= 0) return false
-    }
-    if (returnPrice.trim()) {
-      const p = Number(returnPrice)
-      if (isNaN(p) || p < 0) return false
-    }
-    return true
-  }, [isLocationLocked, userAssignedLocationId, returnLocationId, returnProductId, returnDate, products, returnPieceWeight, returnQty, returnPrice])
-
-  const isEditSaleValid = useMemo(() => {
-    if (!editSaleDate.trim() || !editSaleLocationId.trim() || !editSalePrice.trim()) return false
-    const q = Number(editSaleQuantity)
-    if (isNaN(q) || q < 1) return false
-    const p = Number(editSalePrice)
-    if (isNaN(p) || p < 0) return false
-    return true
-  }, [editSaleDate, editSaleLocationId, editSaleQuantity, editSalePrice])
-
-  const saleLocationOptions: SelectOption[] = useMemo(() => {
-    return locations
-      .slice()
-      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
-      .map((l) => ({
-        value: l.id,
-        label: l.name
-      }))
-  }, [locations])
-
-  const returnLocationOptions: SelectOption[] = useMemo(() => {
-    return locations
-      .slice()
-      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
-      .map((l) => ({
-        value: l.id,
-        label: l.name
-      }))
-  }, [locations])
-
-  // Open Sale modal (multi-item)
-  const handleOpenSaleForm = () => {
-    setSaleLocationId(isLocationLocked && userAssignedLocationId ? userAssignedLocationId : '')
-    setSelectedCustomer(null)
-    setIsWalkInCustomer(false)
-    setSalePayments([])
-    setIsPaymentBalanced(false)
-    setSaleDate('')
-    setSaleNotes('')
-    setSaleError(null)
-
-    setSaleItems([
-      {
-        id: String(Date.now()),
-        productId: '',
-        quantity: '',
-        price: '',
-        pieceWeight: ''
-      }
-    ])
-    setIsSaleFormOpen(true)
-  }
-
-  const handleAddSaleItem = () => {
-    setSaleItems((prev) => [
+    setStats((prev) => ({
       ...prev,
-      {
-        id: String(Date.now() + Math.random()),
-        productId: '',
-        quantity: '',
-        price: '',
-        pieceWeight: ''
-      }
-    ])
-  }
+      salesCount: prev.salesCount + newTransactions.length,
+      salesUnits: prev.salesUnits + totalUnits,
+      salesRevenue: prev.salesRevenue + totalSaleAmt,
+      netRevenue: prev.netRevenue + totalSaleAmt,
+      profit: (prev.profit ?? prev.netRevenue) + totalSaleAmt
+    }))
+    broadcastTxUpdate()
+    refreshStats()
 
-  const handleRemoveSaleItem = (id: string) => {
-    setSaleItems((prev) => {
-      if (prev.length <= 1) return prev
-      return prev.filter((item) => item.id !== id)
+    const effectiveLocId = createdOrder.locationId
+    setProducts((prev) => {
+      let updated = [...prev]
+      for (const it of validatedItems) {
+        updated = updated.map((p) => {
+          if (p.id !== it.prod.id) return p
+          const currentLocStock = p.stockByLocation?.[effectiveLocId] || 0
+          const updatedLocStock = Math.max(0, currentLocStock - it.qty)
+          const updatedStockByLoc = { ...p.stockByLocation, [effectiveLocId]: updatedLocStock }
+          const updatedTotalStock = Math.max(0, (p.stock || 0) - it.qty)
+
+          let updatedPieces = p.pieceWeights
+          let updatedPiecesByLoc = p.pieceWeightsByLocation
+          if (it.pieceWeight) {
+            const soldWeight = it.pieceWeight
+            const locPieces = p.pieceWeightsByLocation?.[effectiveLocId] || []
+            const idxInLoc = locPieces.indexOf(soldWeight)
+            const newLocPieces =
+              idxInLoc >= 0 ? [...locPieces.slice(0, idxInLoc), ...locPieces.slice(idxInLoc + 1)] : locPieces
+            updatedPiecesByLoc = { ...p.pieceWeightsByLocation, [effectiveLocId]: newLocPieces }
+
+            const allPieces = p.pieceWeights || []
+            const idxInAll = allPieces.indexOf(soldWeight)
+            updatedPieces =
+              idxInAll >= 0 ? [...allPieces.slice(0, idxInAll), ...allPieces.slice(idxInAll + 1)] : allPieces
+          }
+
+          return {
+            ...p,
+            stock: updatedTotalStock,
+            stockByLocation: updatedStockByLoc,
+            pieceWeights: updatedPieces,
+            pieceWeightsByLocation: updatedPiecesByLoc
+          }
+        })
+      }
+      return updated
     })
   }
 
-  const handleUpdateSaleItem = (id: string, updates: Partial<SaleLineItem>) => {
-    setSaleItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item
-        const updated = { ...item, ...updates }
-        if (updates.productId && updates.productId !== item.productId) {
-          const newProd = products.find((p) => p.id === updates.productId)
-          const isIdol = newProd?.category === 'Idols'
-          updated.pieceWeight = ''
-          updated.quantity = isIdol ? '1' : ''
+  const handleReturnRecorded = (
+    createdTx: Transaction,
+    prod: Product,
+    qty: number,
+    effectiveLocId: string,
+    pieceWeightNum?: number
+  ) => {
+    setReturnsList((prev) => [createdTx, ...prev])
+    const retAmt = (createdTx.price || 0) * qty
+    setStats((prev) => ({
+      ...prev,
+      returnsCount: prev.returnsCount + 1,
+      returnsUnits: prev.returnsUnits + qty,
+      returnsAmount: prev.returnsAmount + retAmt,
+      netRevenue: prev.netRevenue - retAmt,
+      profit: (prev.profit ?? prev.netRevenue) - retAmt
+    }))
+    broadcastTxUpdate()
+    refreshStats()
+
+    const isIdol = prod.category === 'Idols'
+    setProducts((prev) =>
+      prev.map((p) => {
+        if (p.id !== prod.id) return p
+        const currentLocStock = p.stockByLocation?.[effectiveLocId] || 0
+        const updatedLocStock = currentLocStock + qty
+        const updatedStockByLoc = { ...p.stockByLocation, [effectiveLocId]: updatedLocStock }
+        const updatedTotalStock = (p.stock || 0) + qty
+
+        let updatedPieces = p.pieceWeights
+        let updatedPiecesByLoc = p.pieceWeightsByLocation
+        if (isIdol && pieceWeightNum) {
+          const locPieces = p.pieceWeightsByLocation?.[effectiveLocId] || []
+          updatedPiecesByLoc = { ...p.pieceWeightsByLocation, [effectiveLocId]: [...locPieces, pieceWeightNum] }
+          const allPieces = p.pieceWeights || []
+          updatedPieces = [...allPieces, pieceWeightNum]
         }
-        return updated
+
+        return {
+          ...p,
+          stock: updatedTotalStock,
+          stockByLocation: updatedStockByLoc,
+          pieceWeights: updatedPieces,
+          pieceWeightsByLocation: updatedPiecesByLoc
+        }
       })
     )
   }
 
-  // Open Return modal
-  const handleOpenReturnForm = () => {
-    setReturnProductId('')
-    setReturnLocationId(isLocationLocked && userAssignedLocationId ? userAssignedLocationId : '')
-    setReturnQty('')
-    setReturnPieceWeight('')
-    setReturnPrice('')
-    setReturnCustomerName('')
-    setReturnDate('')
-    setReturnNotes('')
-    setReturnError(null)
-    setIsReturnFormOpen(true)
-  }
+  const handleSaleUpdated = (
+    updated: Transaction,
+    oldQty: number,
+    oldPrice: number,
+    newQty: number,
+    newPrice: number,
+    oldLoc: string,
+    newLoc: string
+  ) => {
+    setSalesList((prev) => prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)))
 
-  // Submit Multi-Item Sale
-  const handleSaveSale = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : saleLocationId
-    if (!effectiveLocId) {
-      setSaleError('Please select a selling location')
-      return
-    }
+    const oldTotal = oldQty * oldPrice
+    const newTotal = newQty * newPrice
+    const qtyDiff = newQty - oldQty
+    const revDiff = newTotal - oldTotal
 
-    if (!saleDate) {
-      setSaleError('Please select a sale date')
-      return
-    }
+    setStats((prev) => ({
+      ...prev,
+      salesUnits: prev.salesUnits + qtyDiff,
+      salesRevenue: prev.salesRevenue + revDiff,
+      netRevenue: prev.netRevenue + revDiff,
+      profit: (prev.profit ?? prev.netRevenue) + revDiff
+    }))
+    broadcastTxUpdate()
+    refreshStats()
 
-    if (saleItems.length === 0) {
-      setSaleError('Please add at least one item to the sale')
-      return
-    }
-
-    // Validate each line item
-    const validatedItems: Array<{
-      prod: Product
-      qty: number
-      price: number
-      pieceWeight?: number
-    }> = []
-
-    const requiredStockPerProduct: Record<string, number> = {}
-    const chosenPiecesPerProduct: Record<string, Set<number>> = {}
-
-    for (let i = 0; i < saleItems.length; i++) {
-      const item = saleItems[i]
-      const itemNum = i + 1
-      const prod = products.find((p) => p.id === item.productId)
-      if (!prod) {
-        setSaleError(`Item #${itemNum}: Please select a valid product`)
-        return
-      }
-
-      const isIdol = prod.category === 'Idols'
-      if (isIdol && !item.pieceWeight) {
-        setSaleError(`Item #${itemNum} (${prod.name}): Please select which piece weight is being sold`)
-        return
-      }
-
-      const qty = isIdol ? 1 : Number(item.quantity)
-      if (isNaN(qty) || qty <= 0) {
-        setSaleError(`Item #${itemNum} (${prod.name}): Quantity must be at least 1`)
-        return
-      }
-
-      const unitPrice = Number(String(item.price || '').replace(/,/g, ''))
-      if (isNaN(unitPrice) || unitPrice <= 0) {
-        setSaleError(`Item #${itemNum} (${prod.name}): Selling price per unit is required and must be greater than ₹0`)
-        return
-      }
-
-      if (isIdol && item.pieceWeight) {
-        const pw = Number(item.pieceWeight)
-        if (!chosenPiecesPerProduct[prod.id]) {
-          chosenPiecesPerProduct[prod.id] = new Set()
+    setProducts((prev) =>
+      prev.map((p) => {
+        if (p.id !== updated.productId) return p
+        const locStock = { ...(p.stockByLocation || {}) }
+        let totalStock = p.stock || 0
+        if (oldLoc === newLoc) {
+          locStock[oldLoc] = (locStock[oldLoc] || 0) - qtyDiff
+          totalStock -= qtyDiff
+        } else {
+          locStock[oldLoc] = (locStock[oldLoc] || 0) + oldQty
+          locStock[newLoc] = (locStock[newLoc] || 0) - newQty
+          totalStock -= qtyDiff
         }
-        if (chosenPiecesPerProduct[prod.id].has(pw)) {
-          setSaleError(`Item #${itemNum}: Piece weight ${formatWeight(pw)} is already selected in another row`)
-          return
-        }
-        chosenPiecesPerProduct[prod.id].add(pw)
-      }
-
-      requiredStockPerProduct[prod.id] = (requiredStockPerProduct[prod.id] || 0) + qty
-      const available = prod.stockByLocation?.[effectiveLocId] || 0
-      if (requiredStockPerProduct[prod.id] > available) {
-        setSaleError(`Insufficient stock for "${prod.name}" at this location. Available: ${available}, Total in sale: ${requiredStockPerProduct[prod.id]}`)
-        return
-      }
-
-      validatedItems.push({
-        prod,
-        qty,
-        price: unitPrice,
-        pieceWeight: isIdol && item.pieceWeight ? Number(item.pieceWeight) : undefined
-      })
-    }
-
-    setSaleSubmitting(true)
-    setSaleError(null)
-
-    try {
-      if (!selectedCustomer && !isWalkInCustomer) {
-        setSaleError('Please select a customer or choose Walk-in customer')
-        return
-      }
-      if (!isPaymentBalanced || salePayments.length === 0) {
-        setSaleError('Payment amounts must balance the grand total exactly before recording')
-        return
-      }
-
-      const payload = {
-        type: 'sale' as const,
-        customerId: selectedCustomer ? selectedCustomer.id : undefined,
-        locationId: effectiveLocId,
-        date: saleDate,
-        lines: validatedItems.map((it) => ({
-          productId: it.prod.id,
-          qty: it.qty,
-          pieceWeightMg: it.pieceWeight ? gramsToMg(it.pieceWeight) : undefined,
-          unitPricePaise: rupeesToPaise(it.price)
-        })),
-        payments: salePayments,
-        notes: saleNotes.trim() || undefined
-      }
-
-      const data = await createOrder(payload)
-      const createdOrder: Order = data.order
-
-      setIsSaleFormOpen(false)
-      setSaleDate('')
-      toast.success(`Bill ${createdOrder.orderNo} recorded successfully`)
-
-      setOrdersList((prev) => [createdOrder, ...prev])
-
-      const newTransactions: Transaction[] = createdOrder.lines.map((l) => {
-        const prod = products.find((p) => p.id === l.productId)
         return {
-          id: l.transactionId,
-          orderId: createdOrder.id,
-          type: 'sale' as const,
-          productId: l.productId,
-          productName: l.productName,
-          category: l.category as ProductCategory,
-          brand: prod?.brand,
-          metal: l.metal as MetalType,
-          quantity: l.qty,
-          pieceWeight: l.pieceWeightMg ? l.pieceWeightMg / 1000 : undefined,
-          price: l.unitPricePaise / 100,
-          locationId: createdOrder.locationId,
-          locationName: createdOrder.locationName,
-          customerId: createdOrder.customerId,
-          customerName: createdOrder.customerSnapshot?.displayName || selectedCustomer?.displayName || undefined,
-          date: createdOrder.date,
-          notes: createdOrder.orderNo,
-          createdAt: createdOrder.createdAt
+          ...p,
+          stock: Math.max(0, totalStock),
+          stockByLocation: locStock
         }
       })
-
-      setSalesList((prev) => [...newTransactions, ...prev])
-      const totalSaleAmt = createdOrder.totals.amountPaise / 100
-      const totalUnits = createdOrder.totals.units
-
-      setStats((prev) => ({
-        ...prev,
-        salesCount: prev.salesCount + newTransactions.length,
-        salesUnits: prev.salesUnits + totalUnits,
-        salesRevenue: prev.salesRevenue + totalSaleAmt,
-        netRevenue: prev.netRevenue + totalSaleAmt,
-        profit: (prev.profit ?? prev.netRevenue) + totalSaleAmt
-      }))
-      broadcastTxUpdate()
-      refreshStats()
-
-      setProducts((prev) => {
-        let updated = [...prev]
-        for (const it of validatedItems) {
-          updated = updated.map((p) => {
-            if (p.id !== it.prod.id) return p
-            const currentLocStock = p.stockByLocation?.[effectiveLocId] || 0
-            const updatedLocStock = Math.max(0, currentLocStock - it.qty)
-            const updatedStockByLoc = { ...p.stockByLocation, [effectiveLocId]: updatedLocStock }
-            const updatedTotalStock = Math.max(0, (p.stock || 0) - it.qty)
-
-            let updatedPieces = p.pieceWeights
-            let updatedPiecesByLoc = p.pieceWeightsByLocation
-            if (it.pieceWeight) {
-              const soldWeight = it.pieceWeight
-              const locPieces = p.pieceWeightsByLocation?.[effectiveLocId] || []
-              const idxInLoc = locPieces.indexOf(soldWeight)
-              const newLocPieces = idxInLoc >= 0 ? [...locPieces.slice(0, idxInLoc), ...locPieces.slice(idxInLoc + 1)] : locPieces
-              updatedPiecesByLoc = { ...p.pieceWeightsByLocation, [effectiveLocId]: newLocPieces }
-
-              const allPieces = p.pieceWeights || []
-              const idxInAll = allPieces.indexOf(soldWeight)
-              updatedPieces = idxInAll >= 0 ? [...allPieces.slice(0, idxInAll), ...allPieces.slice(idxInAll + 1)] : allPieces
-            }
-
-            return {
-              ...p,
-              stock: updatedTotalStock,
-              stockByLocation: updatedStockByLoc,
-              pieceWeights: updatedPieces,
-              pieceWeightsByLocation: updatedPiecesByLoc
-            }
-          })
-        }
-        return updated
-      })
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to record sale'
-      setSaleError(msg)
-      toast.error(msg)
-    } finally {
-      setSaleSubmitting(false)
-    }
+    )
   }
 
   // Reverse complete Order Bill with atomic inventory restoration
@@ -987,120 +682,13 @@ export default function AdminSales() {
     }
   }
 
-  // Submit Return
-  const handleSaveReturn = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const prod = products.find((p) => p.id === returnProductId)
-    if (!prod) {
-      setReturnError('Please select a product')
-      return
-    }
-    const effectiveLocId = isLocationLocked && userAssignedLocationId ? userAssignedLocationId : returnLocationId
-    if (!effectiveLocId) {
-      setReturnError('Please select a location to receive the return')
-      return
-    }
-
-    if (!returnDate) {
-      setReturnError('Please select a return date')
-      return
-    }
-
-    const isIdol = prod.category === 'Idols'
-    if (isIdol) {
-      const numW = Number(returnPieceWeight)
-      if (isNaN(numW) || numW <= 0) {
-        setReturnError('Please enter the returned piece weight in grams')
-        return
-      }
-    }
-    const qty = isIdol ? 1 : Number(returnQty)
-
-    if (isNaN(qty) || qty <= 0) {
-      setReturnError('Quantity must be at least 1')
-      return
-    }
-
-    setReturnSubmitting(true)
-    setReturnError(null)
-
-    try {
-      const locName = locationMap.get(effectiveLocId) || adminUser?.assignedLocationName || ''
-      const { transaction: createdTx } = await recordTransaction({
-        type: 'return',
-        productId: prod.id,
-        productName: prod.name,
-        category: prod.category,
-        brand: prod.brand,
-        metal: prod.metal,
-        quantity: qty,
-        pieceWeight: isIdol ? Number(returnPieceWeight) : undefined,
-        price: returnPrice ? Number(returnPrice) : undefined,
-        locationId: effectiveLocId,
-        locationName: locName,
-        customerName: returnCustomerName,
-        date: returnDate,
-        notes: returnNotes
-      })
-      setIsReturnFormOpen(false)
-      toast.success('Return recorded and restocked successfully')
-
-      // Optimistically update local transactions & product stock
-      setReturnsList((prev) => [createdTx, ...prev])
-      const retAmt = (Number(returnPrice) || 0) * qty
-      setStats((prev) => ({
-        ...prev,
-        returnsCount: prev.returnsCount + 1,
-        returnsUnits: prev.returnsUnits + qty,
-        returnsAmount: prev.returnsAmount + retAmt,
-        netRevenue: prev.netRevenue - retAmt,
-        profit: (prev.profit ?? prev.netRevenue) - retAmt
-      }))
-      broadcastTxUpdate()
-      refreshStats()
-      setProducts((prev) =>
-        prev.map((p) => {
-          if (p.id !== prod.id) return p
-          const currentLocStock = p.stockByLocation?.[effectiveLocId] || 0
-          const updatedLocStock = currentLocStock + qty
-          const updatedStockByLoc = { ...p.stockByLocation, [effectiveLocId]: updatedLocStock }
-          const updatedTotalStock = (p.stock || 0) + qty
-
-          let updatedPieces = p.pieceWeights
-          let updatedPiecesByLoc = p.pieceWeightsByLocation
-          if (isIdol && returnPieceWeight) {
-            const retWeight = Number(returnPieceWeight)
-            const locPieces = p.pieceWeightsByLocation?.[effectiveLocId] || []
-            updatedPiecesByLoc = { ...p.pieceWeightsByLocation, [effectiveLocId]: [...locPieces, retWeight] }
-            const allPieces = p.pieceWeights || []
-            updatedPieces = [...allPieces, retWeight]
-          }
-
-          return {
-            ...p,
-            stock: updatedTotalStock,
-            stockByLocation: updatedStockByLoc,
-            pieceWeights: updatedPieces,
-            pieceWeightsByLocation: updatedPiecesByLoc
-          }
-        })
-      )
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to record return'
-      setReturnError(msg)
-      toast.error(msg)
-    } finally {
-      setReturnSubmitting(false)
-    }
-  }
-
   // Reverse transaction with automatic reversing entry
   const executeDeleteTransaction = async () => {
     if (!deleteTxTarget) return
     try {
       const res = await deleteTransaction(deleteTxTarget)
       toast.success('Reversing entry posted successfully')
-      
+
       const reversedId = deleteTxTarget.id
       const isTargetSale = deleteTxTarget.type === 'sale'
       const isTargetReturn = deleteTxTarget.type === 'return'
@@ -1138,7 +726,6 @@ export default function AdminSales() {
       broadcastTxUpdate()
       refreshStats()
 
-      // Reverse stock on product locally
       const targetProdId = deleteTxTarget.productId
       const targetLocId = deleteTxTarget.locationId
 
@@ -1193,102 +780,6 @@ export default function AdminSales() {
     }
   }
 
-  const handleOpenEditSale = (tx: Transaction) => {
-    setEditingSale(tx)
-    setEditSaleDate(tx.date || getTodayIST())
-    setEditSaleLocationId(tx.locationId || '')
-    setEditSaleQuantity(String(tx.quantity || 1))
-    setEditSalePrice(tx.price !== undefined ? String(tx.price) : '')
-    setEditSaleCustomerName(tx.customerName || '')
-    setEditSaleNotes(tx.notes || '')
-    setEditSaleError(null)
-  }
-
-  const handleSaveEditSale = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editingSale) return
-
-    const qty = Number(editSaleQuantity)
-    if (isNaN(qty) || qty < 1) {
-      setEditSaleError('Quantity must be at least 1')
-      return
-    }
-
-    const priceNum = Number(editSalePrice)
-    if (isNaN(priceNum) || priceNum < 0) {
-      setEditSaleError('Price must be a valid non-negative number')
-      return
-    }
-
-    setEditSaleSubmitting(true)
-    setEditSaleError(null)
-
-    try {
-      const res = await updateTransaction(editingSale.id, {
-        quantity: qty,
-        price: priceNum,
-        locationId: editSaleLocationId,
-        locationName: locationMap.get(editSaleLocationId) || editingSale.locationName,
-        date: editSaleDate,
-        customerName: editSaleCustomerName,
-        notes: editSaleNotes
-      })
-
-      const updated = res.transaction
-      setSalesList((prev) => prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)))
-
-      const oldQty = Number(editingSale.quantity || 1)
-      const oldPrice = Number(editingSale.price || 0)
-      const oldTotal = oldQty * oldPrice
-      const newTotal = qty * priceNum
-      const qtyDiff = qty - oldQty
-      const revDiff = newTotal - oldTotal
-
-      setStats((prev) => ({
-        ...prev,
-        salesUnits: prev.salesUnits + qtyDiff,
-        salesRevenue: prev.salesRevenue + revDiff,
-        netRevenue: prev.netRevenue + revDiff,
-        profit: (prev.profit ?? prev.netRevenue) + revDiff
-      }))
-      broadcastTxUpdate()
-      refreshStats()
-
-      // Update product stock in local products state if quantity or location changed
-      const oldLoc = editingSale.locationId
-      const newLoc = editSaleLocationId
-      setProducts((prev) =>
-        prev.map((p) => {
-          if (p.id !== editingSale.productId) return p
-          const locStock = { ...(p.stockByLocation || {}) }
-          let totalStock = p.stock || 0
-          if (oldLoc === newLoc) {
-            locStock[oldLoc] = (locStock[oldLoc] || 0) - qtyDiff
-            totalStock -= qtyDiff
-          } else {
-            locStock[oldLoc] = (locStock[oldLoc] || 0) + oldQty
-            locStock[newLoc] = (locStock[newLoc] || 0) - qty
-            totalStock -= qtyDiff
-          }
-          return {
-            ...p,
-            stock: Math.max(0, totalStock),
-            stockByLocation: locStock
-          }
-        })
-      )
-
-      toast.success('Sale entry updated successfully')
-      setEditingSale(null)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to update sale'
-      setEditSaleError(msg)
-      toast.error(msg)
-    } finally {
-      setEditSaleSubmitting(false)
-    }
-  }
-
   if (!isSuperAdmin && !hasPermission('sales', 'view') && !hasPermission('returns', 'view')) {
     return (
       <div className="w-full py-20 flex flex-col items-center justify-center text-center">
@@ -1309,15 +800,16 @@ export default function AdminSales() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-black mb-1">Sales</h1>
-          <p className="text-gray-500 text-sm">
-            Customer sales and returns.
-          </p>
+          <p className="text-gray-500 text-sm">Customer sales and returns.</p>
         </div>
 
         <div className="flex items-center gap-2">
           {hasPermission('returns', 'add') && (
             <button
-              onClick={handleOpenReturnForm}
+              onClick={() => {
+                setIsSaleFormOpen(false)
+                setIsReturnFormOpen(true)
+              }}
               disabled={products.length === 0 || locations.length === 0}
               className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold disabled:opacity-40 transition-[background-color,border-color,transform] duration-150 active:scale-[0.97]"
             >
@@ -1327,7 +819,10 @@ export default function AdminSales() {
           )}
           {hasPermission('sales', 'add') && (
             <button
-              onClick={handleOpenSaleForm}
+              onClick={() => {
+                setIsReturnFormOpen(false)
+                setIsSaleFormOpen(true)
+              }}
               disabled={products.length === 0 || locations.length === 0}
               className="h-9 px-3.5 inline-flex items-center gap-1.5 bg-black text-white hover:bg-gray-800 rounded-lg text-xs font-semibold disabled:opacity-40 transition-[background-color,transform] duration-150 active:scale-[0.97]"
             >
@@ -1339,87 +834,24 @@ export default function AdminSales() {
       </div>
 
       {/* Metrics Summary Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs uppercase font-semibold tracking-wider text-gray-500">Gross Sales</span>
-            <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700">
-              <IndianRupee size={14} />
-            </div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-black font-mono tabular-nums tracking-tight">
-              ₹{stats.salesRevenue.toLocaleString('en-IN')}
-            </div>
-            <div className="text-xs text-gray-400 mt-1 font-medium">{stats.salesCount} sales</div>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs uppercase font-semibold tracking-wider text-gray-500">Units Sold</span>
-            <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700">
-              <PackageCheck size={14} />
-            </div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-black font-mono tabular-nums tracking-tight">
-              {stats.salesUnits.toLocaleString('en-IN')}
-            </div>
-            <div className="text-xs text-gray-400 mt-1 font-medium">units dispatched</div>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs uppercase font-semibold tracking-wider text-gray-500">Returns</span>
-            <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700">
-              <RotateCcw size={14} />
-            </div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-black font-mono tabular-nums tracking-tight">
-              ₹{stats.returnsAmount.toLocaleString('en-IN')}
-            </div>
-            <div className="text-xs text-gray-400 mt-1 font-medium">{stats.returnsCount} returns</div>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs uppercase font-semibold tracking-wider text-gray-500">Profit</span>
-            <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700">
-              <TrendingUp size={14} />
-            </div>
-          </div>
-          <div>
-            <div className={`text-2xl font-bold font-mono tabular-nums tracking-tight ${
-              (stats.profit ?? stats.netRevenue) < 0 ? 'text-rose-600' : 'text-black'
-            }`}>
-              {(stats.profit ?? stats.netRevenue) < 0
-                ? `-₹${Math.abs(stats.profit ?? stats.netRevenue).toLocaleString('en-IN')}`
-                : `₹${(stats.profit ?? stats.netRevenue).toLocaleString('en-IN')}`}
-            </div>
-            <div className="text-xs text-gray-400 mt-1 font-medium">Revenue minus cost</div>
-          </div>
-        </div>
-      </div>
+      <SalesMetricsStrip stats={stats} />
 
       {/* Tabs */}
       <div className="flex items-center border-b border-gray-200 mb-6">
         {(isSuperAdmin || hasPermission('sales', 'view')) && (
           <button
             onClick={() => handleTabChange('sales')}
-            className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'sales'
-              ? 'border-black text-black'
-              : 'border-transparent text-gray-500 hover:text-black'
-              }`}
+            className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${
+              activeTab === 'sales' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black'
+            }`}
           >
             <ShoppingCart size={15} className="shrink-0" />
             <span>Sales</span>
-            <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
-              activeTab === 'sales' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
-            }`}>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
+                activeTab === 'sales' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
               {stats.salesCount}
             </span>
           </button>
@@ -1427,1076 +859,136 @@ export default function AdminSales() {
         {(isSuperAdmin || hasPermission('returns', 'view')) && (
           <button
             onClick={() => handleTabChange('returns')}
-            className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${activeTab === 'returns'
-              ? 'border-black text-black'
-              : 'border-transparent text-gray-500 hover:text-black'
-              }`}
+            className={`pb-3 px-3.5 text-sm font-semibold transition-[color,border-color] duration-150 border-b-2 -mb-px flex items-center gap-2 ${
+              activeTab === 'returns' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black'
+            }`}
           >
             <RotateCcw size={15} className="shrink-0" />
             <span>Returns</span>
-            <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
-              activeTab === 'returns' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
-            }`}>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
+                activeTab === 'returns' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
               {stats.returnsCount}
             </span>
           </button>
         )}
       </div>
 
-      {/* Date Range Filter Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-2.5 mb-6 bg-white border border-gray-200 rounded-xl shadow-2xs">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500 px-2 select-none">
-            <Calendar size={14} className="text-gray-400" />
-            Date Range:
-          </span>
-          <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
-            {([
-              { id: 'all', label: 'All Dates' },
-              { id: 'today', label: 'Today' },
-              { id: 'week', label: 'Last 7 Days' },
-              { id: 'month', label: 'Last 30 Days' },
-              { id: 'custom', label: 'Custom' },
-            ] as const).map((preset) => (
-              <button
-                key={preset.id}
-                onClick={() => {
-                  setLoading(true)
-                  setDateRangePreset(preset.id)
-                }}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${dateRangePreset === preset.id
-                  ? 'bg-white text-black font-semibold shadow-xs'
-                  : 'text-gray-600 hover:text-black'
-                  }`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Filters (Date range + Category + Metal) */}
+      <SalesFilterBar
+        dateRangePreset={dateRangePreset}
+        onPresetChange={(preset) => {
+          setLoading(true)
+          setDateRangePreset(preset)
+        }}
+        customStartDate={customStartDate}
+        onCustomStartDateChange={(d) => {
+          setLoading(true)
+          setCustomStartDate(d)
+        }}
+        customEndDate={customEndDate}
+        onCustomEndDateChange={(d) => {
+          setLoading(true)
+          setCustomEndDate(d)
+        }}
+        selectedCategory={selectedCategory}
+        onCategoryChange={setSelectedCategory}
+        selectedMetal={selectedMetal}
+        onMetalChange={setSelectedMetal}
+      />
 
-        {dateRangePreset === 'custom' && (
-          <div className="flex items-center gap-2">
-            <div className="w-36">
-              <CustomDatePicker
-                size="sm"
-                value={customStartDate}
-                onChange={(d) => {
-                  setLoading(true)
-                  setCustomStartDate(d)
-                }}
-                placeholder="Start Date"
-              />
-            </div>
-            <span className="text-xs text-gray-400 font-medium">to</span>
-            <div className="w-36">
-              <CustomDatePicker
-                size="sm"
-                value={customEndDate}
-                onChange={(d) => {
-                  setLoading(true)
-                  setCustomEndDate(d)
-                }}
-                placeholder="End Date"
-              />
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Record Sale Modal */}
+      <RecordSaleModal
+        isOpen={isSaleFormOpen}
+        onClose={() => setIsSaleFormOpen(false)}
+        products={products}
+        locations={locations}
+        locationMap={locationMap}
+        saleLocationOptions={saleLocationOptions}
+        saleProductOptions={saleProductOptions}
+        isLocationLocked={isLocationLocked}
+        userAssignedLocationId={userAssignedLocationId}
+        adminLocationName={adminUser?.assignedLocationName}
+        onSaleRecorded={handleSaleRecorded}
+      />
 
-      {/* Category & Metal Segmented Filters */}
-      <div className="flex flex-wrap items-center gap-2.5 mb-6">
-        {/* Category Filter */}
-        <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
-          <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 select-none">Category</span>
-          <button
-            onClick={() => setSelectedCategory('All')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
-              selectedCategory === 'All'
-                ? 'bg-white text-black font-semibold shadow-xs'
-                : 'text-gray-600 hover:text-black'
-            }`}
-          >
-            All
-          </button>
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
-                selectedCategory === cat
-                  ? 'bg-white text-black font-semibold shadow-xs'
-                  : 'text-gray-600 hover:text-black'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        {/* Metal Filter */}
-        <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
-          <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 select-none">Metal</span>
-          {(['All', 'Gold', 'Silver'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setSelectedMetal(m)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
-                selectedMetal === m
-                  ? 'bg-white text-black font-semibold shadow-xs'
-                  : 'text-gray-600 hover:text-black'
-              }`}
-            >
-              {m === 'All' ? 'All' : m}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Record Sale Modal / Card */}
-      <AnimatePresence>
-        {isSaleFormOpen && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.97, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 8 }}
-            transition={{ duration: 0.18, ease: EASE_OUT }}
-            className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
-          >
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-black">Record Customer Sale</h2>
-                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
-                  {saleItems.length} {saleItems.length === 1 ? 'item' : 'items'}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSaleFormOpen(false)}
-                className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {saleError && (
-              <div className="mb-4">
-                <FormError message={saleError} />
-              </div>
-            )}
-
-            <form onSubmit={handleSaveSale} className="space-y-5">
-              {/* Common Sale Metadata Header */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50/70 border border-gray-200 rounded-xl items-start relative z-30">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-medium text-gray-700">
-                      Selling Location <span className="text-rose-500">*</span>
-                    </label>
-                    {isLocationLocked && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
-                        <Lock className="w-2.5 h-2.5 text-gray-500" />
-                        Locked
-                      </span>
-                    )}
-                  </div>
-                  {isLocationLocked ? (
-                    <div className="h-10 px-3.5 bg-gray-100 border border-gray-200 rounded-lg text-sm font-medium text-black flex items-center">
-                      {locationMap.get(saleLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
-                    </div>
-                  ) : (
-                    <CustomSelect
-                      value={saleLocationId}
-                      onValueChange={setSaleLocationId}
-                      options={saleLocationOptions}
-                      placeholder="Select location..."
-                    />
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Sale Date <span className="text-rose-500">*</span>
-                  </label>
-                  <CustomDatePicker
-                    value={saleDate}
-                    onChange={setSaleDate}
-                    placeholder="Select sale date..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Customer <span className="text-rose-500">*</span>
-                  </label>
-                  <CustomerPicker
-                    selectedCustomer={selectedCustomer}
-                    isWalkIn={isWalkInCustomer}
-                    onSelectCustomer={(cust) => {
-                      setSelectedCustomer(cust)
-                      if (cust) {
-                        setIsWalkInCustomer(false)
-                      }
-                    }}
-                    onSelectWalkIn={() => {
-                      setIsWalkInCustomer(true)
-                      setSelectedCustomer(null)
-                    }}
-                    onClear={() => {
-                      setSelectedCustomer(null)
-                      setIsWalkInCustomer(false)
-                    }}
-                    disabled={saleSubmitting}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Invoice / Notes
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Tax Invoice #INV-001"
-                    value={saleNotes}
-                    onChange={(e) => setSaleNotes(e.target.value)}
-                    className="h-10 w-full px-3.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition-[border-color,box-shadow] duration-150"
-                  />
-                </div>
-              </div>
-
-              {/* Line Items List */}
-              <div className="space-y-3 relative z-20">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-700">
-                    Items to Sell ({saleItems.length})
-                  </span>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    icon={<Plus size={13} />}
-                    onClick={handleAddSaleItem}
-                  >
-                    Add Another Item
-                  </Button>
-                </div>
-
-                <div className="space-y-3">
-                  <AnimatePresence initial={false}>
-                    {saleItems.map((item, idx) => {
-                      const prod = products.find((p) => p.id === item.productId)
-                      const isIdol = prod?.category === 'Idols'
-                      const availableInStore = prod?.stockByLocation?.[saleLocationId] || 0
-                      const usedInOtherLines = saleItems
-                        .filter((other) => other.id !== item.id && other.productId === item.productId)
-                        .reduce((sum, other) => sum + (Number(other.quantity) || 0), 0)
-                      const availableForThisLine = Math.max(0, availableInStore - usedInOtherLines)
-
-                      const locPieces = prod?.pieceWeightsByLocation?.[saleLocationId] || []
-                      const chosenInOtherLines = new Set(
-                        saleItems
-                          .filter((other) => other.id !== item.id && other.productId === item.productId && other.pieceWeight)
-                          .map((other) => Number(other.pieceWeight))
-                      )
-                      const availableLinePieces = locPieces.filter((pw) => !chosenInOtherLines.has(pw))
-                      const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0)
-
-                      return (
-                        <motion.div
-                          key={item.id}
-                          style={{ zIndex: 50 - idx }}
-                          initial={{ opacity: 0, scale: 0.98, y: 6 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.98, y: -6 }}
-                          transition={{ duration: 0.16, ease: EASE_OUT }}
-                          className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3 relative"
-                        >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center">
-                              {idx + 1}
-                            </span>
-                            <span className="text-xs font-semibold text-gray-800">
-                              Item #{idx + 1}
-                            </span>
-                            {prod && (
-                              <span className="text-[11px] font-mono text-gray-500">
-                                ({prod.category} · {prod.metal || 'Silver'})
-                              </span>
-                            )}
-                          </div>
-
-                          {saleItems.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveSaleItem(item.id)}
-                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                              title="Remove item"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
-                          <div className="sm:col-span-6">
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                              Product <span className="text-rose-500">*</span>
-                            </label>
-                            <CustomSelect
-                              value={item.productId}
-                              onValueChange={(val) => handleUpdateSaleItem(item.id, { productId: val })}
-                              options={saleProductOptions}
-                              placeholder="Select product..."
-                            />
-                            <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
-                              <span>Available in store:</span>
-                              {prod ? (
-                                <strong className={availableForThisLine > 0 ? 'text-black' : 'text-rose-600'}>
-                                  {availableForThisLine} units
-                                </strong>
-                              ) : (
-                                <span className="text-gray-400">—</span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="sm:col-span-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                              Qty <span className="text-rose-500">*</span>
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              max={Math.max(1, availableForThisLine)}
-                              disabled={isIdol}
-                              placeholder={isIdol ? '1' : 'Qty'}
-                              value={isIdol ? '1' : item.quantity}
-                              onChange={(e) => handleUpdateSaleItem(item.id, { quantity: e.target.value })}
-                              className={`h-10 w-full px-3.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition-[border-color,box-shadow] duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''}`}
-                              required
-                            />
-                          </div>
-
-                          <div className="sm:col-span-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                              Unit Price (₹) <span className="text-rose-500">*</span>
-                            </label>
-                            <MoneyInput
-                              placeholder="e.g. 78500"
-                              value={item.price}
-                              onChange={(val) => handleUpdateSaleItem(item.id, { price: val })}
-                              required
-                            />
-                          </div>
-
-                          <div className="sm:col-span-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                              Total
-                            </label>
-                            <div className="h-10 px-3.5 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-end font-mono font-bold text-sm tabular-nums">
-                              {lineTotal > 0 ? (
-                                <span className="text-black font-semibold font-mono">₹{lineTotal.toLocaleString('en-IN')}</span>
-                              ) : (
-                                <span className="text-gray-400 font-medium font-mono">₹0</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Idol piece weight selector */}
-                        {isIdol && (
-                          <div className="pt-2 border-t border-gray-200/60">
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-xs font-medium text-gray-700">
-                                Select Piece Weight <span className="text-rose-500">*</span>
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {availableLinePieces.length} available
-                              </span>
-                            </div>
-                            {availableLinePieces.length > 0 ? (
-                              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
-                                {availableLinePieces.map((pw, i) => (
-                                  <button
-                                    key={`${pw}-${i}`}
-                                    type="button"
-                                    onClick={() => handleUpdateSaleItem(item.id, { pieceWeight: String(pw) })}
-                                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${
-                                      String(item.pieceWeight) === String(pw)
-                                        ? 'bg-black text-white shadow-xs'
-                                        : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
-                                    }`}
-                                  >
-                                    #{i + 1}: {formatWeight(pw)}
-                                  </button>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-rose-600 font-semibold">
-                                No available idol pieces in stock at this location.
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        </motion.div>
-                      )
-                    })}
-                  </AnimatePresence>
-                </div>
-              </div>
-
-              {/* Payment Split */}
-              <div className="pt-2 relative z-10">
-                <PaymentSplit
-                  totalPaise={saleTotalsPaise}
-                  payments={salePayments}
-                  onChange={(payments, isBalanced) => {
-                    setSalePayments(payments)
-                    setIsPaymentBalanced(isBalanced)
-                  }}
-                  disabled={saleSubmitting}
-                />
-              </div>
-
-              {/* Order Summary Footer */}
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-0">
-                <div className="flex items-center gap-6 divide-x divide-gray-200 text-xs">
-                  <div>
-                    <span className="text-gray-500 block">Total Items</span>
-                    <span className="font-bold text-sm text-black tabular-nums">
-                      {saleItems.length} {saleItems.length === 1 ? 'item' : 'items'} ({saleTotals.totalUnits} units)
-                    </span>
-                  </div>
-                  {saleTotals.totalWeightGrams > 0 && (
-                    <div className="pl-6">
-                      <span className="text-gray-500 block">Total Weight</span>
-                      <span className="font-bold text-sm text-black tabular-nums">
-                        {formatWeight(saleTotals.totalWeightGrams)}
-                      </span>
-                    </div>
-                  )}
-                  <div className="pl-6">
-                    <span className="text-gray-500 block">Grand Total</span>
-                    <span className="font-extrabold text-base text-black font-mono tabular-nums">
-                      ₹{saleTotals.grandTotal.toLocaleString('en-IN')}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="md"
-                    onClick={() => setIsSaleFormOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="md"
-                    disabled={saleSubmitting || !isSaleFormValid}
-                    loading={saleSubmitting}
-                  >
-                    Record Sale ({saleItems.length} {saleItems.length === 1 ? 'item' : 'items'})
-                  </Button>
-                </div>
-              </div>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Record Return Modal / Card */}
-      <AnimatePresence>
-        {isReturnFormOpen && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.97, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 8 }}
-            transition={{ duration: 0.2, ease: EASE_OUT }}
-            className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm"
-          >
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-black">Record Customer Return (Restock)</h2>
-              <button
-                onClick={() => setIsReturnFormOpen(false)}
-                className="text-gray-400 hover:text-black transition-[color,transform] active:scale-[0.97]"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {returnError && (
-              <div className="mb-4">
-                <FormError message={returnError} />
-              </div>
-            )}
-
-            <form onSubmit={handleSaveReturn} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Select Product <span className="text-rose-500">*</span>
-                  </label>
-                  <CustomSelect
-                    value={returnProductId}
-                    onValueChange={setReturnProductId}
-                    options={saleProductOptions}
-                    placeholder="Select product..."
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-medium text-gray-700">
-                      Restock into Location <span className="text-rose-500">*</span>
-                    </label>
-                    {isLocationLocked && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
-                        <Lock className="w-3 h-3 text-gray-500" />
-                        Assigned Store
-                      </span>
-                    )}
-                  </div>
-                  {isLocationLocked ? (
-                    <div className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-black flex items-center justify-between">
-                      <span className="font-semibold text-black">
-                        {locationMap.get(returnLocationId) || adminUser?.assignedLocationName || 'Assigned Location'}
-                      </span>
-                      <span className="text-xs text-gray-500 font-medium">
-                        Default & Locked
-                      </span>
-                    </div>
-                  ) : (
-                    <CustomSelect
-                      value={returnLocationId}
-                      onValueChange={setReturnLocationId}
-                      options={returnLocationOptions}
-                      placeholder="Select location to restock..."
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* Idol Piece Weight for Return */}
-              {isReturnProductAnIdol && (
-                <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
-                  <label className="block text-xs font-medium text-gray-700">
-                    Returned Piece Weight (Grams) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0.001"
-                    placeholder="e.g. 48.250"
-                    value={returnPieceWeight}
-                    onChange={(e) => setReturnPieceWeight(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150"
-                    required
-                  />
-                  <p className="text-xs text-gray-500">
-                    This weight will be registered back into the idol inventory at the restocked location.
-                  </p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Quantity Returned <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    disabled={isReturnProductAnIdol}
-                    value={isReturnProductAnIdol ? '1' : returnQty}
-                    onChange={(e) => setReturnQty(e.target.value)}
-                    className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:border-black transition-[border-color] duration-150 ${isReturnProductAnIdol ? 'bg-gray-100 cursor-not-allowed font-semibold' : ''
-                      }`}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Refund Price per Unit (₹)
-                  </label>
-                  <MoneyInput
-                    placeholder="e.g. 78500"
-                    value={returnPrice}
-                    onChange={setReturnPrice}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Return Date
-                  </label>
-                  <CustomDatePicker
-                    value={returnDate}
-                    onChange={setReturnDate}
-                    placeholder="Select return date"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Customer Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Ramesh Shah"
-                    value={returnCustomerName}
-                    onChange={(e) => setReturnCustomerName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Return Reason / Notes
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Exchange for higher weight / seal intact"
-                    value={returnNotes}
-                    onChange={(e) => setReturnNotes(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="md"
-                  onClick={() => setIsReturnFormOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="md"
-                  disabled={returnSubmitting || !isReturnFormValid}
-                  loading={returnSubmitting}
-                >
-                  Accept Return & Add Stock
-                </Button>
-              </div>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Record Return Modal */}
+      <RecordReturnModal
+        isOpen={isReturnFormOpen}
+        onClose={() => setIsReturnFormOpen(false)}
+        products={products}
+        locations={locations}
+        locationMap={locationMap}
+        returnLocationOptions={returnLocationOptions}
+        saleProductOptions={saleProductOptions}
+        isLocationLocked={isLocationLocked}
+        userAssignedLocationId={userAssignedLocationId}
+        adminLocationName={adminUser?.assignedLocationName}
+        onReturnRecorded={handleReturnRecorded}
+      />
 
       {/* Main Tables */}
       {loading ? (
         <SkeletonTable rows={6} columns={7} />
       ) : activeTab === 'sales' ? (
-        saleBills.length === 0 ? (
-          <EmptyState
-            title="No sales recorded"
-            description="When you record a customer sale, stock is automatically decremented from the chosen physical location."
-            action={
-              hasPermission('sales', 'add') ? (
-                <button
-                  onClick={handleOpenSaleForm}
-                  disabled={products.length === 0 || locations.length === 0}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-40 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-                >
-                  <Plus size={16} />
-                  Record First Sale
-                </button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-            <div className="overflow-x-auto max-h-[720px] overflow-y-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead className="sticky top-0 bg-gray-50/95 backdrop-blur z-10 border-b border-gray-200 text-xs uppercase font-semibold text-gray-500 tracking-wider">
-                  <tr>
-                    <th className="px-5 py-3.5">Bill / Invoice</th>
-                    <th className="px-5 py-3.5">Date</th>
-                    <th className="px-5 py-3.5">Customer</th>
-                    <th className="px-5 py-3.5">Location</th>
-                    <th className="px-5 py-3.5 text-right">Items</th>
-                    <th className="px-5 py-3.5 text-right">Total (₹)</th>
-                    <th className="px-5 py-3.5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {saleBills.map((bill) => {
-                    const isExpanded = expandedBillKeys.has(bill.billKey)
-                    return (
-                      <React.Fragment key={bill.billKey}>
-                        <tr
-                          onClick={() => toggleBillExpand(bill.billKey)}
-                          className="hover:bg-gray-50/80 cursor-pointer transition-[background-color] duration-150 group"
-                        >
-                          <td className="px-5 py-4 font-mono font-medium text-xs text-black">
-                            <div className="flex items-center gap-2">
-                              <span className="w-5 h-5 flex items-center justify-center rounded text-gray-400 group-hover:text-black group-hover:bg-gray-200/60 transition-[background-color,color] duration-150">
-                                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                              </span>
-                              <span className="font-semibold">{bill.invoiceNo}</span>
-                              {bill.hasReversed && !bill.hasActive && (
-                                <span className="ml-1.5 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                  Reversed
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-5 py-4 text-xs text-gray-600">
-                            {formatDateDisplay(bill.date)}
-                          </td>
-                          <td className="px-5 py-4 font-semibold text-black">
-                            {bill.customerId ? (
-                              <Link
-                                href={`/admin/customers/${bill.customerId}`}
-                                className="inline-flex items-center gap-1.5 text-black hover:underline group-hover:text-blue-600 transition-[color] duration-150"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <span>{bill.customerName || 'View Customer'}</span>
-                                <ExternalLink size={12} className="text-gray-400" />
-                              </Link>
-                            ) : (
-                              bill.customerName || <span className="text-gray-400 font-normal italic">Walk-in Customer</span>
-                            )}
-                            {bill.paymentModes && bill.paymentModes.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {bill.paymentModes.map((mode) => (
-                                  <span
-                                    key={mode}
-                                    className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-gray-100 text-gray-700 border border-gray-200"
-                                  >
-                                    {mode === 'old_metal' ? 'Metal' : mode}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-5 py-4 text-xs text-gray-700">
-                            {bill.locationName}
-                          </td>
-                          <td className="px-5 py-4 text-right tabular-nums text-xs font-medium text-gray-700">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-800">
-                              {bill.items.length} {bill.items.length === 1 ? 'item' : 'items'} • {bill.totalQuantity} {bill.totalQuantity === 1 ? 'unit' : 'units'}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4 text-right font-mono tabular-nums font-bold text-black">
-                            ₹{bill.totalAmount.toLocaleString('en-IN')}
-                          </td>
-                          <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-1">
-                              {bill.items.length === 1 && !bill.orderId && (isSuperAdmin || hasPermission('sales', 'edit')) && !bill.items[0].isReversed && !bill.items[0].reversalOf && (
-                                <button
-                                  onClick={() => handleOpenEditSale(bill.items[0])}
-                                  title="Edit sale"
-                                  className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                              )}
-                              {hasPermission('sales', 'delete') && bill.hasActive && (
-                                <button
-                                  onClick={() => {
-                                    if (bill.orderId) {
-                                      setReverseOrderTarget(bill)
-                                    } else {
-                                      const activeItem = bill.items.find((i) => !i.isReversed && !i.reversalOf)
-                                      if (activeItem) setDeleteTxTarget(activeItem)
-                                    }
-                                  }}
-                                  title={bill.orderId ? 'Reverse bill' : 'Post reversing entry (restores stock)'}
-                                  className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                                >
-                                  <RotateCcw size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-
-                        {/* Expanded Line Items Table */}
-                        {isExpanded && (
-                          <tr className="bg-gray-50/50">
-                            <td colSpan={7} className="px-6 py-3 border-t border-b border-gray-200/80">
-                              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-2xs">
-                                <div className="px-4 py-2 bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center justify-between">
-                                  <span>Bill Line Items ({bill.items.length})</span>
-                                  <span className="font-mono text-gray-400">Invoice: {bill.invoiceNo}</span>
-                                </div>
-                                <table className="w-full text-left text-xs">
-                                  <thead>
-                                    <tr className="border-b border-gray-100 text-gray-400 font-medium">
-                                      <th className="py-2.5 px-4 font-normal">Product</th>
-                                      <th className="py-2.5 px-4 font-normal">Metal</th>
-                                      <th className="py-2.5 px-4 font-normal">Category</th>
-                                      <th className="py-2.5 px-4 text-right font-normal">Qty / Weight</th>
-                                      <th className="py-2.5 px-4 text-right font-normal">Unit Price</th>
-                                      <th className="py-2.5 px-4 text-right font-normal">Total</th>
-                                      <th className="py-2.5 px-4 text-right font-normal">
-                                        {bill.orderId ? 'Status' : 'Actions'}
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-gray-100">
-                                    {bill.items.map((item) => {
-                                      const lineTotal = (item.price || 0) * (item.quantity || 1)
-                                      return (
-                                        <tr key={item.id} className="hover:bg-gray-50/40">
-                                          <td className="py-2.5 px-4 font-semibold text-black">
-                                            {item.productName}
-                                          </td>
-                                          <td className="py-2.5 px-4">
-                                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
-                                              {item.metal || 'Silver'}
-                                            </span>
-                                          </td>
-                                          <td className="py-2.5 px-4 text-gray-600">
-                                            {item.category}
-                                          </td>
-                                          <td className="py-2.5 px-4 text-right tabular-nums font-semibold text-black">
-                                            {item.quantity}
-                                            {item.pieceWeight && (
-                                              <span className="text-[11px] font-mono text-gray-500 block">
-                                                ({formatWeight(item.pieceWeight)})
-                                              </span>
-                                            )}
-                                          </td>
-                                          <td className="py-2.5 px-4 text-right font-mono tabular-nums text-gray-600">
-                                            {item.price ? `₹${item.price.toLocaleString('en-IN')}` : '—'}
-                                          </td>
-                                          <td className="py-2.5 px-4 text-right font-mono tabular-nums font-bold text-black">
-                                            ₹{lineTotal.toLocaleString('en-IN')}
-                                          </td>
-                                          <td className="py-2.5 px-4 text-right">
-                                            {item.orderId ? (
-                                              item.isReversed || item.reversalOf ? (
-                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
-                                                  Reversed
-                                                </span>
-                                              ) : (
-                                                <span className="text-gray-400 text-xs">—</span>
-                                              )
-                                            ) : (
-                                              <div className="flex items-center justify-end gap-1">
-                                                {(isSuperAdmin || hasPermission('sales', 'edit')) && !item.isReversed && !item.reversalOf && (
-                                                  <button
-                                                    onClick={() => handleOpenEditSale(item)}
-                                                    title="Edit item"
-                                                    className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded transition-[color,background-color] duration-150 active:scale-[0.97]"
-                                                  >
-                                                    <Pencil size={13} />
-                                                  </button>
-                                                )}
-                                                {hasPermission('sales', 'delete') && !item.isReversed && !item.reversalOf && (
-                                                  <button
-                                                    onClick={() => setDeleteTxTarget(item)}
-                                                    title="Reverse this item"
-                                                    className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded transition-[color,background-color] duration-150 active:scale-[0.97]"
-                                                  >
-                                                    <RotateCcw size={13} />
-                                                  </button>
-                                                )}
-                                                {(item.isReversed || item.reversalOf) && (
-                                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
-                                                    Reversed
-                                                  </span>
-                                                )}
-                                              </div>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      )
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Load More Controls */}
-            <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
-              <span className="font-mono">
-                Showing <strong className="text-black font-semibold">{filteredSales.length}</strong> of{' '}
-                <strong className="text-black font-semibold">{stats.salesCount}</strong> recorded sales
-              </span>
-              {salesHasMore ? (
-                <button
-                  onClick={handleLoadMoreSales}
-                  disabled={loadingMoreSales}
-                  className="h-9 px-4 inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-800 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold shadow-xs transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50"
-                >
-                  {loadingMoreSales ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                      Loading more...
-                    </>
-                  ) : (
-                    'Load More Sales'
-                  )}
-                </button>
-              ) : (
-                <span className="text-[11px] text-gray-400 font-mono">
-                  {filteredSales.length > 0 ? 'All sales loaded' : ''}
-                </span>
-              )}
-            </div>
-          </div>
-        )
+        <SalesBillsTable
+          saleBills={saleBills}
+          filteredSalesCount={filteredSales.length}
+          totalSalesCount={stats.salesCount}
+          expandedBillKeys={expandedBillKeys}
+          onToggleBillExpand={toggleBillExpand}
+          hasPermission={hasPermission}
+          isSuperAdmin={isSuperAdmin}
+          onOpenEditSale={setEditingSale}
+          onReverseOrder={setReverseOrderTarget}
+          onReverseTx={setDeleteTxTarget}
+          onOpenSaleForm={() => {
+            setIsReturnFormOpen(false)
+            setIsSaleFormOpen(true)
+          }}
+          canAddSale={hasPermission('sales', 'add') && products.length > 0 && locations.length > 0}
+          salesHasMore={salesHasMore}
+          loadingMoreSales={loadingMoreSales}
+          onLoadMoreSales={handleLoadMoreSales}
+        />
       ) : (
-        /* Returns Tab */
-        filteredReturns.length === 0 ? (
-          <EmptyState
-            title="No returns recorded"
-            description="Returns restore items back into stock at your chosen location and track customer refund amounts."
-            action={
-              hasPermission('returns', 'add') ? (
-                <button
-                  onClick={handleOpenReturnForm}
-                  disabled={products.length === 0 || locations.length === 0}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-40 transition-[background-color,transform] duration-150 active:scale-[0.97]"
-                >
-                  <RotateCcw size={16} />
-                  Record First Return
-                </button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-            <div className="overflow-x-auto max-h-[720px] overflow-y-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead className="sticky top-0 bg-gray-50/95 backdrop-blur z-10 border-b border-gray-200 text-xs uppercase font-semibold text-gray-500 tracking-wider">
-                  <tr>
-                    <th className="px-5 py-3.5">Date</th>
-                    <th className="px-5 py-3.5">Customer</th>
-                    <th className="px-5 py-3.5">Product</th>
-                    <th className="px-5 py-3.5">Restocked At</th>
-                    <th className="px-5 py-3.5 text-right">Quantity</th>
-                    <th className="px-5 py-3.5 text-right">Total Refund (₹)</th>
-                    <th className="px-5 py-3.5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredReturns.map((tx) => {
-                    const totalVal = tx.price ? tx.price * tx.quantity : 0
-                    return (
-                      <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
-                        <td className="px-5 py-4 text-xs text-gray-600">
-                          {formatDateDisplay(tx.date)}
-                        </td>
-                        <td className="px-5 py-4 font-semibold text-black">
-                          {tx.customerName || <span className="text-gray-400 font-normal italic">Walk-in Customer</span>}
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="font-semibold text-black">{tx.productName}</div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
-                              {tx.metal || 'Silver'}
-                            </span>
-                            <span className="text-[11px] text-gray-500">{tx.category}</span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-xs text-gray-700">
-                          {tx.locationName}
-                        </td>
-                        <td className="px-5 py-4 text-right tabular-nums font-semibold text-black">
-                          +{tx.quantity}
-                          {tx.pieceWeight && (
-                            <div className="text-[11px] font-mono text-gray-500">
-                              ({formatWeight(tx.pieceWeight)})
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-right font-mono tabular-nums font-bold text-black">
-                          {totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')}` : '—'}
-                          {tx.notes && (
-                            <div className="text-[11px] text-gray-400 font-normal truncate max-w-xs ml-auto">
-                              {tx.notes}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          {hasPermission('returns', 'delete') && !tx.isReversed && !tx.reversalOf && !tx.orderId && (
-                            <button
-                              onClick={() => setDeleteTxTarget(tx)}
-                              title="Post reversing entry (reverses restock)"
-                              className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                            >
-                              <RotateCcw size={14} />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Load More Controls */}
-            <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
-              <span className="font-mono">
-                Showing <strong className="text-black font-semibold">{filteredReturns.length}</strong> of{' '}
-                <strong className="text-black font-semibold">{stats.returnsCount}</strong> recorded returns
-              </span>
-              {returnsHasMore ? (
-                <button
-                  onClick={handleLoadMoreReturns}
-                  disabled={loadingMoreReturns}
-                  className="h-9 px-4 inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-800 hover:text-black hover:bg-gray-50 rounded-lg text-xs font-semibold shadow-xs transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] disabled:opacity-50"
-                >
-                  {loadingMoreReturns ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                      Loading more...
-                    </>
-                  ) : (
-                    'Load More Returns'
-                  )}
-                </button>
-              ) : (
-                <span className="text-[11px] text-gray-400 font-mono">
-                  {filteredReturns.length > 0 ? 'All returns loaded' : ''}
-                </span>
-              )}
-            </div>
-          </div>
-        )
+        <ReturnsTable
+          filteredReturns={filteredReturns}
+          totalReturnsCount={stats.returnsCount}
+          hasPermission={hasPermission}
+          onReverseReturn={setDeleteTxTarget}
+          returnsHasMore={returnsHasMore}
+          loadingMoreReturns={loadingMoreReturns}
+          onLoadMoreReturns={handleLoadMoreReturns}
+          onOpenReturnForm={() => {
+            setIsSaleFormOpen(false)
+            setIsReturnFormOpen(true)
+          }}
+          canAddReturn={hasPermission('returns', 'add') && products.length > 0 && locations.length > 0}
+        />
       )}
 
-      {/* Reversal Modal */}
+      {/* Reversal Confirmation Modal (Single Line Item / Return) */}
       <ConfirmModal
         isOpen={!!deleteTxTarget}
         title={`Reverse ${deleteTxTarget?.type === 'sale' ? 'Sale' : 'Return'}`}
-        description={`Posting a reversing entry will invert its stock effect (${deleteTxTarget?.type === 'sale' ? 'restore sold stock back into location' : 'remove returned stock from location'
-          }) without deleting audit history. This action cannot be undone. Continue?`}
+        description={`Posting a reversing entry will invert its stock effect (${
+          deleteTxTarget?.type === 'sale' ? 'restore sold stock back into location' : 'remove returned stock from location'
+        }) without deleting audit history. This action cannot be undone. Continue?`}
         confirmText="Post Reversing Entry"
         onConfirm={executeDeleteTransaction}
         onClose={() => setDeleteTxTarget(null)}
       />
 
-      {/* Order Reversal Modal */}
+      {/* Order Reversal Modal (Complete Bill) */}
       <ConfirmModal
         isOpen={!!reverseOrderTarget}
         title="Reverse Sale Bill"
-        description={`Posting a reversing entry will reverse bill ${reverseOrderTarget?.invoiceNo || ''} and all ${reverseOrderTarget?.items.length || 0} line item(s), restore all sold stock back into the location, and recalculate customer statistics. This action cannot be undone. Continue?`}
+        description={`Posting a reversing entry will reverse bill ${reverseOrderTarget?.invoiceNo || ''} and all ${
+          reverseOrderTarget?.items.length || 0
+        } line item(s), restore all sold stock back into the location, and recalculate customer statistics. This action cannot be undone. Continue?`}
         confirmText={reversingOrder ? 'Reversing...' : 'Reverse Bill'}
         disabled={reversingOrder}
         onConfirm={handleConfirmReverseOrder}
@@ -2504,165 +996,13 @@ export default function AdminSales() {
       />
 
       {/* Super Admin Edit Sale Modal */}
-      <AnimatePresence>
-        {editingSale && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 8 }}
-              transition={{ duration: 0.16, ease: EASE_OUT }}
-              className="w-full max-w-lg bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden"
-            >
-              <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-black">Edit Sale Entry</h3>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-800 border border-gray-200">
-                      Ledger Entry
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Correct recorded sale details. Stock adjustments apply automatically.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEditingSale(null)}
-                  className="p-1.5 text-gray-400 hover:text-black rounded-lg hover:bg-gray-100 transition-[color,background-color,transform] duration-150 active:scale-[0.97]"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              {editSaleError && (
-                <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 flex items-center gap-2">
-                  <AlertCircle size={14} className="shrink-0" />
-                  <span>{editSaleError}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleSaveEditSale} className="p-6 space-y-4">
-                {/* Product Summary banner */}
-                <div className="p-3 bg-gray-50 border border-gray-200/80 rounded-xl flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-semibold text-black block">{editingSale.productName}</span>
-                    <span className="text-[11px] text-gray-500">
-                      {editingSale.metal} · {editingSale.category} {editingSale.brand ? `· ${editingSale.brand}` : ''}
-                    </span>
-                  </div>
-                  <span className="text-[11px] font-mono text-gray-400">ID: {editingSale.id.slice(-6)}</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                      Sale Date <span className="text-red-500">*</span>
-                    </label>
-                    <CustomDatePicker
-                      value={editSaleDate}
-                      onChange={setEditSaleDate}
-                      placeholder="Select sale date"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                      Store Location <span className="text-red-500">*</span>
-                    </label>
-                    <CustomSelect
-                      value={editSaleLocationId}
-                      onValueChange={setEditSaleLocationId}
-                      options={saleLocationOptions}
-                      placeholder="Select location..."
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                      Quantity Sold <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      required
-                      value={editSaleQuantity}
-                      onChange={(e) => setEditSaleQuantity(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                      Unit Price (₹) <span className="text-red-500">*</span>
-                    </label>
-                    <MoneyInput
-                      required
-                      value={editSalePrice}
-                      onChange={setEditSalePrice}
-                      placeholder="e.g. 15000"
-                      size="sm"
-                    />
-                  </div>
-                </div>
-
-                {/* Live total display */}
-                <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-between text-xs">
-                  <span className="text-gray-500">Total Sale Amount:</span>
-                  <span className="font-bold text-black text-sm font-mono tabular-nums">
-                    ₹{((Number(editSaleQuantity) || 0) * (Number(String(editSalePrice || '').replace(/,/g, '')) || 0)).toLocaleString('en-IN')}
-                  </span>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Customer Name / Entity
-                  </label>
-                  <input
-                    type="text"
-                    value={editSaleCustomerName}
-                    onChange={(e) => setEditSaleCustomerName(e.target.value)}
-                    placeholder="e.g. Rajesh Kumar"
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Invoice / Notes
-                  </label>
-                  <input
-                    type="text"
-                    value={editSaleNotes}
-                    onChange={(e) => setEditSaleNotes(e.target.value)}
-                    placeholder="e.g. Tax Invoice #INV-001"
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-black placeholder-gray-400 focus:outline-none focus:border-black transition-[border-color] duration-150"
-                  />
-                </div>
-
-                <div className="pt-2 flex items-center justify-end gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setEditingSale(null)}
-                    className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-[background-color,color,transform] duration-150 active:scale-[0.97]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={editSaleSubmitting || !isEditSaleValid}
-                    className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-black/85 rounded-lg shadow-xs transition-[background-color,opacity,transform] duration-150 active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none inline-flex items-center gap-2"
-                  >
-                    {editSaleSubmitting ? 'Saving Changes...' : 'Save Changes'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <EditSaleModal
+        editingSale={editingSale}
+        onClose={() => setEditingSale(null)}
+        saleLocationOptions={saleLocationOptions}
+        locationMap={locationMap}
+        onSaleUpdated={handleSaleUpdated}
+      />
     </div>
   )
 }
