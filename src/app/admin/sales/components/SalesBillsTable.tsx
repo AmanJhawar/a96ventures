@@ -94,7 +94,7 @@ export function SalesBillsTable({
                     onClick={() => onToggleBillExpand(bill.billKey)}
                     className="hover:bg-gray-50/80 cursor-pointer transition-[background-color] duration-150 group"
                   >
-                    <td className="px-5 py-4 font-mono font-medium text-xs text-black">
+                    <td className="px-5 py-4 font-semibold text-xs text-black whitespace-nowrap tracking-tight">
                       <div className="flex items-center gap-2">
                         <span className="w-5 h-5 flex items-center justify-center rounded text-gray-400 group-hover:text-black group-hover:bg-gray-200/60 transition-[background-color,color] duration-150">
                           {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -107,28 +107,31 @@ export function SalesBillsTable({
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-4 text-xs text-gray-600">
+                    <td className="px-5 py-4 text-xs text-gray-600 whitespace-nowrap">
                       {formatDateDisplay(bill.date)}
                     </td>
-                    <td className="px-5 py-4 font-semibold text-black">
+                    <td className="px-5 py-4 font-semibold text-black max-w-[220px]">
                       {bill.customerId ? (
                         <Link
                           href={`/admin/customers/${bill.customerId}`}
-                          className="inline-flex items-center gap-1.5 text-black hover:underline group-hover:text-blue-600 transition-[color] duration-150"
+                          className="inline-flex items-center gap-1.5 text-black hover:underline group-hover:text-blue-600 transition-[color] duration-150 max-w-full"
                           onClick={(e) => e.stopPropagation()}
+                          title={bill.customerName || 'View Customer'}
                         >
-                          <span>{bill.customerName || 'View Customer'}</span>
-                          <ExternalLink size={12} className="text-gray-400" />
+                          <span className="truncate">{bill.customerName || 'View Customer'}</span>
+                          <ExternalLink size={12} className="text-gray-400 shrink-0" />
                         </Link>
                       ) : (
-                        bill.customerName || <span className="text-gray-400 font-normal italic">Walk-in Customer</span>
+                        <span className="truncate block" title={bill.customerName || 'Walk-in Customer'}>
+                          {bill.customerName || <span className="text-gray-400 font-normal italic">Walk-in Customer</span>}
+                        </span>
                       )}
                       {bill.paymentModes && bill.paymentModes.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {bill.paymentModes.map((mode) => (
                             <span
                               key={mode}
-                              className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-gray-100 text-gray-700 border border-gray-200"
+                              className="inline-flex px-1.5 py-0.5 rounded text-[10px] uppercase bg-gray-100 text-gray-700 border border-gray-200 font-medium"
                             >
                               {mode === 'old_metal' ? 'Metal' : mode}
                             </span>
@@ -136,16 +139,16 @@ export function SalesBillsTable({
                         </div>
                       )}
                     </td>
-                    <td className="px-5 py-4 text-xs text-gray-700">
+                    <td className="px-5 py-4 text-xs text-gray-700 max-w-[180px] truncate" title={bill.locationName}>
                       {bill.locationName}
                     </td>
-                    <td className="px-5 py-4 text-right tabular-nums text-xs font-medium text-gray-700">
+                    <td className="px-5 py-4 text-right tabular-nums text-xs font-medium text-gray-700 whitespace-nowrap">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-800">
                         {bill.items.length} {bill.items.length === 1 ? 'item' : 'items'} • {bill.totalQuantity} {bill.totalQuantity === 1 ? 'unit' : 'units'}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-right font-mono tabular-nums font-bold text-black">
-                      ₹{bill.totalAmount.toLocaleString('en-IN')}
+                    <td className="px-5 py-4 text-right tabular-nums font-bold text-black whitespace-nowrap">
+                      ₹{bill.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
@@ -185,7 +188,7 @@ export function SalesBillsTable({
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-2xs">
                           <div className="px-4 py-2 bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center justify-between">
                             <span>Bill Line Items ({bill.items.length})</span>
-                            <span className="font-mono text-gray-400">Invoice: {bill.invoiceNo}</span>
+                            <span className="font-normal text-gray-400">Invoice: {bill.invoiceNo}</span>
                           </div>
                           <table className="w-full text-left text-xs">
                             <thead>
@@ -206,8 +209,10 @@ export function SalesBillsTable({
                                 const lineTotal = (item.price || 0) * (item.quantity || 1)
                                 return (
                                   <tr key={item.id} className="hover:bg-gray-50/40">
-                                    <td className="py-2.5 px-4 font-semibold text-black">
-                                      {item.productName}
+                                    <td className="py-2.5 px-4 font-semibold text-black max-w-[260px]">
+                                      <div className="truncate" title={item.productName}>
+                                        {item.productName}
+                                      </div>
                                     </td>
                                     <td className="py-2.5 px-4">
                                       <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
@@ -220,16 +225,16 @@ export function SalesBillsTable({
                                     <td className="py-2.5 px-4 text-right tabular-nums font-semibold text-black">
                                       {item.quantity}
                                       {item.pieceWeight && (
-                                        <span className="text-[11px] font-mono text-gray-500 block">
+                                        <span className="text-[11px] tabular-nums text-gray-500 block">
                                           ({formatWeight(item.pieceWeight)})
                                         </span>
                                       )}
                                     </td>
-                                    <td className="py-2.5 px-4 text-right font-mono tabular-nums text-gray-600">
-                                      {item.price ? `₹${item.price.toLocaleString('en-IN')}` : '—'}
+                                    <td className="py-2.5 px-4 text-right tabular-nums text-gray-600 whitespace-nowrap">
+                                      {item.price ? `₹${item.price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
                                     </td>
-                                    <td className="py-2.5 px-4 text-right font-mono tabular-nums font-bold text-black">
-                                      ₹{lineTotal.toLocaleString('en-IN')}
+                                    <td className="py-2.5 px-4 text-right tabular-nums font-bold text-black whitespace-nowrap">
+                                      ₹{lineTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                                     </td>
                                     <td className="py-2.5 px-4 text-right">
                                       {item.orderId ? (

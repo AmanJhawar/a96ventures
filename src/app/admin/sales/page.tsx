@@ -37,6 +37,17 @@ import { ReturnsTable } from './components/ReturnsTable'
 import { EditSaleModal } from './components/EditSaleModal'
 import { SalesMetricsStrip } from './components/SalesMetricsStrip'
 import { SalesFilterBar } from './components/SalesFilterBar'
+import { DevBreakUiToggle, BreakUiMode } from '@/components/dev-break-ui-toggle'
+import {
+  WORST_CASE_STATS,
+  WORST_CASE_SALES_TRANSACTIONS,
+  WORST_CASE_RETURNS_TRANSACTIONS,
+  WORST_CASE_ORDERS,
+  ONE_ITEM_STATS,
+  ONE_ITEM_SALES,
+  EXTREME_STATS,
+  EMPTY_STATS
+} from './components/break-ui-fixtures'
 
 export default function AdminSales() {
   const router = useRouter()
@@ -46,6 +57,22 @@ export default function AdminSales() {
   const { hasPermission, adminUser, isSuperAdmin } = usePermissions()
   const userAssignedLocationId = adminUser?.assignedLocationId
   const isLocationLocked = Boolean(!isSuperAdmin && userAssignedLocationId)
+
+  // Break-UI stress testing mode (?data=live|worst|empty|one|extreme)
+  const initialDataMode = (searchParams.get('data') as BreakUiMode) || 'live'
+  const [dataMode, setDataMode] = useState<BreakUiMode>(initialDataMode)
+
+  const handleDataModeChange = (mode: BreakUiMode) => {
+    setDataMode(mode)
+    const params = new URLSearchParams(searchParams.toString())
+    if (mode === 'live') {
+      params.delete('data')
+    } else {
+      params.set('data', mode)
+    }
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
 
   // URL-synchronized tabs (?tab=sales | ?tab=returns)
   const tabParam = searchParams.get('tab')
@@ -324,31 +351,64 @@ export default function AdminSales() {
       }))
   }, [locations])
 
+  // In-memory break-ui data switching without modifying live database
+  const effectiveSalesList = useMemo(() => {
+    if (dataMode === 'worst') return WORST_CASE_SALES_TRANSACTIONS
+    if (dataMode === 'empty') return []
+    if (dataMode === 'one') return ONE_ITEM_SALES
+    if (dataMode === 'extreme') return WORST_CASE_SALES_TRANSACTIONS
+    return salesList
+  }, [dataMode, salesList])
+
+  const effectiveReturnsList = useMemo(() => {
+    if (dataMode === 'worst') return WORST_CASE_RETURNS_TRANSACTIONS
+    if (dataMode === 'empty') return []
+    if (dataMode === 'one') return []
+    if (dataMode === 'extreme') return WORST_CASE_RETURNS_TRANSACTIONS
+    return returnsList
+  }, [dataMode, returnsList])
+
+  const effectiveOrdersList = useMemo(() => {
+    if (dataMode === 'worst') return WORST_CASE_ORDERS
+    if (dataMode === 'empty') return []
+    if (dataMode === 'one') return []
+    if (dataMode === 'extreme') return WORST_CASE_ORDERS
+    return ordersList
+  }, [dataMode, ordersList])
+
+  const effectiveStats = useMemo(() => {
+    if (dataMode === 'worst') return WORST_CASE_STATS
+    if (dataMode === 'empty') return EMPTY_STATS
+    if (dataMode === 'one') return ONE_ITEM_STATS
+    if (dataMode === 'extreme') return EXTREME_STATS
+    return stats
+  }, [dataMode, stats])
+
   // Filtered lists
   const filteredSales = useMemo(() => {
-    return salesList.filter(
+    return effectiveSalesList.filter(
       (tx) =>
         (selectedCategory === 'All' || tx.category === selectedCategory) &&
         (selectedMetal === 'All' || tx.metal === selectedMetal)
     )
-  }, [salesList, selectedCategory, selectedMetal])
+  }, [effectiveSalesList, selectedCategory, selectedMetal])
 
   const filteredReturns = useMemo(() => {
-    return returnsList.filter(
+    return effectiveReturnsList.filter(
       (tx) =>
         (selectedCategory === 'All' || tx.category === selectedCategory) &&
         (selectedMetal === 'All' || tx.metal === selectedMetal)
     )
-  }, [returnsList, selectedCategory, selectedMetal])
+  }, [effectiveReturnsList, selectedCategory, selectedMetal])
 
   // Orders map for invoice grouping
   const ordersMap = useMemo(() => {
     const map = new Map<string, Order>()
-    for (const o of ordersList) {
+    for (const o of effectiveOrdersList) {
       map.set(o.id, o)
     }
     return map
-  }, [ordersList])
+  }, [effectiveOrdersList])
 
   // Group sales transactions into bills/invoices
   const saleBills: SaleBill[] = useMemo(() => {
@@ -611,6 +671,11 @@ export default function AdminSales() {
   // Reverse complete Order Bill with atomic inventory restoration
   const handleConfirmReverseOrder = async () => {
     if (!reverseOrderTarget || !reverseOrderTarget.orderId) return
+    if (dataMode !== 'live') {
+      toast.info('Simulated bill reversal in Mock Mode — no live database records were modified.')
+      setReverseOrderTarget(null)
+      return
+    }
     try {
       setReversingOrder(true)
       const data = await reverseOrder(reverseOrderTarget.orderId)
@@ -685,6 +750,11 @@ export default function AdminSales() {
   // Reverse transaction with automatic reversing entry
   const executeDeleteTransaction = async () => {
     if (!deleteTxTarget) return
+    if (dataMode !== 'live') {
+      toast.info('Simulated item reversal in Mock Mode — no live database records were modified.')
+      setDeleteTxTarget(null)
+      return
+    }
     try {
       const res = await deleteTransaction(deleteTxTarget)
       toast.success('Reversing entry posted successfully')
@@ -834,7 +904,7 @@ export default function AdminSales() {
       </div>
 
       {/* Metrics Summary Strip */}
-      <SalesMetricsStrip stats={stats} />
+      <SalesMetricsStrip stats={effectiveStats} />
 
       {/* Tabs */}
       <div className="flex items-center border-b border-gray-200 mb-6">
@@ -848,11 +918,11 @@ export default function AdminSales() {
             <ShoppingCart size={15} className="shrink-0" />
             <span>Sales</span>
             <span
-              className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
+              className={`px-1.5 py-0.2 rounded-full text-[11px] tabular-nums font-medium ${
                 activeTab === 'sales' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
               }`}
             >
-              {stats.salesCount}
+              {effectiveStats.salesCount}
             </span>
           </button>
         )}
@@ -866,11 +936,11 @@ export default function AdminSales() {
             <RotateCcw size={15} className="shrink-0" />
             <span>Returns</span>
             <span
-              className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-medium ${
+              className={`px-1.5 py-0.2 rounded-full text-[11px] tabular-nums font-medium ${
                 activeTab === 'returns' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
               }`}
             >
-              {stats.returnsCount}
+              {effectiveStats.returnsCount}
             </span>
           </button>
         )}
@@ -936,7 +1006,7 @@ export default function AdminSales() {
         <SalesBillsTable
           saleBills={saleBills}
           filteredSalesCount={filteredSales.length}
-          totalSalesCount={stats.salesCount}
+          totalSalesCount={effectiveStats.salesCount}
           expandedBillKeys={expandedBillKeys}
           onToggleBillExpand={toggleBillExpand}
           hasPermission={hasPermission}
@@ -956,7 +1026,7 @@ export default function AdminSales() {
       ) : (
         <ReturnsTable
           filteredReturns={filteredReturns}
-          totalReturnsCount={stats.returnsCount}
+          totalReturnsCount={effectiveStats.returnsCount}
           hasPermission={hasPermission}
           onReverseReturn={setDeleteTxTarget}
           returnsHasMore={returnsHasMore}
@@ -1003,6 +1073,9 @@ export default function AdminSales() {
         locationMap={locationMap}
         onSaleUpdated={handleSaleUpdated}
       />
+
+      {/* Dev-Only Break-UI Stress Testing Toggle (Non-destructive, zero DB mutations) */}
+      <DevBreakUiToggle currentMode={dataMode} onModeChange={handleDataModeChange} />
     </div>
   )
 }

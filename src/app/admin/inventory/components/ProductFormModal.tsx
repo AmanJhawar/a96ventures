@@ -354,9 +354,9 @@ export function ProductFormModal({
                         {prodPieceWeights.map((w, idx) => (
                           <motion.span
                             key={`${idx}-${w}`}
-                            initial={{ opacity: 0, scale: 0.92 }}
+                            initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.92 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
                             transition={{ duration: 0.14, ease: EASE_OUT }}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 border border-gray-200 text-xs font-medium text-gray-800"
                           >

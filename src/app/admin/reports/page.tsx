@@ -526,73 +526,87 @@ export default function AdminReportsPage() {
         <div className="space-y-6">
           {/* Executive Overview Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
               <span className="text-xs uppercase font-semibold tracking-wider text-gray-400 block mb-1">
                 Total Units Sold
               </span>
-              <div className="text-2xl font-bold text-black tabular-nums">
-                {topSellingOverview.totalUnits.toLocaleString('en-IN')}
+              <div className="min-w-0">
+                <div
+                  title={topSellingOverview.totalUnits.toLocaleString('en-IN')}
+                  className="text-xl sm:text-2xl font-bold text-black tabular-nums tracking-tight truncate"
+                >
+                  {topSellingOverview.totalUnits.toLocaleString('en-IN')}
+                </div>
+                <span className="text-xs text-gray-500 mt-1 block truncate">
+                  Across {topSellingOverview.salesCount.toLocaleString('en-IN')} recorded sales
+                </span>
               </div>
-              <span className="text-xs text-gray-500 mt-1 block">
-                Across {topSellingOverview.salesCount.toLocaleString('en-IN')} recorded sales
-              </span>
             </div>
 
-            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
               <span className="text-xs uppercase font-semibold tracking-wider text-gray-400 block mb-1">
                 Total Sales Revenue
               </span>
-              <div className="text-2xl font-bold text-black font-mono tabular-nums">
-                ₹{topSellingOverview.totalRevenue.toLocaleString('en-IN')}
+              <div className="min-w-0">
+                <div
+                  title={`₹${topSellingOverview.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`}
+                  className="text-xl sm:text-2xl font-bold text-black tabular-nums tracking-tight truncate"
+                >
+                  ₹{topSellingOverview.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                </div>
+                <span className="text-xs text-gray-500 mt-1 block truncate">
+                  Gross realized customer sales
+                </span>
               </div>
-              <span className="text-xs text-gray-500 mt-1 block">
-                Gross realized customer sales
-              </span>
             </div>
 
-            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
               <span className="text-xs uppercase font-semibold tracking-wider text-gray-400 block mb-1">
                 #1 by Volume
               </span>
-              <div className="text-lg font-bold text-black truncate">
-                {topSellingOverview.topProductByVolume ? (
-                  topSellingOverview.topProductByVolume.productName
-                ) : (
-                  <span className="text-gray-300 italic">No sales yet</span>
-                )}
+              <div className="min-w-0">
+                <div className="text-lg font-bold text-black truncate">
+                  {topSellingOverview.topProductByVolume ? (
+                    topSellingOverview.topProductByVolume.productName
+                  ) : (
+                    <span className="text-gray-300 italic">No sales yet</span>
+                  )}
+                </div>
+                <span className="text-xs text-gray-500 mt-1 block truncate">
+                  {topSellingOverview.topProductByVolume
+                    ? `${topSellingOverview.topProductByVolume.unitsSold} units sold`
+                    : '—'}
+                </span>
               </div>
-              <span className="text-xs text-gray-500 mt-1 block">
-                {topSellingOverview.topProductByVolume
-                  ? `${topSellingOverview.topProductByVolume.unitsSold} units sold`
-                  : '—'}
-              </span>
             </div>
 
-            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
               <span className="text-xs uppercase font-semibold tracking-wider text-gray-400 block mb-1">
                 #1 by Revenue
               </span>
-              <div className="text-lg font-bold text-black truncate">
-                {topSellingOverview.topProductByRevenue ? (
-                  topSellingOverview.topProductByRevenue.productName
-                ) : (
-                  <span className="text-gray-300 italic">No sales yet</span>
-                )}
+              <div className="min-w-0">
+                <div className="text-lg font-bold text-black truncate">
+                  {topSellingOverview.topProductByRevenue ? (
+                    topSellingOverview.topProductByRevenue.productName
+                  ) : (
+                    <span className="text-gray-300 italic">No sales yet</span>
+                  )}
+                </div>
+                <span className="text-xs text-gray-500 mt-1 block tabular-nums truncate">
+                  {topSellingOverview.topProductByRevenue
+                    ? `₹${topSellingOverview.topProductByRevenue.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+                    : '—'}
+                </span>
               </div>
-              <span className="text-xs text-gray-500 mt-1 block font-mono">
-                {topSellingOverview.topProductByRevenue
-                  ? `₹${topSellingOverview.topProductByRevenue.totalRevenue.toLocaleString('en-IN')}`
-                  : '—'}
-              </span>
             </div>
           </div>
 
           {/* Filters Bar: Time Range, Category, Metal, Sort */}
-          <div className="bg-white p-4 border border-gray-200 rounded-xl flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-4">
-              {/* Time Range Squircles */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Period:</span>
+          <div className="bg-white p-3 border border-gray-200 rounded-xl shadow-2xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Period Squircles */}
+              <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-2 select-none">Period:</span>
                 {[
                   { id: 'all', label: 'All Time' },
                   { id: 'month', label: 'Last 30 Days' },
@@ -606,10 +620,10 @@ export default function AdminReportsPage() {
                       setDateRange(t.id as DateRange)
                       setVisibleLeaderboardCount(15)
                     }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
                       dateRange === t.id
-                        ? 'bg-black text-white border border-black shadow-xs'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                        ? 'bg-white text-black font-semibold shadow-xs'
+                        : 'text-gray-600 hover:text-black'
                     }`}
                   >
                     {t.label}
@@ -617,18 +631,18 @@ export default function AdminReportsPage() {
                 ))}
               </div>
 
-              {/* Category Squircles */}
-              <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4 overflow-x-auto">
-                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Category:</span>
+              {/* Category Segmented Control */}
+              <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-2 select-none">Category:</span>
                 <button
                   onClick={() => {
                     setSelectedCategory('All')
                     setVisibleLeaderboardCount(15)
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
                     selectedCategory === 'All'
-                      ? 'bg-black text-white border border-black shadow-xs'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                      ? 'bg-white text-black font-semibold shadow-xs'
+                      : 'text-gray-600 hover:text-black'
                   }`}
                 >
                   All
@@ -640,10 +654,10 @@ export default function AdminReportsPage() {
                       setSelectedCategory(c)
                       setVisibleLeaderboardCount(15)
                     }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
                       selectedCategory === c
-                        ? 'bg-black text-white border border-black shadow-xs'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                        ? 'bg-white text-black font-semibold shadow-xs'
+                        : 'text-gray-600 hover:text-black'
                     }`}
                   >
                     {c}
@@ -651,18 +665,18 @@ export default function AdminReportsPage() {
                 ))}
               </div>
 
-              {/* Metal Squircles */}
-              <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4">
-                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Metal:</span>
+              {/* Metal Segmented Control */}
+              <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-2 select-none">Metal:</span>
                 <button
                   onClick={() => {
                     setSelectedMetal('All')
                     setVisibleLeaderboardCount(15)
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
                     selectedMetal === 'All'
-                      ? 'bg-black text-white border border-black shadow-xs'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                      ? 'bg-white text-black font-semibold shadow-xs'
+                      : 'text-gray-600 hover:text-black'
                   }`}
                 >
                   All
@@ -674,10 +688,10 @@ export default function AdminReportsPage() {
                       setSelectedMetal(m)
                       setVisibleLeaderboardCount(15)
                     }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
                       selectedMetal === m
-                        ? 'bg-black text-white border border-black shadow-xs'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                        ? 'bg-white text-black font-semibold shadow-xs'
+                        : 'text-gray-600 hover:text-black'
                     }`}
                   >
                     {m}
@@ -687,17 +701,17 @@ export default function AdminReportsPage() {
             </div>
 
             {/* Sort Toggle */}
-            <div className="flex items-center gap-1.5 border-l border-gray-200 pl-4">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">Rank By:</span>
+            <div className="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-2 select-none">Rank By:</span>
               <button
                 onClick={() => {
                   setTopSort('volume_desc')
                   setVisibleLeaderboardCount(15)
                 }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
                   topSort === 'volume_desc'
-                    ? 'bg-black text-white border border-black shadow-xs'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                    ? 'bg-white text-black font-semibold shadow-xs'
+                    : 'text-gray-600 hover:text-black'
                 }`}
               >
                 Volume (Units)
@@ -707,10 +721,10 @@ export default function AdminReportsPage() {
                   setTopSort('revenue_desc')
                   setVisibleLeaderboardCount(15)
                 }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-[background-color,color,border-color,transform] duration-150 active:scale-[0.97] ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.97] ${
                   topSort === 'revenue_desc'
-                    ? 'bg-black text-white border border-black shadow-xs'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black'
+                    ? 'bg-white text-black font-semibold shadow-xs'
+                    : 'text-gray-600 hover:text-black'
                 }`}
               >
                 Revenue (₹)
@@ -830,11 +844,11 @@ export default function AdminReportsPage() {
                                 {sharePercent}% of top item
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-right font-mono tabular-nums font-bold text-black">
-                              ₹{item.totalRevenue.toLocaleString('en-IN')}
+                            <td className="px-6 py-4 text-right tabular-nums font-bold text-black whitespace-nowrap">
+                              ₹{item.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                             </td>
-                            <td className="px-6 py-4 text-right font-mono tabular-nums text-gray-600">
-                              ₹{item.averagePrice.toLocaleString('en-IN')}
+                            <td className="px-6 py-4 text-right tabular-nums text-gray-600 whitespace-nowrap">
+                              ₹{item.averagePrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                             </td>
                             <td className="px-6 py-4 text-right tabular-nums">
                               <span
@@ -930,11 +944,11 @@ export default function AdminReportsPage() {
                               <td className="px-6 py-3.5 text-right tabular-nums font-semibold text-black">
                                 {tx.quantity}
                               </td>
-                              <td className="px-6 py-3.5 text-right font-mono tabular-nums text-gray-600 text-xs">
-                                {typeof tx.price === 'number' ? `₹${tx.price.toLocaleString('en-IN')}` : '—'}
+                              <td className="px-6 py-3.5 text-right tabular-nums text-gray-600 text-xs whitespace-nowrap">
+                                {typeof tx.price === 'number' ? `₹${tx.price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
                               </td>
-                              <td className="px-6 py-3.5 text-right font-mono tabular-nums font-bold text-black">
-                                ₹{total.toLocaleString('en-IN')}
+                              <td className="px-6 py-3.5 text-right tabular-nums font-bold text-black whitespace-nowrap">
+                                ₹{total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                               </td>
                             </tr>
                           )

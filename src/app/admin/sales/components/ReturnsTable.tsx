@@ -70,14 +70,16 @@ export function ReturnsTable({
               const totalVal = tx.price ? tx.price * tx.quantity : 0
               return (
                 <tr key={tx.id} className="hover:bg-gray-50/70 transition-[background-color] duration-100">
-                  <td className="px-5 py-4 text-xs text-gray-600">
+                  <td className="px-5 py-4 text-xs text-gray-600 whitespace-nowrap">
                     {formatDateDisplay(tx.date)}
                   </td>
-                  <td className="px-5 py-4 font-semibold text-black">
-                    {tx.customerName || <span className="text-gray-400 font-normal italic">Walk-in Customer</span>}
+                  <td className="px-5 py-4 font-semibold text-black max-w-[220px]">
+                    <div className="truncate" title={tx.customerName || 'Walk-in Customer'}>
+                      {tx.customerName || <span className="text-gray-400 font-normal italic">Walk-in Customer</span>}
+                    </div>
                   </td>
-                  <td className="px-5 py-4">
-                    <div className="font-semibold text-black">{tx.productName}</div>
+                  <td className="px-5 py-4 max-w-[260px]">
+                    <div className="font-semibold text-black truncate" title={tx.productName}>{tx.productName}</div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium border border-gray-200 text-gray-700 bg-gray-50">
                         {tx.metal || 'Silver'}
@@ -85,21 +87,21 @@ export function ReturnsTable({
                       <span className="text-[11px] text-gray-500">{tx.category}</span>
                     </div>
                   </td>
-                  <td className="px-5 py-4 text-xs text-gray-700">
+                  <td className="px-5 py-4 text-xs text-gray-700 max-w-[180px] truncate" title={tx.locationName}>
                     {tx.locationName}
                   </td>
-                  <td className="px-5 py-4 text-right tabular-nums font-semibold text-black">
+                  <td className="px-5 py-4 text-right tabular-nums font-semibold text-black whitespace-nowrap">
                     +{tx.quantity}
                     {tx.pieceWeight && (
-                      <div className="text-[11px] font-mono text-gray-500">
+                      <div className="text-[11px] tabular-nums text-gray-500">
                         ({formatWeight(tx.pieceWeight)})
                       </div>
                     )}
                   </td>
-                  <td className="px-5 py-4 text-right font-mono tabular-nums font-bold text-black">
-                    {totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')}` : '—'}
+                  <td className="px-5 py-4 text-right tabular-nums font-bold text-black whitespace-nowrap">
+                    {totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
                     {tx.notes && (
-                      <div className="text-[11px] text-gray-400 font-normal truncate max-w-xs ml-auto">
+                      <div className="text-[11px] text-gray-400 font-normal truncate max-w-xs ml-auto" title={tx.notes}>
                         {tx.notes}
                       </div>
                     )}
@@ -124,7 +126,7 @@ export function ReturnsTable({
 
       {/* Load More Controls */}
       <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
-        <span className="font-mono">
+        <span className="font-normal tracking-tight text-gray-500">
           Showing <strong className="text-black font-semibold">{filteredReturns.length}</strong> of{' '}
           <strong className="text-black font-semibold">{totalReturnsCount}</strong> recorded returns
         </span>
