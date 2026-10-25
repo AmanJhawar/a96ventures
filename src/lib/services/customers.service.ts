@@ -1,4 +1,6 @@
-import { apiClient, getAuthHeaders } from '@/lib/api-client'
+import { apiClient, getAuthHeaders, ApiError } from '@/lib/api-client'
+import { db } from '@/lib/firebase/config'
+import { collection, getDocs, getDoc, doc } from 'firebase/firestore/lite'
 import { Customer } from '@/lib/types'
 
 export interface GetCustomersParams {
@@ -23,6 +25,16 @@ export interface CustomerDetailResponse {
   visits: Record<string, unknown>[]
 }
 
+function shouldFallback(err: unknown): boolean {
+  if (err instanceof Error && err.message === 'Authentication required') {
+    return false
+  }
+  if (err instanceof ApiError) {
+    return err.status >= 500 || err.status === 0
+  }
+  return true
+}
+
 /**
  * Fetches paginated customers with optional keyword/mobile search query, lastVisit, and hasFollowUp filters.
  */
@@ -32,7 +44,43 @@ export async function getCustomers(params?: GetCustomersParams): Promise<GetCust
     lastVisit: params?.lastVisit && params.lastVisit !== 'all' ? params.lastVisit : undefined,
     hasFollowUp: params?.hasFollowUp ? 'true' : undefined
   }
-  return apiClient.get<GetCustomersResponse>('/api/admin/customers', queryParams, { actionName: 'fetch customers' })
+
+  try {
+    const res = await apiClient.get<GetCustomersResponse>('/api/admin/customers', queryParams, { actionName: 'fetch customers' })
+    if (res && Array.isArray(res.customers)) return res
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Customers API failed, falling back to direct Firestore:', err)
+  }
+
+  // Client Firestore fallback
+  const snap = await getDocs(collection(db, 'customers'))
+  const items: Customer[] = []
+  const qStr = params?.q ? params.q.toLowerCase().trim() : ''
+
+  snap.forEach((d) => {
+    const data = d.data()
+    if (data.isArchived) return
+    if (qStr) {
+      const name = `${data.firstName || ''} ${data.middleName || ''} ${data.lastName || ''}`.toLowerCase()
+      const mobile = String(data.mobile || '')
+      if (!name.includes(qStr) && !mobile.includes(qStr)) return
+    }
+    items.push({
+      id: d.id,
+      ...data
+    } as Customer)
+  })
+
+  items.sort((a, b) => String(a.firstName || '').localeCompare(String(b.firstName || '')))
+  const limit = params?.limit ? Number(params.limit) : 50
+  const paged = items.slice(0, limit)
+  return {
+    success: true,
+    customers: paged,
+    nextCursor: items.length > limit ? paged[paged.length - 1].id : null,
+    hasMore: items.length > limit
+  }
 }
 
 /**
@@ -43,9 +91,28 @@ export async function getCustomerById(
   options?: { allowArchived?: boolean }
 ): Promise<CustomerDetailResponse> {
   const queryParams = options?.allowArchived ? { allowArchived: 'true' } : undefined
-  return apiClient.get<CustomerDetailResponse>(`/api/admin/customers/${encodeURIComponent(id)}`, queryParams, {
-    actionName: 'fetch customer profile'
-  })
+  try {
+    const res = await apiClient.get<CustomerDetailResponse>(`/api/admin/customers/${encodeURIComponent(id)}`, queryParams, {
+      actionName: 'fetch customer profile'
+    })
+    if (res?.customer) return res
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Customer detail API failed, falling back to direct Firestore:', err)
+  }
+
+  // Client Firestore fallback
+  const docSnap = await getDoc(doc(db, 'customers', id))
+  if (!docSnap.exists()) {
+    throw new Error('Customer not found')
+  }
+  const cust = { id: docSnap.id, ...docSnap.data() } as Customer
+  return {
+    success: true,
+    customer: cust,
+    orders: [],
+    visits: []
+  }
 }
 
 /**

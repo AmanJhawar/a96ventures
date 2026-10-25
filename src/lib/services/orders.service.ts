@@ -1,4 +1,6 @@
-import { apiClient } from '@/lib/api-client'
+import { apiClient, ApiError } from '@/lib/api-client'
+import { db } from '@/lib/firebase/config'
+import { collection, getDocs } from 'firebase/firestore/lite'
 import { Order, OrderPayment } from '@/lib/types'
 
 export interface GetOrdersParams {
@@ -41,11 +43,42 @@ export interface ReverseOrderResponse {
   order: Order
 }
 
+function shouldFallback(err: unknown): boolean {
+  if (err instanceof Error && err.message === 'Authentication required') {
+    return false
+  }
+  if (err instanceof ApiError) {
+    return err.status >= 500 || err.status === 0
+  }
+  return true
+}
+
 /**
  * Fetches paginated orders with optional customerId, locationId, cursor, and limit filters.
  */
 export async function getOrders(params?: GetOrdersParams): Promise<GetOrdersResponse> {
-  return apiClient.get<GetOrdersResponse>('/api/admin/orders', params, { actionName: 'fetch orders' })
+  try {
+    return await apiClient.get<GetOrdersResponse>('/api/admin/orders', params, { actionName: 'fetch orders' })
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Orders API failed, falling back to direct Firestore:', err)
+    const snap = await getDocs(collection(db, 'orders'))
+    const orders: Order[] = []
+    snap.forEach((d) => {
+      const data = d.data()
+      if (params?.customerId && data.customerId !== params.customerId) return
+      if (params?.locationId && data.locationId !== params.locationId) return
+      orders.push({ id: d.id, ...data } as Order)
+    })
+    orders.sort((a, b) => String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')))
+    const limit = params?.limit ? Number(params.limit) : 50
+    const paged = orders.slice(0, limit)
+    return {
+      success: true,
+      orders: paged,
+      nextCursor: orders.length > limit ? paged[paged.length - 1].id : null
+    }
+  }
 }
 
 /**

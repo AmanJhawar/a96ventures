@@ -1,4 +1,13 @@
-import { apiClient, getAuthHeaders } from '@/lib/api-client'
+import { apiClient, getAuthHeaders, ApiError } from '@/lib/api-client'
+import { db } from '@/lib/firebase/config'
+import {
+  collection,
+  getDocs,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc
+} from 'firebase/firestore/lite'
 import {
   Location,
   Product,
@@ -11,30 +20,90 @@ import {
 
 export { getAuthHeaders }
 
+function shouldFallback(err: unknown): boolean {
+  if (err instanceof Error && err.message === 'Authentication required') {
+    return false
+  }
+  if (err instanceof ApiError) {
+    return err.status >= 500 || err.status === 0
+  }
+  return true
+}
+
 // ==========================================
 // LOCATIONS
 // ==========================================
 
 export async function getLocations(): Promise<Location[]> {
-  const data = await apiClient.get<{ success: boolean; locations: Location[] }>('/api/admin/locations', undefined, {
-    actionName: 'fetch locations'
+  try {
+    const data = await apiClient.get<{ success: boolean; locations: Location[] }>('/api/admin/locations', undefined, {
+      actionName: 'fetch locations'
+    })
+    if (data && Array.isArray(data.locations)) return data.locations
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Locations API failed, falling back to direct Firestore:', err)
+  }
+
+  // Client Firestore fallback
+  const snap = await getDocs(collection(db, 'locations'))
+  const items: Location[] = []
+  snap.forEach((d) => {
+    const data = d.data()
+    items.push({
+      id: d.id,
+      name: data.name || '',
+      description: data.description || '',
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt
+    } as Location)
   })
-  return data.locations || []
+  return items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
 }
 
 export async function addLocation(data: { name: string; description?: string }): Promise<string> {
-  const resData = await apiClient.post<{ success: boolean; id: string }>('/api/admin/locations', data, {
-    actionName: 'add location'
+  try {
+    const resData = await apiClient.post<{ success: boolean; id: string }>('/api/admin/locations', data, {
+      actionName: 'add location'
+    })
+    return resData.id
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Add location API failed, falling back to direct Firestore:', err)
+  }
+
+  const now = new Date().toISOString()
+  const docRef = await addDoc(collection(db, 'locations'), {
+    name: data.name.trim(),
+    description: data.description?.trim() || '',
+    createdAt: now,
+    updatedAt: now
   })
-  return resData.id
+  return docRef.id
 }
 
 export async function updateLocation(id: string, data: { name: string; description?: string }): Promise<void> {
-  await apiClient.put('/api/admin/locations', { id, ...data }, { actionName: 'update location' })
+  try {
+    await apiClient.put('/api/admin/locations', { id, ...data }, { actionName: 'update location' })
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Update location API failed, falling back to direct Firestore:', err)
+    await updateDoc(doc(db, 'locations', id), {
+      name: data.name.trim(),
+      description: data.description?.trim() || '',
+      updatedAt: new Date().toISOString()
+    })
+  }
 }
 
 export async function deleteLocation(id: string): Promise<void> {
-  await apiClient.delete('/api/admin/locations', { id }, { actionName: 'delete location' })
+  try {
+    await apiClient.delete('/api/admin/locations', { id }, { actionName: 'delete location' })
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Delete location API failed, falling back to direct Firestore:', err)
+    await deleteDoc(doc(db, 'locations', id))
+  }
 }
 
 // ==========================================
@@ -42,10 +111,63 @@ export async function deleteLocation(id: string): Promise<void> {
 // ==========================================
 
 export async function getProducts(): Promise<Product[]> {
-  const data = await apiClient.get<{ success: boolean; products: Product[] }>('/api/admin/products', undefined, {
-    actionName: 'fetch products'
+  try {
+    const data = await apiClient.get<{ success: boolean; products: Product[] }>('/api/admin/products', undefined, {
+      actionName: 'fetch products'
+    })
+    if (data && Array.isArray(data.products)) return data.products
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Products API failed, falling back to direct Firestore:', err)
+  }
+
+  // Client Firestore fallback
+  const prodsSnap = await getDocs(collection(db, 'products'))
+  const items: Product[] = []
+  prodsSnap.forEach((docSnap) => {
+    const data = docSnap.data()
+    let normalizedCategory: ProductCategory = 'Bullions'
+    let brand = data.brand ? String(data.brand).trim() : ''
+
+    if (data.category === 'MMTC PAMP') {
+      normalizedCategory = 'Bullions'
+      if (!brand) brand = 'MMTC PAMP'
+    } else if (data.category === 'Silver Idols' || data.category === 'Idols') {
+      normalizedCategory = 'Idols'
+      if (!brand) brand = 'Local'
+    } else if (data.category === 'Bullions') {
+      normalizedCategory = 'Bullions'
+      if (!brand) brand = 'Local'
+    }
+
+    const wMg = data.weightMg !== undefined ? Number(data.weightMg) : Math.round(Number(data.weight || 0) * 1000)
+    const pieceWs = Array.isArray(data.pieceWeightsMg)
+      ? data.pieceWeightsMg.map((mg: number) => mg / 1000)
+      : Array.isArray(data.pieceWeights)
+        ? data.pieceWeights.map((w: number) => Math.round(Number(w) * 1000) / 1000)
+        : undefined
+
+    items.push({
+      id: docSnap.id,
+      name: data.name || '',
+      category: normalizedCategory,
+      brand,
+      metal: (data.metal || (normalizedCategory === 'Idols' ? 'Silver' : 'Gold')) as MetalType,
+      sku: data.sku || '',
+      weight: wMg / 1000,
+      weightMg: wMg,
+      purity: data.purity || '999',
+      stock: Number(data.stock || 0),
+      stockByLocation: (data.stockByLocation || {}) as Record<string, number>,
+      pieceWeights: pieceWs,
+      pieceWeightsMg: Array.isArray(data.pieceWeightsMg) ? data.pieceWeightsMg : undefined,
+      isArchived: Boolean(data.isArchived),
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt
+    } as Product)
   })
-  return data.products || []
+
+  return items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
 }
 
 export async function addProduct(data: {
@@ -61,10 +183,46 @@ export async function addProduct(data: {
   initialLocationName?: string
   pieceWeights?: number[]
 }): Promise<string> {
-  const resData = await apiClient.post<{ success: boolean; id: string }>('/api/admin/products', data, {
-    actionName: 'add product'
+  try {
+    const resData = await apiClient.post<{ success: boolean; id: string }>('/api/admin/products', data, {
+      actionName: 'add product'
+    })
+    return resData.id
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Add product API failed, falling back to direct Firestore:', err)
+  }
+
+  const stockByLoc: Record<string, number> = {}
+  const initQty = Number(data.initialStock || 0)
+  if (data.initialLocationId && initQty > 0) {
+    stockByLoc[data.initialLocationId] = initQty
+  }
+
+  const weightMg = Math.round(Number(data.weight || 0) * 1000)
+  const pieceWeightsMg = Array.isArray(data.pieceWeights)
+    ? data.pieceWeights.map((w) => Math.round(Number(w) * 1000))
+    : undefined
+
+  const now = new Date().toISOString()
+  const docRef = await addDoc(collection(db, 'products'), {
+    name: data.name.trim(),
+    category: data.category,
+    brand: data.brand?.trim() || '',
+    metal: data.metal,
+    sku: data.sku.trim(),
+    weight: data.weight,
+    weightMg,
+    purity: data.purity,
+    stock: initQty,
+    stockByLocation: stockByLoc,
+    pieceWeights: data.pieceWeights,
+    pieceWeightsMg,
+    isArchived: false,
+    createdAt: now,
+    updatedAt: now
   })
-  return resData.id
+  return docRef.id
 }
 
 export async function updateProduct(
@@ -82,11 +240,33 @@ export async function updateProduct(
     isArchived?: boolean
   }
 ): Promise<void> {
-  await apiClient.put('/api/admin/products', { id, ...data }, { actionName: 'update product' })
+  try {
+    await apiClient.put('/api/admin/products', { id, ...data }, { actionName: 'update product' })
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Update product API failed, falling back to direct Firestore:', err)
+    const updates: Record<string, unknown> = {
+      ...data,
+      updatedAt: new Date().toISOString()
+    }
+    if (data.weight !== undefined) {
+      updates.weightMg = Math.round(Number(data.weight) * 1000)
+    }
+    if (Array.isArray(data.pieceWeights)) {
+      updates.pieceWeightsMg = data.pieceWeights.map((w) => Math.round(Number(w) * 1000))
+    }
+    await updateDoc(doc(db, 'products', id), updates)
+  }
 }
 
 export async function deleteProduct(id: string): Promise<void> {
-  await apiClient.delete('/api/admin/products', { id }, { actionName: 'delete product' })
+  try {
+    await apiClient.delete('/api/admin/products', { id }, { actionName: 'delete product' })
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Delete product API failed, falling back to direct Firestore:', err)
+    await deleteDoc(doc(db, 'products', id))
+  }
 }
 
 // ==========================================
@@ -116,12 +296,55 @@ export async function getTransactionStats(options?: {
   endDate?: string
   locationId?: string
 }): Promise<TransactionStats> {
-  const resData = await apiClient.get<{ success: boolean; stats: TransactionStats }>(
-    '/api/admin/transactions/stats',
-    options,
-    { actionName: 'fetch transaction stats' }
-  )
-  return resData.stats
+  try {
+    const resData = await apiClient.get<{ success: boolean; stats: TransactionStats }>(
+      '/api/admin/transactions/stats',
+      options,
+      { actionName: 'fetch transaction stats' }
+    )
+    if (resData?.stats) return resData.stats
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Transaction stats API failed, computing directly from Firestore:', err)
+  }
+
+  // Client Firestore fallback: compute stats directly from transactions collection
+  const snap = await getDocs(collection(db, 'transactions'))
+  const stats: TransactionStats = {
+    salesCount: 0,
+    salesUnits: 0,
+    salesRevenue: 0,
+    returnsCount: 0,
+    returnsUnits: 0,
+    returnsAmount: 0,
+    netRevenue: 0,
+    profit: 0
+  }
+
+  snap.forEach((d) => {
+    const tx = d.data()
+    if (tx.isReversed || tx.reversed || tx.isReversal || tx.reversalOf) return
+    if (options?.locationId && tx.locationId !== options.locationId && tx.toLocationId !== options.locationId) return
+    if (options?.startDate && tx.date < options.startDate) return
+    if (options?.endDate && tx.date > options.endDate) return
+
+    const qty = Number(tx.quantity || 0)
+    const price = Number(tx.price || 0)
+    const total = Number(tx.totalAmount ?? price * (qty > 0 ? qty : 1))
+
+    if (tx.type === 'sale') {
+      stats.salesCount += 1
+      stats.salesUnits += qty
+      stats.salesRevenue += total
+    } else if (tx.type === 'return') {
+      stats.returnsCount += 1
+      stats.returnsUnits += qty
+      stats.returnsAmount += total
+    }
+  })
+
+  stats.netRevenue = stats.salesRevenue - stats.returnsAmount
+  return stats
 }
 
 export async function getTransactionsPage(options: TransactionFilterOptions = {}): Promise<PaginatedTransactions> {
@@ -136,9 +359,42 @@ export async function getTransactionsPage(options: TransactionFilterOptions = {}
     excludeReversed: options.excludeReversed ? true : undefined
   }
 
-  return apiClient.get<PaginatedTransactions>('/api/admin/transactions', params, {
-    actionName: 'fetch transactions page'
+  try {
+    const res = await apiClient.get<PaginatedTransactions>('/api/admin/transactions', params, {
+      actionName: 'fetch transactions page'
+    })
+    if (res && Array.isArray(res.transactions)) return res
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Transactions API failed, falling back to direct Firestore:', err)
+  }
+
+  // Client Firestore fallback
+  const snap = await getDocs(collection(db, 'transactions'))
+  const allTx: Transaction[] = []
+  snap.forEach((d) => {
+    const data = d.data()
+    if (options.excludeReversed && (data.isReversed || data.reversed)) return
+    if (options.type && options.type !== 'all' && data.type !== options.type) return
+    if (options.productId && data.productId !== options.productId) return
+    if (options.locationId && data.locationId !== options.locationId && data.toLocationId !== options.locationId) return
+    if (options.startDate && data.date < options.startDate) return
+    if (options.endDate && data.date > options.endDate) return
+
+    allTx.push({
+      id: d.id,
+      ...data
+    } as Transaction)
   })
+
+  allTx.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+  const limit = options.limitCount ? Number(options.limitCount) : 50
+  const pageItems = allTx.slice(0, limit)
+  return {
+    transactions: pageItems,
+    nextCursor: allTx.length > limit ? pageItems[pageItems.length - 1].id : null,
+    hasMore: allTx.length > limit
+  }
 }
 
 export async function getTransactions(options?: TransactionFilterOptions): Promise<Transaction[]> {

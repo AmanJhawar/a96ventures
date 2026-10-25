@@ -1,14 +1,41 @@
-import { apiClient } from '@/lib/api-client'
+import { apiClient, ApiError } from '@/lib/api-client'
+import { db } from '@/lib/firebase/config'
+import { collection, getDocs } from 'firebase/firestore/lite'
 import { AdminUser, UserStatus, UserRole, UserPermissions } from '@/lib/types'
+
+function shouldFallback(err: unknown): boolean {
+  if (err instanceof Error && err.message === 'Authentication required') {
+    return false
+  }
+  if (err instanceof ApiError) {
+    return err.status >= 500 || err.status === 0
+  }
+  return true
+}
 
 /**
  * Fetch all admin users via the server Admin API.
  */
 export async function getAdminUsers(): Promise<AdminUser[]> {
-  const data = await apiClient.get<{ success: boolean; users: AdminUser[] }>('/api/admin/users', undefined, {
-    actionName: 'fetch admin users'
+  try {
+    const data = await apiClient.get<{ success: boolean; users: AdminUser[] }>('/api/admin/users', undefined, {
+      actionName: 'fetch admin users'
+    })
+    if (data?.users) {
+      return (data.users || []).sort((a, b) => String(a.displayName || '').localeCompare(String(b.displayName || '')))
+    }
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Admin users API failed, falling back to direct Firestore:', err)
+  }
+
+  // Client Firestore fallback
+  const snap = await getDocs(collection(db, 'admins'))
+  const users: AdminUser[] = []
+  snap.forEach((d) => {
+    users.push({ id: d.id, ...d.data() } as AdminUser)
   })
-  return (data.users || []).sort((a, b) => String(a.displayName || '').localeCompare(String(b.displayName || '')))
+  return users.sort((a, b) => String(a.displayName || '').localeCompare(String(b.displayName || '')))
 }
 
 export interface CreateAdminUserParams {
