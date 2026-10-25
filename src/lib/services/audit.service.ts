@@ -1,4 +1,7 @@
-import { apiClient, getAuthHeaders } from '@/lib/api-client'
+import { apiClient, getAuthHeaders, ApiError } from '@/lib/api-client'
+import { auth } from '@/lib/firebase/auth'
+import { db } from '@/lib/firebase/config'
+import { collection, getDocs, addDoc } from 'firebase/firestore/lite'
 import { AuditLogEntry, AuditActionType } from '@/lib/types'
 
 export interface RecordAuditParams {
@@ -17,6 +20,68 @@ export interface RecordAuditParams {
 }
 
 const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/i
+
+function toIsoString(val: unknown): string {
+  if (!val) return ''
+  if (typeof val === 'string') return val
+  if (typeof val === 'number') {
+    const d = new Date(val)
+    return isNaN(d.getTime()) ? '' : d.toISOString()
+  }
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? '' : val.toISOString()
+  }
+  if (typeof val === 'object' && val !== null) {
+    if ('toDate' in val && typeof (val as { toDate: () => Date }).toDate === 'function') {
+      try {
+        const d = (val as { toDate: () => Date }).toDate()
+        return isNaN(d.getTime()) ? '' : d.toISOString()
+      } catch {
+        // ignore
+      }
+    }
+    if ('toMillis' in val && typeof (val as { toMillis: () => number }).toMillis === 'function') {
+      try {
+        const d = new Date((val as { toMillis: () => number }).toMillis())
+        return isNaN(d.getTime()) ? '' : d.toISOString()
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return ''
+}
+
+function cleanUndefined<T>(value: T): T {
+  if (value === null || value === undefined) {
+    return value
+  }
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => cleanUndefined(item)) as unknown as T
+  }
+  if (typeof value === 'object' && !(value instanceof Date)) {
+    const res: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) {
+        res[k] = cleanUndefined(v)
+      }
+    }
+    return res as T
+  }
+  return value
+}
+
+function shouldFallback(err: unknown): boolean {
+  if (err instanceof Error && err.message === 'Authentication required') {
+    return false
+  }
+  if (err instanceof ApiError) {
+    return err.status >= 500 || err.status === 0
+  }
+  return true
+}
 
 /**
  * Redacts any audit diff where the field name is 'pan' or the value matches the PAN pattern.
@@ -61,7 +126,32 @@ export async function recordAuditLog(params: RecordAuditParams): Promise<string>
     })
     return data.id || ''
   } catch (err) {
-    console.warn('Failed to write audit log via server:', err)
+    console.warn('Failed to write audit log via server, falling back to client:', err)
+  }
+
+  // Client Firestore fallback
+  try {
+    const currentUser = auth.currentUser
+    const now = new Date().toISOString()
+    const docRef = await addDoc(collection(db, 'audit_logs'), cleanUndefined({
+      timestamp: now,
+      createdAt: now,
+      userId: sanitizedParams.userId || currentUser?.uid || '',
+      userEmail: sanitizedParams.userEmail || currentUser?.email || '',
+      userName: sanitizedParams.userName || currentUser?.displayName || 'Admin',
+      action: sanitizedParams.action,
+      entityType: sanitizedParams.entityType,
+      entityId: sanitizedParams.entityId,
+      entityName: sanitizedParams.entityName || '',
+      locationId: sanitizedParams.locationId || '',
+      locationName: sanitizedParams.locationName || '',
+      description: sanitizedParams.description,
+      diffs: sanitizedParams.diffs,
+      metadata: sanitizedParams.metadata
+    }))
+    return docRef.id
+  } catch (clientErr) {
+    console.error('Failed to write audit log to Firestore directly:', clientErr)
     return ''
   }
 }
@@ -126,9 +216,44 @@ export async function getAuditLogs(filters?: GetAuditLogsFilter): Promise<AuditL
     action: filters?.action && filters.action !== 'all' ? filters.action : undefined
   }
 
-  const data = await apiClient.get<{ logs: AuditLogEntry[] }>('/api/admin/audit', params, {
-    actionName: 'fetch audit logs'
+  try {
+    const data = await apiClient.get<{ logs: AuditLogEntry[] }>('/api/admin/audit', params, {
+      actionName: 'fetch audit logs'
+    })
+    if (data && Array.isArray(data.logs)) return data.logs
+  } catch (err) {
+    if (!shouldFallback(err)) throw err
+    console.warn('Audit logs API failed, falling back to direct Firestore:', err)
+  }
+
+  // Client Firestore fallback
+  const snap = await getDocs(collection(db, 'audit_logs'))
+  const logs: AuditLogEntry[] = []
+  snap.forEach((d) => {
+    const data = d.data()
+    if (filters?.userId && filters.userId !== 'all' && data.userId !== filters.userId) return
+    if (filters?.entityType && filters.entityType !== 'all' && data.entityType !== filters.entityType) return
+    if (filters?.action && filters.action !== 'all' && data.action !== filters.action) return
+
+    logs.push({
+      id: d.id,
+      timestamp: toIsoString(data.timestamp || data.createdAt) || new Date().toISOString(),
+      userId: data.userId || '',
+      userName: data.userName || '',
+      userEmail: data.userEmail || '',
+      action: data.action,
+      entityType: data.entityType,
+      entityId: data.entityId,
+      entityName: data.entityName,
+      locationId: data.locationId,
+      locationName: data.locationName,
+      description: data.description || '',
+      diffs: data.diffs,
+      metadata: data.metadata
+    })
   })
 
-  return data.logs || []
+  logs.sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))
+  const limit = filters?.limitCount || 50
+  return logs.slice(0, limit)
 }
