@@ -113,18 +113,18 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, order }, { status: 201 })
   } catch (err: unknown) {
-    if (err instanceof ValidationError) {
-      return NextResponse.json({ error: err.message }, { status: 400 })
+    if (err instanceof ValidationError || (err instanceof Error && (err.name === 'ValidationError' || (err as { type?: string }).type === 'ValidationError'))) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 400 })
     }
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: 'Validation failed', details: err.format() }, { status: 400 })
     }
-    if (err instanceof SystemLockedError) {
-      return NextResponse.json({ error: err.message }, { status: 423 })
+    if (err instanceof SystemLockedError || (err instanceof Error && (err.name === 'SystemLockedError' || (err as { statusCode?: number }).statusCode === 423))) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 423 })
     }
     console.error('POST /api/admin/orders error:', err)
     const msg = err instanceof Error ? err.message : 'Failed to create order'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return NextResponse.json({ error: msg, message: msg }, { status: 500 })
   }
 }
 

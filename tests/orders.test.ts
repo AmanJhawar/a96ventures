@@ -469,6 +469,88 @@ describe('Orders and Bills with Payments (Phase 4)', () => {
       expect(updatedCustomerStats?.lastVisitAt).toBe('2026-05-15')
     })
 
+    it('creates a sale order for a walk-in customer without customer document or visit record', async () => {
+      const { createOrder } = await import('@/lib/server/orders')
+      const { adminDb } = await import('@/lib/firebase/admin')
+
+      const bullionProduct: Product = {
+        id: 'prod_peacock_10g',
+        name: '10g Peacock',
+        category: 'Bullions',
+        brand: 'Local',
+        metal: 'Gold',
+        stock: 10,
+        stockByLocation: { loc_alipore: 10 },
+        weight: 10,
+        weightMg: 10000,
+        price: 150900,
+        isArchived: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      }
+
+      let writtenOrder: Record<string, unknown> | null = null
+      let writtenTx: Record<string, unknown> | null = null
+      let writtenVisit: Record<string, unknown> | null = null
+
+      const fakeTransaction = {
+        get: vi.fn(async (ref: { path: string }) => {
+          if (ref.path === 'system_control/zero_balance_run_lock') {
+            return { exists: false, data: () => null }
+          }
+          if (ref.path === 'locations/loc_alipore') {
+            return { exists: true, data: () => ({ name: 'Alipore Office' }) }
+          }
+          if (ref.path === 'counters/2026') {
+            return { exists: false, data: () => null }
+          }
+          if (ref.path === 'products/prod_peacock_10g') {
+            return { exists: true, id: bullionProduct.id, data: () => ({ ...bullionProduct }) }
+          }
+          return { exists: false, data: () => null }
+        }),
+        set: vi.fn((ref: { path: string }, data: Record<string, unknown>) => {
+          if (ref.path.startsWith('orders/')) writtenOrder = data
+          if (ref.path.startsWith('transactions/')) writtenTx = data
+          if (ref.path.startsWith('visits/')) writtenVisit = data
+        }),
+        update: vi.fn()
+      }
+
+      vi.spyOn(adminDb, 'collection').mockImplementation((colName: string) => {
+        return {
+          doc: (id?: string) => ({ id: id || 'mock_doc', path: `${colName}/${id || 'mock_doc'}` }),
+          add: vi.fn(async () => ({ id: 'mock_add_id' }))
+        } as unknown as FirebaseFirestore.CollectionReference
+      })
+
+      vi.spyOn(adminDb, 'runTransaction').mockImplementation(async (cb: unknown) => {
+        return (cb as (t: unknown) => Promise<unknown>)(fakeTransaction)
+      })
+
+      const order = await createOrder({
+        type: 'sale',
+        locationId: 'loc_alipore',
+        date: '2026-10-22',
+        lines: [{ productId: 'prod_peacock_10g', qty: 10, unitPricePaise: 15090000 }],
+        payments: [{ mode: 'cash', amountPaise: 150900000 }],
+        caller: { callerUid: 'admin_1', callerName: 'Admin', callerEmail: 'admin@a96.com' }
+      })
+
+      expect(order.orderNo).toBe('A96-2026-000001')
+      expect(order.customerId).toBeUndefined()
+      expect(order.customerSnapshot).toBeUndefined()
+      expect(order.totals.amountPaise).toBe(150900000)
+      expect(order.totals.units).toBe(10)
+      expect(order.totals.weightMg.Gold).toBe(100000)
+      expect(writtenOrder).toBeDefined()
+      expect(writtenOrder?.customerId).toBeUndefined()
+      expect(writtenTx).toBeDefined()
+      expect(writtenTx?.productName).toBe('10g Peacock')
+      expect(writtenTx?.totalAmount).toBe(1509000)
+      expect(writtenVisit).toBeNull() // No visit created for walk-in customer
+    })
+
     it('sets firstVisitAt only if unset or earlier than bill date, and lastVisitAt = max(existing, bill date)', async () => {
       const { createOrder } = await import('@/lib/server/orders')
       const { adminDb } = await import('@/lib/firebase/admin')

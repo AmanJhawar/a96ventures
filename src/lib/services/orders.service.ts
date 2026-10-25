@@ -55,13 +55,14 @@ export interface ReverseOrderResponse {
 
 async function parseResponseJson<T>(res: Response, fallbackAction: string): Promise<T> {
   let data: Record<string, unknown> | null = null
+  let rawText = ''
   if (typeof res.text === 'function') {
-    const text = await res.text()
-    if (text) {
+    rawText = await res.text()
+    if (rawText) {
       try {
-        data = JSON.parse(text)
+        data = JSON.parse(rawText)
       } catch {
-        const cleanSnippet = text.replace(/<[^>]*>?/gm, '').trim().slice(0, 150)
+        const cleanSnippet = rawText.replace(/<[^>]*>?/gm, '').trim().slice(0, 150)
         throw new Error(
           res.ok
             ? 'Invalid server response format'
@@ -74,7 +75,18 @@ async function parseResponseJson<T>(res: Response, fallbackAction: string): Prom
   }
 
   if (!res.ok) {
-    const errMsg = typeof data?.error === 'string' ? data.error : `Failed to ${fallbackAction} (${res.status})`
+    let serverMsg: string | undefined
+    if (typeof data?.error === 'string' && data.error.trim()) {
+      serverMsg = data.error.trim()
+    } else if (data?.error && typeof (data.error as Record<string, unknown>).message === 'string') {
+      serverMsg = ((data.error as Record<string, unknown>).message as string).trim()
+    } else if (typeof data?.message === 'string' && data.message.trim()) {
+      serverMsg = data.message.trim()
+    } else if (typeof data?.details === 'string' && data.details.trim()) {
+      serverMsg = data.details.trim()
+    }
+    const errMsg = serverMsg || `Failed to ${fallbackAction} (${res.status})`
+    console.error(`API error during ${fallbackAction} [${res.status}]:`, data || rawText || res.statusText)
     throw new Error(errMsg)
   }
 
