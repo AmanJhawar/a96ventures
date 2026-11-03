@@ -292,7 +292,6 @@ export function RecordMovementModal({
                         return (
                           <motion.div
                             key={item.id}
-                            style={{ zIndex: 50 - idx }}
                             initial={{ opacity: 0, transform: 'scale(0.98) translateY(6px)' }}
                             animate={{ opacity: 1, transform: 'scale(1) translateY(0px)' }}
                             exit={{ opacity: 0, transform: 'scale(0.98) translateY(-6px)' }}

@@ -506,7 +506,6 @@ export function RecordSaleModal({
                   return (
                     <motion.div
                       key={item.id}
-                      style={{ zIndex: 50 - idx }}
                       initial={{ opacity: 0, scale: 0.98, y: 6 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.98, y: -6 }}

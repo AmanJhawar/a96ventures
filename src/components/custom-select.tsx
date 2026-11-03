@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent, Fragment } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, useLayoutEffect, KeyboardEvent, Fragment } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Check, Search, X } from 'lucide-react'
 
 export interface SelectOption {
@@ -17,6 +18,7 @@ export interface CustomSelectProps {
   value: string
   onChange?: (e: { target: { name: string; value: string } }) => void
   onValueChange?: (value: string) => void
+  onOpenChange?: (open: boolean) => void
   options: SelectOption[]
   placeholder?: string
   searchPlaceholder?: string
@@ -33,6 +35,7 @@ export default function CustomSelect({
   value,
   onChange,
   onValueChange,
+  onOpenChange,
   options,
   placeholder = 'Select option...',
   searchPlaceholder = 'Type to search...',
@@ -43,15 +46,29 @@ export default function CustomSelect({
   searchable
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [isClosing, setIsClosing] = useState(false)
+  const [isVisible, setIsVisible] = useState(false)
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const [searchQuery, setSearchQuery] = useState('')
+  const [mounted, setMounted] = useState(false)
+  const [coords, setCoords] = useState<{
+    top?: number
+    bottom?: number
+    left: number
+    width: number
+    openUpward: boolean
+    maxHeight: number
+  } | null>(null)
 
   const selectRef = useRef<HTMLDivElement>(null)
   const triggerButtonRef = useRef<HTMLButtonElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const optionRefs = useRef<(HTMLLIElement | null)[]>([])
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Automatically enable search if more than 5 options, unless explicitly set
   const isSearchable = searchable ?? options.length > 5
@@ -70,36 +87,92 @@ export default function CustomSelect({
     })
   }, [options, searchQuery])
 
+  // ── Viewport-aware & collision-detected positioning (Apple / Emil principle) ──
+  const updatePosition = useCallback(() => {
+    if (!triggerButtonRef.current) return
+    const rect = triggerButtonRef.current.getBoundingClientRect()
+    const viewportHeight = window.innerHeight
+    const spaceBelow = viewportHeight - rect.bottom
+    const spaceAbove = rect.top
+
+    // Open upward if cramped below and more space available above
+    const openUpward = spaceBelow < 260 && spaceAbove > spaceBelow
+    const maxHeight = openUpward
+      ? Math.max(160, Math.min(320, spaceAbove - 24))
+      : Math.max(160, Math.min(320, spaceBelow - 24))
+
+    const top = openUpward ? undefined : Math.round(rect.bottom + 6)
+    const bottom = openUpward ? Math.round(viewportHeight - rect.top + 6) : undefined
+    const left = Math.round(rect.left)
+    const width = Math.max(Math.round(rect.width), 220)
+
+    setCoords({
+      top,
+      bottom,
+      left,
+      width,
+      openUpward,
+      maxHeight
+    })
+  }, [])
+
+  // Synchronously update position while open on scroll or resize
+  useLayoutEffect(() => {
+    if (!isOpen) return
+    updatePosition()
+
+    const handleScrollOrResize = () => updatePosition()
+    window.addEventListener('scroll', handleScrollOrResize, true)
+    window.addEventListener('resize', handleScrollOrResize)
+
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true)
+      window.removeEventListener('resize', handleScrollOrResize)
+    }
+  }, [isOpen, updatePosition])
+
   const closeSelect = useCallback(() => {
-    if (!isOpen || isClosing) return
-    setIsClosing(true)
-    setTimeout(() => {
+    if (!isOpen) return
+    setIsVisible(false)
+    onOpenChange?.(false)
+    const timer = setTimeout(() => {
       setIsOpen(false)
-      setIsClosing(false)
       setFocusedIndex(-1)
       setSearchQuery('')
     }, 120)
-  }, [isOpen, isClosing])
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (selectRef.current && !selectRef.current.contains(event.target as Node)) {
-        if (isOpen) {
-          closeSelect()
-        }
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [isOpen, closeSelect])
+    return () => clearTimeout(timer)
+  }, [isOpen, onOpenChange])
 
   const openSelect = () => {
     if (disabled) return
     setSearchQuery('')
+    updatePosition()
     setIsOpen(true)
+    onOpenChange?.(true)
     const idx = options.findIndex((opt) => opt.value === value)
     setFocusedIndex(idx >= 0 ? idx : 0)
+
+    // Trigger smooth entrance animation on next frame
+    requestAnimationFrame(() => {
+      setIsVisible(true)
+    })
   }
+
+  // Click outside detection across both trigger and portaled menu
+  useEffect(() => {
+    if (!isOpen) return
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      const isInsideTrigger = selectRef.current?.contains(target)
+      const isInsideDropdown = dropdownRef.current?.contains(target)
+      if (!isInsideTrigger && !isInsideDropdown) {
+        closeSelect()
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen, closeSelect])
 
   // Auto-focus search input when opening if searchable
   useEffect(() => {
@@ -175,7 +248,6 @@ export default function CustomSelect({
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (disabled) return
 
-    // If search input is focused, let handleInputKeyDown handle navigation
     if (document.activeElement === searchInputRef.current) {
       return
     }
@@ -214,45 +286,33 @@ export default function CustomSelect({
     }
   }
 
-  return (
-    <div className={`relative ${className} ${isOpen ? 'z-50' : ''}`} ref={selectRef} onKeyDown={handleKeyDown}>
-      {id && <input type="hidden" id={id} name={name} value={value} />}
-
-      <button
-        ref={triggerButtonRef}
-        type="button"
-        role="combobox"
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        aria-controls={id ? `${id}-listbox` : undefined}
-        disabled={disabled}
-        onClick={() => (isOpen ? closeSelect() : openSelect())}
-        className={`w-full border border-gray-200 rounded-lg bg-white text-left flex justify-between items-center transition-[border-color,box-shadow,background-color,transform] duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed ${
-          size === 'sm' ? 'h-9 px-3 text-xs' : 'h-10 px-3.5 text-sm'
-        } ${isOpen ? 'border-black ring-2 ring-black/10' : ''} ${buttonClassName}`}
-      >
-        <span className={`truncate mr-2 ${selectedOption ? 'text-black font-medium' : 'text-gray-400'}`}>
-          {selectedOption ? selectedOption.label : placeholder}
-        </span>
-        <ChevronDown
-          className={`${size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-gray-500 shrink-0 transition-transform duration-200 ease-[var(--ease-out)] ${
-            isOpen ? 'rotate-180 text-black' : ''
-          }`}
-        />
-      </button>
-
-      {isOpen && (
+  // ── Portaled floating menu (immune to all stacking contexts & overflow-hidden) ──
+  const dropdownMenu = isOpen && coords && mounted
+    ? createPortal(
         <div
-          className="absolute z-50 w-full min-w-[200px] mt-1.5 bg-white border border-gray-200 rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.08)] overflow-hidden origin-top"
+          ref={dropdownRef}
+          role="dialog"
+          aria-modal="false"
+          className="fixed z-[99999] bg-white/95 backdrop-blur-md border border-gray-200/90 rounded-xl shadow-[0_12px_36px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden flex flex-col"
           style={{
-            opacity: isClosing ? 0 : 1,
-            transform: isClosing ? 'scale(0.97) translateY(-4px)' : 'scale(1) translateY(0)',
-            transition: 'opacity 120ms var(--ease-out), transform 120ms var(--ease-out)',
-            animation: isClosing ? 'none' : 'fadeInUp 160ms var(--ease-out) forwards',
+            top: coords.top !== undefined ? `${coords.top}px` : 'auto',
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : 'auto',
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            maxHeight: `${coords.maxHeight}px`,
+            transformOrigin: coords.openUpward ? 'bottom' : 'top',
+            transform: isVisible
+              ? 'scale(1) translateY(0)'
+              : coords.openUpward
+                ? 'scale(0.96) translateY(4px)'
+                : 'scale(0.96) translateY(-4px)',
+            opacity: isVisible ? 1 : 0,
+            transition: 'opacity 150ms var(--ease-out), transform 150ms var(--ease-out)'
           }}
+          onKeyDown={handleKeyDown}
         >
           {isSearchable && (
-            <div className="p-2 border-b border-gray-100 bg-gray-50/70 sticky top-0 z-20">
+            <div className="p-2 border-b border-gray-100 bg-gray-50/80 sticky top-0 z-20 shrink-0">
               <div className="relative flex items-center">
                 <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 pointer-events-none" />
                 <input
@@ -289,7 +349,7 @@ export default function CustomSelect({
             ref={listRef}
             id={id ? `${id}-listbox` : undefined}
             role="listbox"
-            className="py-1 m-0 list-none max-h-64 overflow-y-auto divide-y divide-gray-50"
+            className="py-1 m-0 list-none overflow-y-auto divide-y divide-gray-50 overscroll-contain flex-1"
           >
             {options.length === 0 ? (
               <li className="px-3.5 py-4 text-xs text-gray-400 text-center select-none">
@@ -328,7 +388,7 @@ export default function CustomSelect({
                         type="button"
                         tabIndex={-1}
                         onClick={() => handleSelect(option.value)}
-                        className={`w-full text-left px-3.5 transition-[background-color,color,transform] duration-150 ease-[var(--ease-out)] flex items-center justify-between gap-2 hover:bg-gray-100 active:scale-[0.98] ${
+                        className={`w-full text-left px-3.5 transition-[background-color,color,transform] duration-150 ease-[var(--ease-out)] flex items-center justify-between gap-2 hover:bg-gray-100/90 active:scale-[0.98] ${
                           size === 'sm' ? 'py-2 text-xs' : 'py-2.5 text-sm'
                         } ${
                           focusedIndex === idx ? 'bg-gray-100' : ''
@@ -348,7 +408,7 @@ export default function CustomSelect({
                               {option.badge}
                             </span>
                           )}
-                          {isSelected && <Check size={14} className="text-black" />}
+                          {isSelected && <Check size={14} className="text-black shrink-0" />}
                         </div>
                       </button>
                     </li>
@@ -357,8 +417,39 @@ export default function CustomSelect({
               })
             )}
           </ul>
-        </div>
-      )}
+        </div>,
+        document.body
+      )
+    : null
+
+  return (
+    <div className={`relative ${className}`} ref={selectRef} onKeyDown={handleKeyDown}>
+      {id && <input type="hidden" id={id} name={name} value={value} />}
+
+      <button
+        ref={triggerButtonRef}
+        type="button"
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={id ? `${id}-listbox` : undefined}
+        disabled={disabled}
+        onClick={() => (isOpen ? closeSelect() : openSelect())}
+        className={`w-full border border-gray-200 rounded-lg bg-white text-left flex justify-between items-center transition-[border-color,box-shadow,background-color,transform] duration-150 ease-[var(--ease-out)] focus:outline-none focus:border-black focus:ring-2 focus:ring-black/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
+          size === 'sm' ? 'h-9 px-3 text-xs' : 'h-10 px-3.5 text-sm'
+        } ${isOpen ? 'border-black ring-2 ring-black/10' : ''} ${buttonClassName}`}
+      >
+        <span className={`truncate mr-2 ${selectedOption ? 'text-black font-medium' : 'text-gray-400'}`}>
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <ChevronDown
+          className={`${size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-gray-500 shrink-0 transition-transform duration-200 ease-[var(--ease-out)] ${
+            isOpen ? 'rotate-180 text-black' : ''
+          }`}
+        />
+      </button>
+
+      {dropdownMenu}
     </div>
   )
 }
