@@ -293,7 +293,7 @@ export default function CustomSelect({
           ref={dropdownRef}
           role="dialog"
           aria-modal="false"
-          className="fixed z-[99999] bg-white/95 backdrop-blur-md border border-gray-200/90 rounded-xl shadow-[0_12px_36px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden flex flex-col"
+          className="fixed z-[99999] bg-white border border-gray-200 rounded-xl shadow-[0_12px_36px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden flex flex-col"
           style={{
             top: coords.top !== undefined ? `${coords.top}px` : 'auto',
             bottom: coords.bottom !== undefined ? `${coords.bottom}px` : 'auto',
@@ -312,7 +312,7 @@ export default function CustomSelect({
           onKeyDown={handleKeyDown}
         >
           {isSearchable && (
-            <div className="p-2 border-b border-gray-100 bg-gray-50/80 sticky top-0 z-20 shrink-0">
+            <div className="p-2 border-b border-gray-100 bg-white sticky top-0 z-20 shrink-0">
               <div className="relative flex items-center">
                 <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 pointer-events-none" />
                 <input
@@ -325,7 +325,7 @@ export default function CustomSelect({
                   }}
                   onKeyDown={handleInputKeyDown}
                   placeholder={searchPlaceholder}
-                  className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-gray-200 rounded-lg text-black placeholder-gray-400 focus:outline-none focus:border-black focus:ring-1 focus:ring-black/10 transition-[border-color,box-shadow] duration-150"
+                  className="w-full pl-8 pr-7 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg text-black placeholder-gray-400 focus:outline-none focus:border-black focus:bg-white focus:ring-1 focus:ring-black/10 transition-[border-color,background-color,box-shadow] duration-150"
                 />
                 {searchQuery && (
                   <button
@@ -349,7 +349,7 @@ export default function CustomSelect({
             ref={listRef}
             id={id ? `${id}-listbox` : undefined}
             role="listbox"
-            className="py-1 m-0 list-none overflow-y-auto divide-y divide-gray-50 overscroll-contain flex-1"
+            className="p-0 pb-1 m-0 list-none overflow-y-auto divide-y divide-gray-50 overscroll-contain flex-1"
           >
             {options.length === 0 ? (
               <li className="px-3.5 py-4 text-xs text-gray-400 text-center select-none">
@@ -370,7 +370,7 @@ export default function CustomSelect({
                   <Fragment key={option.value || idx}>
                     {isNewGroup && (
                       <li
-                        className="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-gray-50/95 border-y border-gray-100 select-none sticky top-0 z-10 backdrop-blur-xs flex items-center justify-between"
+                        className="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-gray-50 border-b border-gray-100 select-none sticky top-0 z-10 flex items-center justify-between"
                         role="presentation"
                         aria-hidden="true"
                       >
